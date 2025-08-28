@@ -41,7 +41,7 @@
     <div class="top-bar">
         <div class="logo">
             <a href="{{ route('admin.dashboard') }}">
-                <img src="{{ asset('images/logo.png') }}" alt="Logo">
+                <img src="{{ asset('images/logos/vysisa.png') }}" alt="Logo">
             </a>
         </div>
 

@@ -8,6 +8,9 @@ use App\Http\Controllers\SubsidiariaController;
 use App\Http\Controllers\UnidadServicioController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\PuestoController;
+use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ResponsivaController;
+use App\Http\Controllers\ProductoSerieController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -66,3 +69,26 @@ Route::middleware(['auth'])->group(function () {
         ->parameters(['subsidiarias' => 'subsidiaria']);
 });
 
+
+Route::middleware(['auth'])->group(function () {
+    Route::resource('productos', ProductoController::class)
+        ->parameters(['productos' => 'producto']);
+
+    // SERIES (para tracking = serial)
+    Route::get ('productos/{producto}/series',                 [ProductoController::class,'series'])->name('productos.series');
+    Route::post('productos/{producto}/series',                 [ProductoController::class,'seriesStore'])->name('productos.series.store');
+    Route::delete('productos/{producto}/series/{serie}',       [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
+    Route::put('productos/{producto}/series/{serie}/estado',   [ProductoController::class,'seriesEstado'])->name('productos.series.estado');
+
+    // EXISTENCIA (para tracking = cantidad)
+    Route::get ('productos/{producto}/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
+    Route::post('productos/{producto}/existencia/ajustar',     [ProductoController::class,'existenciaAjustar'])->name('productos.existencia.ajustar');
+});
+
+Route::middleware(['auth'])->group(function(){
+    Route::resource('responsivas', ResponsivaController::class)->only(['index','create','store','show']);
+});
+
+Route::middleware('auth')->group(function () {
+  Route::resource('series', ProductoSerieController::class)->only(['index','edit','update','show']);
+});

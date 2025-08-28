@@ -45,6 +45,12 @@ class RoleController extends Controller
             'edit'   => 'Editar subsidiarias',
             'delete' => 'Eliminar subsidiarias',
         ],
+        'productos' => [
+            'view'   => 'Ver productos',
+            'create' => 'Crear productos',
+            'edit'   => 'Editar productos',
+            'delete' => 'Eliminar productos',
+        ],
     ];
 
     public function index(Request $request)
