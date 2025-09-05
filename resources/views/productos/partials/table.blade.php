@@ -5,21 +5,25 @@
     'periferico' => 'Periférico',
     'consumible' => 'Consumible',
     'otro'       => 'Otro',
+    'pantalla'   => 'Pantalla',
+    'monitor'    => 'Monitor',
   ];
 @endphp
 
 <div id="tabla-productos">
   <style>
-    /* Centrar headers y celdas por defecto */
     #tabla-productos .tbl th,
-    #tabla-productos .tbl td{
-      text-align:center;
-      vertical-align:middle;
+    #tabla-productos .tbl td{ text-align:center; vertical-align:middle; }
+    #tabla-productos .tbl td.col-producto{ text-align:left; }
+
+    /* chips series/SKU */
+    .chips{display:flex;flex-wrap:wrap;gap:.35rem;justify-content:center}
+    .chip{
+      display:inline-block;font-size:.72rem;padding:.18rem .55rem;border-radius:9999px;
+      background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;white-space:nowrap
     }
-    /* EXCEPCIÓN: contenido de la columna Producto alineado a la izquierda */
-    #tabla-productos .tbl td.col-producto{
-      text-align:left;
-    }
+    .chip--asignado{ background:#dcfce7; border-color:#bbf7d0; color:#166534; } /* verde */
+    .chip--prestamo{ background:#fef3c7; border-color:#fde68a; color:#92400e; } /* amarillo */
   </style>
 
   <table class="tbl w-full">
@@ -28,6 +32,7 @@
         <th style="width:320px">Producto</th>
         <th>Marca / Modelo</th>
         <th style="width:180px">Tipo</th>
+        <th style="width:220px">Series / SKU</th>
         <th style="width:160px">Stock</th>
         <th style="width:150px">Series / Existencia</th>
         <th style="width:120px">Acciones</th>
@@ -36,7 +41,7 @@
     <tbody>
       @forelse ($productos as $p)
         <tr>
-          {{-- Producto + SKU + Descripción (si aplica) --}}
+          {{-- Producto + SKU + Descripción --}}
           <td class="font-medium col-producto">
             <div>{{ $p->nombre }}</div>
             @if($p->sku)
@@ -57,12 +62,40 @@
 
           {{-- Tipo / Tracking --}}
           <td class="text-sm">
-            <div class="font-medium">
-              {{ $tipoLabels[$p->tipo] ?? ucfirst($p->tipo ?? '') }}
-            </div>
+            <div class="font-medium">{{ $tipoLabels[$p->tipo] ?? ucfirst($p->tipo ?? '') }}</div>
             <div class="text-xs text-gray-500">
               {{ $p->tracking === 'serial' ? 'Por número de serie' : 'Por cantidad' }}
             </div>
+          </td>
+
+          {{-- Series / SKU (coloreado) --}}
+          <td>
+            @if($p->tracking === 'serial')
+              @php
+                /** @var \Illuminate\Support\Collection $series */
+                $series = ($seriesByProduct[$p->id] ?? collect());
+              @endphp
+              <div class="chips">
+                @forelse($series as $s)
+                  @php
+                    $motivo = optional($s->responsivaAsignada)->motivo_entrega;
+                    $cls = '';
+                    if ($s->estado === 'asignado') {
+                      $cls = ($motivo === 'prestamo_provisional') ? 'chip--prestamo' : 'chip--asignado';
+                    }
+                    $title = 'Estado: '.ucfirst($s->estado);
+                    if ($motivo === 'prestamo_provisional') $title .= ' — Préstamo provisional';
+                  @endphp
+                  <span class="chip {{ $cls }}" title="{{ $title }}">{{ $s->serie }}</span>
+                @empty
+                  <span class="text-xs text-gray-400">Sin series</span>
+                @endforelse
+              </div>
+            @else
+              <div class="chips">
+                <span class="chip">{{ $p->sku ?: '—' }}</span>
+              </div>
+            @endif
           </td>
 
           {{-- Stock --}}
@@ -78,16 +111,12 @@
             @endif
           </td>
 
-          {{-- Series / Existencia --}}
+          {{-- Serie/Existencia links --}}
           <td>
             @if($p->tracking === 'serial')
-              <a href="{{ route('productos.series', $p) }}" class="text-indigo-600 hover:underline">
-                Ver series
-              </a>
+              <a href="{{ route('productos.series', $p) }}" class="text-indigo-600 hover:underline">Ver series</a>
             @else
-              <a href="{{ route('productos.existencia', $p) }}" class="text-indigo-600 hover:underline">
-                Ver existencia
-              </a>
+              <a href="{{ route('productos.existencia', $p) }}" class="text-indigo-600 hover:underline">Ver existencia</a>
             @endif
           </td>
 
@@ -99,7 +128,6 @@
                   <i class="fa-solid fa-pen"></i>
                 </a>
               @endcan
-
               @can('productos.delete')
                 <form action="{{ route('productos.destroy', $p) }}" method="POST"
                       onsubmit="return confirm('¿Eliminar este producto?');">
@@ -114,7 +142,7 @@
         </tr>
       @empty
         <tr>
-          <td colspan="6" class="text-center text-gray-500 py-6">No hay productos.</td>
+          <td colspan="7" class="text-center text-gray-500 py-6">No hay productos.</td>
         </tr>
       @endforelse
     </tbody>

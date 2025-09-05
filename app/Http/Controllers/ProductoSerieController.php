@@ -6,6 +6,8 @@ use App\Models\ProductoSerie;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Storage;
+use App\Models\ProductoSerieFoto;
 
 class ProductoSerieController extends Controller implements HasMiddleware
 {
@@ -106,4 +108,34 @@ class ProductoSerieController extends Controller implements HasMiddleware
         }
         return $out;
     }
+
+    public function fotosStore(\App\Models\Producto $producto, \App\Models\ProductoSerie $serie, Request $req)
+{
+    $req->validate([
+        'imagenes'   => ['required','array','min:1'],
+        'imagenes.*' => ['image','max:4096'], // 4MB c/u
+        'caption'    => ['nullable','string','max:200'],
+    ]);
+
+    foreach ($req->file('imagenes') as $img) {
+        $path = $img->store("series/{$serie->id}", 'public');
+        $serie->fotos()->create([
+            'path'    => $path,
+            'caption' => $req->input('caption'),
+        ]);
+    }
+
+    return back()->with('updated', 'Fotos subidas.');
+}
+
+public function fotosDestroy(\App\Models\Producto $producto, \App\Models\ProductoSerie $serie, \App\Models\ProductoSerieFoto $foto)
+{
+    // seguridad simple por relación
+    abort_unless($foto->producto_serie_id === $serie->id, 404);
+
+    Storage::disk('public')->delete($foto->path);
+    $foto->delete();
+
+    return back()->with('updated', 'Foto eliminada.');
+}
 }

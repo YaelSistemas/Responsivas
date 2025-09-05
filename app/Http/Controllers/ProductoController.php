@@ -35,7 +35,7 @@ class ProductoController extends Controller implements HasMiddleware
     private function trackingByTipo(string $tipo, ?string $input): string
     {
         return match ($tipo) {
-            'equipo_pc', 'impresora' => 'serial',
+            'equipo_pc', 'impresora', 'monitor', 'pantalla' => 'serial',
             'periferico', 'consumible' => 'cantidad',
             'otro' => in_array($input, ['serial','cantidad'], true) ? $input : 'serial', // fallback
             default => 'cantidad',
@@ -44,44 +44,61 @@ class ProductoController extends Controller implements HasMiddleware
 
     // ===================== LISTADO =====================
     public function index(Request $request)
-    {
-        $tenant  = $this->tenantId();
-        $perPage = (int) $request->query('per_page', 10);
-        $q       = trim((string) $request->query('q', ''));
+{
+    $tenant  = (int) session('empresa_activa', auth()->user()?->empresa_id);
+    $perPage = (int) $request->query('per_page', 10);
+    $q       = trim((string) $request->query('q', ''));
 
-        $productos = Producto::query()
-            ->where('empresa_tenant_id', $tenant)
-            ->when($q, function ($w) use ($q) {
-                $w->where(function ($qq) use ($q) {
-                    $qq->where('nombre', 'like', "%{$q}%")
-                       ->orWhere('sku', 'like', "%{$q}%")
-                       ->orWhere('marca', 'like', "%{$q}%")
-                       ->orWhere('modelo', 'like', "%{$q}%");
-                       // ->orWhere('descripcion', 'like', "%{$q}%"); // si existe la columna
-                });
-            })
-            ->withCount([
-                'series as series_disponibles_count' => function ($s) use ($tenant) {
-                    $s->where('empresa_tenant_id', $tenant)
-                      ->where('estado', 'disponible');
-                },
-                'series as series_total_count' => function ($s) use ($tenant) {
-                    $s->where('empresa_tenant_id', $tenant);
-                },
-            ])
-            ->with(['existencia' => function ($q) use ($tenant) {
-                $q->where('empresa_tenant_id', $tenant);
-            }])
-            ->orderBy('nombre')
-            ->paginate($perPage)
-            ->withQueryString();
+    $productos = \App\Models\Producto::query()
+        ->where('empresa_tenant_id', $tenant)
+        ->when($q, function ($w) use ($q, $tenant) {
+            $w->where(function ($qq) use ($q, $tenant) {
+                $qq->where('nombre', 'like', "%{$q}%")
+                   ->orWhere('sku', 'like', "%{$q}%")
+                   ->orWhere('marca', 'like', "%{$q}%")
+                   ->orWhere('modelo', 'like', "%{$q}%")
+                   ->orWhereHas('series', function ($s) use ($q, $tenant) {
+                       $s->where('empresa_tenant_id', $tenant)
+                         ->where('serie', 'like', "%{$q}%");
+                   });
+            });
+        })
+        ->withCount([
+            'series as series_disponibles_count' => function ($s) use ($tenant) {
+                $s->where('empresa_tenant_id', $tenant)->where('estado', 'disponible');
+            },
+            'series as series_total_count' => function ($s) use ($tenant) {
+                $s->where('empresa_tenant_id', $tenant);
+            },
+        ])
+        ->with(['existencia' => function ($q2) use ($tenant) {
+            $q2->where('empresa_tenant_id', $tenant);
+        }])
+        ->orderBy('nombre')
+        ->paginate($perPage)
+        ->withQueryString();
 
-        if ($request->boolean('partial')) {
-            return view('productos.partials.table', compact('productos'))->render();
-        }
+    // ====== Series de los productos en la página (con motivo de responsiva) ======
+    $ids = $productos->getCollection()->pluck('id')->all();
 
-        return view('productos.index', compact('productos','perPage','q'));
+    $seriesQuery = \App\Models\ProductoSerie::deEmpresa($tenant)
+        ->whereIn('producto_id', $ids)
+        ->select('id','producto_id','serie','estado','asignado_en_responsiva_id')
+        ->orderBy('serie');
+
+    if (method_exists(\App\Models\ProductoSerie::class, 'responsivaAsignada')) {
+        $seriesQuery->with('responsivaAsignada:id,motivo_entrega');
     }
+
+    $seriesByProduct = $seriesQuery->get()->groupBy('producto_id');
+
+    if ($request->boolean('partial')) {
+        return view('productos.partials.table', compact('productos','seriesByProduct'))->render();
+    }
+
+    return view('productos.index', compact('productos','perPage','q','seriesByProduct'));
+}
+
 
     // ===================== CREAR =====================
     public function create()
@@ -89,6 +106,8 @@ class ProductoController extends Controller implements HasMiddleware
         $tipos = [
             'equipo_pc'  => 'Equipo de Cómputo',
             'impresora'  => 'Impresora/Multifuncional',
+            'monitor'    => 'Monitor',
+            'pantalla'   => 'Pantalla/TV',
             'periferico' => 'Periférico',
             'consumible' => 'Consumible',
             'otro'       => 'Otro',
@@ -105,7 +124,7 @@ class ProductoController extends Controller implements HasMiddleware
             'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)],
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','periferico','consumible','otro'])],
+            'tipo'           => ['required', Rule::in(['equipo_pc','impresora', 'monitor','pantalla', 'periferico','consumible','otro'])],
             // tracking solo requerido si tipo = otro
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
@@ -227,6 +246,8 @@ class ProductoController extends Controller implements HasMiddleware
         $tipos = [
             'equipo_pc'  => 'Equipo de Cómputo',
             'impresora'  => 'Impresora/Multifuncional',
+            'monitor'    => 'Monitor',
+            'pantalla'   => 'Pantalla/TV',
             'periferico' => 'Periférico',
             'consumible' => 'Consumible',
             'otro'       => 'Otro',
@@ -244,7 +265,7 @@ class ProductoController extends Controller implements HasMiddleware
             'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)->ignore($producto->id)],
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','periferico','consumible','otro'])],
+            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','monitor','pantalla','periferico','consumible','otro'])],
             // tracking solo requerido si tipo = otro
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',

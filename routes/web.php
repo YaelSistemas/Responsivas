@@ -86,9 +86,20 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function(){
-    Route::resource('responsivas', ResponsivaController::class)->only(['index','create','store','show']);
+    Route::resource('responsivas', ResponsivaController::class)->only(['index','create','store','show', 'edit', 'update', 'destroy']);
 });
 
 Route::middleware('auth')->group(function () {
   Route::resource('series', ProductoSerieController::class)->only(['index','edit','update','show']);
 });
+
+Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])
+     ->name('responsivas.pdf');
+
+     Route::post('productos/{producto}/series/{serie}/fotos',
+    [\App\Http\Controllers\ProductoSerieController::class, 'fotosStore']
+)->name('productos.series.fotos.store');
+
+Route::delete('productos/{producto}/series/{serie}/fotos/{foto}',
+    [\App\Http\Controllers\ProductoSerieController::class, 'fotosDestroy']
+)->name('productos.series.fotos.destroy');

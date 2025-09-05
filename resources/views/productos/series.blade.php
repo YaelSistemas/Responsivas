@@ -22,15 +22,34 @@
     .chip{font-size:.72rem;border:1px solid #e5e7eb;background:#f3f4f6;color:#374151;border-radius:9999px;padding:.12rem .5rem}
     .badge-mod{font-size:.65rem;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:9999px;padding:.08rem .4rem}
 
-    /* Modal */
+    /* ===== Modal base ===== */
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
     .modal.open{display:flex}
     .modal .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
-    .modal .panel{position:relative;background:#fff;width:min(700px,92vw);border-radius:10px;box-shadow:0 15px 35px rgba(0,0,0,.25);padding:18px}
+    .modal .panel{
+      position:relative;background:#fff;border-radius:10px;box-shadow:0 15px 35px rgba(0,0,0,.25);
+      width:min(900px,96vw);max-height:90vh;padding:18px;display:flex;flex-direction:column;overflow:hidden
+    }
     .modal .panel h3{font-weight:700;font-size:18px;margin:2px 0 10px}
     .modal .close{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;cursor:pointer;color:#6b7280}
     .modal textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px}
     .modal .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+
+    /* Contenido scrollable dentro del panel (mantiene visibles los botones de abajo) */
+    .modal .scroll{overflow:auto;padding-right:4px;margin-bottom:10px}
+
+    /* Galería responsive */
+    .gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+    .tile{border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;background:#fff}
+    .tile img{width:100%;height:120px;object-fit:cover;border-radius:6px}
+    .tile .meta{font-size:12px;color:#374151;margin-top:6px}
+
+    /* Fila de subida */
+    .upload-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .upload-row input[type="file"]{flex:1 1 260px;min-width:220px}
+    .upload-row input[type="text"]{flex:1 1 260px;min-width:220px}
+    .upload-row .btn{flex:0 0 auto}
+    .hint{font-size:12px;color:#6b7280;margin-top:6px}
   </style>
 
   <div class="page-wrap py-6">
@@ -46,7 +65,6 @@
       <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
     @endif
 
-    {{-- Toolbar: Buscar + Botón modal + Volver --}}
     <div class="card p-4 mb-4">
       <div class="flex items-center justify-between gap-3">
         <div class="text-lg font-semibold">Series registradas</div>
@@ -61,7 +79,6 @@
       </div>
     </div>
 
-    {{-- Tabla --}}
     <div class="card p-4">
       <div class="overflow-x-auto">
         <table class="tbl w-full">
@@ -84,28 +101,18 @@
                     @endif
                   </div>
 
-                  {{-- chips SOLO para equipo_pc --}}
                   @if($producto->tipo === 'equipo_pc' && !empty($sp))
                     <div class="chips">
-                      @if(!empty($sp['procesador']))
-                        <span class="chip">{{ $sp['procesador'] }}</span>
-                      @endif
-                      @if(!empty($sp['ram_gb']))
-                        <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>
-                      @endif
+                      @if(!empty($sp['procesador'])) <span class="chip">{{ $sp['procesador'] }}</span>@endif
+                      @if(!empty($sp['ram_gb'])) <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
                       @php
                         $alm = $sp['almacenamiento'] ?? [];
-                        $t = $alm['tipo'] ?? null;
-                        $cap = $alm['capacidad_gb'] ?? null;
+                        $t = $alm['tipo'] ?? null; $cap = $alm['capacidad_gb'] ?? null;
                       @endphp
                       @if($t || $cap)
-                        <span class="chip">
-                          {{ strtoupper($t ?? '') }}{{ $t && $cap ? ' ' : '' }}@if($cap) {{ (int)$cap }} GB @endif
-                        </span>
+                        <span class="chip">{{ strtoupper($t ?? '') }}{{ $t && $cap ? ' ' : '' }}@if($cap) {{ (int)$cap }} GB @endif</span>
                       @endif
-                      @if(!empty($sp['color']))
-                        <span class="chip">Color: {{ $sp['color'] }}</span>
-                      @endif
+                      @if(!empty($sp['color'])) <span class="chip">Color: {{ $sp['color'] }}</span>@endif
                     </div>
                   @endif
                 </td>
@@ -124,6 +131,7 @@
                 <td>
                   <div class="flex items-center gap-3">
                     <a href="{{ route('series.edit', $s) }}" class="text-indigo-600 hover:underline">Editar</a>
+                    <a href="#" class="text-blue-600 hover:underline" data-open-fotos="{{ $s->id }}">Fotos ({{ $s->fotos->count() }})</a>
                     @if($s->estado === 'disponible')
                       <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
                             onsubmit="return confirm('¿Eliminar esta serie?');">
@@ -158,11 +166,8 @@
       <form method="POST" action="{{ route('productos.series.store', $producto) }}">
         @csrf
         <textarea name="lotes" rows="8" placeholder="Pega o escribe una serie por línea...">{{ old('lotes') }}</textarea>
-        <div class="hint" style="font-size:12px;color:#6b7280;margin-top:6px">
-          Se crearán como <b>disponibles</b>. Duplicadas se omiten.
-        </div>
+        <div class="hint">Se crearán como <b>disponibles</b>. Duplicadas se omiten.</div>
         @error('lotes') <div class="err">{{ $message }}</div> @enderror
-
         <div class="actions">
           <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
           <button type="submit" class="btn btn-primary">Agregar series</button>
@@ -171,32 +176,80 @@
     </div>
   </div>
 
+  {{-- MODALES DE FOTOS (uno por serie) --}}
+  @foreach($series as $s)
+    <div id="fotos-modal-{{ $s->id }}" class="modal" aria-hidden="true">
+      <div class="backdrop" data-close="1"></div>
+      <div class="panel">
+        <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
+        <h3>Fotos — Serie {{ $s->serie }}</h3>
+
+        {{-- Contenido scrollable: galería --}}
+        <div class="scroll">
+          <div class="gallery">
+            @forelse($s->fotos as $f)
+              <div class="tile">
+                <a href="{{ $f->url }}" target="_blank" rel="noopener">
+                  <img src="{{ $f->url }}" alt="foto">
+                </a>
+                <div class="meta">{{ $f->caption }}</div>
+                <form method="POST" action="{{ route('productos.series.fotos.destroy', [$producto,$s,$f]) }}"
+                      onsubmit="return confirm('¿Eliminar esta foto?')" style="margin-top:6px">
+                  @csrf @method('DELETE')
+                  <button class="btn btn-light" type="submit">Eliminar</button>
+                </form>
+              </div>
+            @empty
+              <div style="grid-column:1/-1;color:#6b7280;text-align:center">Sin fotos.</div>
+            @endforelse
+          </div>
+        </div>
+
+        {{-- Fila de subida (siempre visible, no se recorta) --}}
+        <form method="POST" action="{{ route('productos.series.fotos.store', [$producto,$s]) }}"
+              enctype="multipart/form-data">
+          @csrf
+          <div class="upload-row">
+            <input type="file" name="imagenes[]" accept="image/*" multiple required>
+            <input type="text" name="caption" placeholder="Nota / descripción (opcional)" class="border rounded px-2 py-1">
+            <button type="submit" class="btn btn-primary">Subir</button>
+          </div>
+          <div class="hint">Puedes seleccionar varias imágenes a la vez. Máx. 4MB por archivo.</div>
+        </form>
+      </div>
+    </div>
+  @endforeach
+
   <script>
     (function(){
-      const alert = document.getElementById('alert');
       const modal = document.getElementById('bulk-modal');
       const openBtn = document.getElementById('open-bulk');
-
-      function openModal(){
-        modal.classList.add('open');
-        setTimeout(()=> modal.querySelector('textarea')?.focus(), 30);
-      }
-      function closeModal(){
-        modal.classList.remove('open');
-      }
-
+      function openModal(){ modal.classList.add('open'); setTimeout(()=> modal.querySelector('textarea')?.focus(), 30); }
+      function closeModal(){ modal.classList.remove('open'); }
       openBtn?.addEventListener('click', openModal);
-      modal?.addEventListener('click', (e)=>{
-        if(e.target.dataset.close) closeModal();
+      modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.classList.contains('open')) closeModal(); });
+      @if ($errors->has('lotes')) openModal(); @endif
+    })();
+  </script>
+
+  <script>
+    (function(){
+      document.querySelectorAll('[data-open-fotos]').forEach(a=>{
+        a.addEventListener('click', (e)=>{
+          e.preventDefault();
+          const id = a.getAttribute('data-open-fotos');
+          document.getElementById('fotos-modal-'+id)?.classList.add('open');
+        });
+      });
+      document.querySelectorAll('[id^="fotos-modal-"]').forEach(m=>{
+        m.addEventListener('click', (e)=>{ if (e.target.dataset.close) m.classList.remove('open'); });
       });
       document.addEventListener('keydown', (e)=>{
-        if(e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+        if(e.key==='Escape'){
+          document.querySelectorAll('[id^="fotos-modal-"].open').forEach(m=> m.classList.remove('open'));
+        }
       });
-
-      // Si hubo error de validación en 'lotes', abre el modal automáticamente
-      @if ($errors->has('lotes'))
-        openModal();
-      @endif
     })();
   </script>
 </x-app-layout>

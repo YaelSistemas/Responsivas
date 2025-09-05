@@ -95,4 +95,14 @@ class Colaborador extends Model
             }
         });
     }
+
+    protected $appends = ['nombre_completo'];
+    
+    public function getNombreCompletoAttribute(): string
+    {
+        $nom = trim((string) $this->nombre);
+        $ape = trim((string) $this->apellidos);
+        return trim($nom . ' ' . $ape);
+    }
+
 }

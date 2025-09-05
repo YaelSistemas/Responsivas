@@ -27,7 +27,7 @@ class PuestoController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = (int) $request->query('per_page', 25);
         $q       = trim((string) $request->query('q', ''));
 
         $puestos = Puesto::deEmpresa($this->tenantId())

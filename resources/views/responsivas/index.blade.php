@@ -1,20 +1,56 @@
+{{-- resources/views/responsivas/index.blade.php --}}
 <x-app-layout title="Responsivas">
   <x-slot name="header">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Responsivas</h2>
   </x-slot>
 
   <style>
-    .page-wrap{max-width:1100px;margin:0 auto}
+    .page-wrap{max-width:1650px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
+
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
-    .tbl th,.tbl td{padding:.75rem .9rem;text-align:center;vertical-align:middle}
+    .tbl th,.tbl td{
+      padding:.70rem .9rem;text-align:center;vertical-align:middle;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis; /* 1 línea por defecto */
+    }
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+
+    /* Colaborador EN UNA SOLA LÍNEA (hereda nowrap + ellipsis) */
+    .tbl td:nth-child(3){ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    /* Equipo SÍ puede hacer salto para verse completo */
+    .tbl td:nth-child(6){
+      white-space:normal;           /* permitir wraps solo en EQUIPO */
+      overflow:visible;
+      text-overflow:unset;
+      line-height:1.15;
+    }
+
+    /* Badges del motivo (ya usados en el partial) */
+    .badge{display:inline-block;padding:.18rem .55rem;border-radius:9999px;font-weight:700;font-size:.75rem;line-height:1;border:1px solid transparent}
+    .badge-green{background:#dcfce7;color:#166534;border-color:#86efac}
+    .badge-yellow{background:#fef9c3;color:#854d0e;border-color:#fde68a}
+
+    /* Anchos de columnas (coinciden con el <colgroup> del partial) */
+    .tbl col.c-folio   { width:8%  }
+    .tbl col.c-fsol    { width:9%  }
+    .tbl col.c-colab   { width:20% }
+    .tbl col.c-area    { width:9%  }
+    .tbl col.c-motivo  { width:10% }
+    .tbl col.c-equipo  { width:20% }
+    .tbl col.c-entrega { width:7%  }
+    .tbl col.c-fent    { width:9%  }
+    .tbl col.c-items   { width:4%  }
+    .tbl col.c-acc     { width:4%  }
+
     #resp-toolbar .select-wrap{position:relative;display:inline-block}
     #resp-toolbar select[name="per_page"]{
-      -webkit-appearance:none;appearance:none;background-image:none;width:88px;padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:6px;
+      -webkit-appearance:none;appearance:none;background-image:none;width:88px;
+      padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;
+      background:#fff;border:1px solid #d1d5db;border-radius:6px;
     }
     #resp-toolbar .select-wrap .caret{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#6b7280;font-size:12px}
   </style>
@@ -51,10 +87,9 @@
 
     @if (session('created') || session('updated') || session('deleted') || session('error'))
       @php
-        $msg = session('created') ? 'Responsiva creada.'
-             : (session('updated') ? 'Responsiva actualizada.'
-             : (session('deleted') ? 'Responsiva eliminada.'
-             : (session('error') ?: '')));
+        $msg = session('created') ? 'Responsiva creado.' :
+               (session('updated') ? 'Responsiva actualizada.' :
+               (session('deleted') ? 'Responsiva eliminada.' : (session('error') ?: '')));
         $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
              : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
              : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
@@ -65,7 +100,7 @@
     @endif
 
     <div class="card">
-      <div class="overflow-x-auto" id="resp-wrap">
+      <div id="resp-wrap">
         @include('responsivas.partials.table')
       </div>
     </div>
@@ -79,7 +114,7 @@
     let t, ctl;
 
     function buildUrl(pageUrl = null){
-      const base = pageUrl || "{{ route('responsivas.index') }}";
+      const base = pageUrl || "{{ route('responsivas.index') }}"; // <- corregido
       const url = new URL(base, window.location.origin);
       const q = (input?.value || '').trim();
       const per = perPageSelect ? perPageSelect.value : '';

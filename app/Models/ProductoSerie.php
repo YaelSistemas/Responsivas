@@ -100,4 +100,10 @@ class ProductoSerie extends Model
             $m->estado = $m->estado ?: self::ESTADO_DISPONIBLE;
         });
     }
+
+    public function fotos() 
+    {
+        return $this->hasMany(\App\Models\ProductoSerieFoto::class, 'producto_serie_id');
+    }
+
 }

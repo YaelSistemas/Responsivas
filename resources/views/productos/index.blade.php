@@ -4,7 +4,7 @@
   </x-slot>
 
   <style>
-    .page-wrap{max-width:1100px;margin:0 auto}
+    .page-wrap{max-width:1500px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
@@ -44,7 +44,7 @@
           <label for="q">Buscar:</label>
           <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
                  class="border rounded px-3 py-1 w-56 focus:outline-none"
-                 placeholder="Nombre, marca, modelo o SKU">
+                 placeholder="Nombre, Marca, Modelo o SKU o Serie">
         </div>
       </div>
     </form>

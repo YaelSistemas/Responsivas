@@ -26,7 +26,7 @@
         </div>
       @endif
 
-      <form method="POST" action="{{ route('productos.store') }}">
+      <form id="productoForm" method="POST" action="{{ route('productos.store') }}">
         @csrf
 
         <div class="form-group">
@@ -56,6 +56,8 @@
               $tipos = [
                 'equipo_pc'  => 'Equipo de Cómputo',
                 'impresora'  => 'Impresora/Multifuncional',
+                'monitor'    => 'Monitor',
+                'pantalla'   => 'Pantalla/TV',
                 'periferico' => 'Periférico',
                 'consumible' => 'Consumible',
                 'otro'       => 'Otro',
@@ -92,7 +94,7 @@
           <div class="grid-2">
             <div>
               <label>Color</label>
-              <input name="spec[color]" value="{{ old('spec.color') }}">
+              <input id="colorInput" name="spec[color]" value="{{ old('spec.color') }}">
               @error('spec.color') <div class="err">{{ $message }}</div> @enderror
             </div>
             <div>
@@ -123,10 +125,10 @@
           </div>
         </div>
 
-        {{-- ====== Descripción (solo si tipo = impresora | periferico | otro) ====== --}}
-        <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','periferico','otro']) ? '' : 'display:none' }}">
+        {{-- ====== Descripción (visible impresora | monitor | pantalla | periférico | otro). ====== --}}
+        <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
           <label>Descripción</label>
-          <textarea name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
+          <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
           @error('descripcion') <div class="err">{{ $message }}</div> @enderror
         </div>
 
@@ -166,6 +168,7 @@
 
   <script>
   (function(){
+    const form         = document.getElementById('productoForm');
     const tipo         = document.getElementById('tipo');
     const tracking     = document.getElementById('tracking');
     const trackingWrap = document.getElementById('tracking-wrap');
@@ -176,12 +179,17 @@
     const equipoSpecs  = document.getElementById('equipo-specs');
     const descWrap     = document.getElementById('descripcion-wrap');
 
-    // Defaults por tipo (cuando NO es "otro")
+    const colorInput   = document.getElementById('colorInput');
+    const descripcion  = document.getElementById('descripcion');
+
+    // defaults por tipo (incluye monitor y pantalla como impresora)
     const defaultTracking = {
       consumible: 'cantidad',
       periferico: 'cantidad',
       equipo_pc:  'serial',
-      impresora:  'serial'
+      impresora:  'serial',
+      monitor:    'serial',
+      pantalla:   'serial'
     };
 
     function resetAll() {
@@ -217,6 +225,15 @@
       updateSKUVisibility();
     }
 
+    function syncColorToDescripcion() {
+      const t = (tipo.value || '').toLowerCase();
+      if (!descripcion) return;
+      if (t === 'equipo_pc') {
+        const color = (colorInput?.value || '').trim();
+        descripcion.value = color;
+      }
+    }
+
     function applyByTipo() {
       const t = (tipo.value || '').toLowerCase();
       if (!t) { resetAll(); return; }
@@ -224,8 +241,9 @@
       // Especificaciones solo para Equipo de Cómputo
       equipoSpecs.style.display = (t === 'equipo_pc') ? '' : 'none';
 
-      // Descripción visible para impresora, periférico u "otro"
-      descWrap.style.display = (t === 'impresora' || t === 'periferico' || t === 'otro') ? '' : 'none';
+      // Descripción visible para impresora, monitor, pantalla, periférico u "otro"
+      const showDesc = (t === 'impresora' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
+      descWrap.style.display = showDesc ? '' : 'none';
 
       // Tracking solo visible si tipo = "otro"
       if (t === 'otro') {
@@ -238,16 +256,19 @@
       }
 
       toggleByTracking();
+      syncColorToDescripcion();
     }
 
     tipo.addEventListener('change', applyByTipo);
     tracking?.addEventListener('change', toggleByTracking);
+    colorInput?.addEventListener('input', syncColorToDescripcion);
+    form?.addEventListener('submit', syncColorToDescripcion);
 
-    // Inicial
     if ('{{ old('tipo') }}') {
       applyByTipo();
     } else {
       resetAll();
+      syncColorToDescripcion();
     }
   })();
   </script>

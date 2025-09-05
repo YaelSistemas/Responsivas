@@ -19,17 +19,14 @@
     .sep-option{color:#9ca3af}
     .toolbar-right{margin-left:auto;display:flex;gap:8px}
     #seriesSelect optgroup{font-weight:700;color:#111827}
-    /* Separadores */
     .section-sep{display:flex;align-items:center;margin:22px 0 14px}
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
   </style>
 
   @php
-    // Agrupar series por producto
     $groups = $series->groupBy('producto_id');
 
-    // Etiqueta visible por serie
     $fmtSerie = function($s) {
       $p   = $s->producto;
       $lbl = "{$s->serie} — {$p->nombre}".($p->marca ? " {$p->marca}" : "").($p->modelo ? " {$p->modelo}" : "");
@@ -53,7 +50,6 @@
       return $lbl;
     };
 
-    // Dataset para JS (encabezado del grupo: nombre + marca/modelo)
     $data = [];
     foreach ($groups as $pid => $items) {
       $p = $items->first()->producto;
@@ -75,7 +71,6 @@
       $data[] = $entry;
     }
 
-    // Listas para Entregó/Autorizó (solo Administradores)
     $admins = isset($admins) ? $admins : (\App\Models\User::role('Administrador')->orderBy('name')->get(['id','name']));
     $yo = auth()->user();
     $yoEsAdmin = $yo && method_exists($yo,'hasRole') ? $yo->hasRole('Administrador') : false;
@@ -83,7 +78,7 @@
     $entregoDefaultId  = old('entrego_user_id', $yoEsAdmin ? $yo->id : '');
     $recibiDefaultId   = old('recibi_colaborador_id', old('colaborador_id'));
     $autorizaDefaultId = old('autoriza_user_id');
-    $motivoDefault     = old('motivo_entrega', 'asignacion'); // asignacion | prestamo_provisional
+    $motivoDefault     = old('motivo_entrega', 'asignacion');
     $hoy               = now()->toDateString();
   @endphp
 
@@ -102,14 +97,9 @@
       <form method="POST" action="{{ route('responsivas.store') }}">
         @csrf
 
-        {{-- ======= Separador: Datos ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Datos</div>
-          <div class="line"></div>
-        </div>
+        {{-- ======= Datos ======= --}}
+        <div class="section-sep"><div class="line"></div><div class="label">Datos</div><div class="line"></div></div>
 
-        {{-- Fila 1: Motivo de entrega | Colaborador --}}
         <div class="grid2 row">
           <div>
             <label>Motivo de entrega</label>
@@ -124,14 +114,13 @@
             <select name="colaborador_id" id="colaborador_id" required>
               <option value="" disabled {{ old('colaborador_id') ? '' : 'selected' }}>Selecciona colaborador…</option>
               @foreach($colaboradores as $c)
-                <option value="{{ $c->id }}" @selected(old('colaborador_id')==$c->id)>{{ $c->nombre }}</option>
+                <option value="{{ $c->id }}" @selected(old('colaborador_id')==$c->id)>{{ $c->nombre_completo }}</option>
               @endforeach
             </select>
             @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
           </div>
         </div>
 
-        {{-- Fila 2: Fecha de solicitud | Fecha de entrega --}}
         <div class="grid2 row">
           <div>
             <label>Fecha de solicitud</label>
@@ -145,23 +134,17 @@
           </div>
         </div>
 
-        {{-- ======= Separador: Productos ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Productos</div>
-          <div class="line"></div>
-        </div>
+        {{-- ======= Productos ======= --}}
+        <div class="section-sep"><div class="line"></div><div class="label">Productos</div><div class="line"></div></div>
 
-        {{-- Herramientas de selección --}}
         <div class="row toolrow">
-          <input id="searchBox" placeholder="Buscar por serie / producto…" />
+          <input id="searchBox" placeholder="Buscar por serie / producto…"/>
           <div class="toolbar-right">
             <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
             <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
           </div>
         </div>
 
-        {{-- Series (render dinámico) --}}
         <div class="row">
           <label>Series disponibles (puedes seleccionar varias)</label>
           <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
@@ -170,14 +153,9 @@
           @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
         </div>
 
-        {{-- ======= Separador: Firmas ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Firmas</div>
-          <div class="line"></div>
-        </div>
+        {{-- ======= Firmas ======= --}}
+        <div class="section-sep"><div class="line"></div><div class="label">Firmas</div><div class="line"></div></div>
 
-        {{-- Entregó / Recibí / Autorizó --}}
         <div class="grid3 row">
           <div>
             <label>Entregó (solo administradores)</label>
@@ -194,7 +172,7 @@
             <select name="recibi_colaborador_id" id="recibi_colaborador_id">
               <option value="">— Selecciona —</option>
               @foreach($colaboradores as $c)
-                <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre }}</option>
+                <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre_completo }}</option>
               @endforeach
             </select>
             <div class="hint">Se sincroniza con “Colaborador”, pero puedes elegir otro.</div>
