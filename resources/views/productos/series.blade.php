@@ -22,6 +22,19 @@
     .chip{font-size:.72rem;border:1px solid #e5e7eb;background:#f3f4f6;color:#374151;border-radius:9999px;padding:.12rem .5rem}
     .badge-mod{font-size:.65rem;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:9999px;padding:.08rem .4rem}
 
+    /* ===== Select Estado: sin solaparse con la flecha ===== */
+    .state-wrap{position:relative;display:inline-block}
+    .state-select{
+      -webkit-appearance:none;appearance:none;
+      background:#fff;border:1px solid #d1d5db;border-radius:8px;
+      padding:.4rem 2rem .4rem .6rem; /* espacio a la derecha para la flecha */
+      min-width:160px;font-size:.9rem;line-height:1.25;
+    }
+    .state-wrap::after{
+      content:'▾';position:absolute;right:.55rem;top:50%;transform:translateY(-50%);
+      color:#6b7280;pointer-events:none;font-size:.85rem;
+    }
+
     /* ===== Modal base ===== */
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
     .modal.open{display:flex}
@@ -35,21 +48,36 @@
     .modal textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px}
     .modal .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
 
-    /* Contenido scrollable dentro del panel (mantiene visibles los botones de abajo) */
     .modal .scroll{overflow:auto;padding-right:4px;margin-bottom:10px}
-
-    /* Galería responsive */
     .gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
     .tile{border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center;background:#fff}
     .tile img{width:100%;height:120px;object-fit:cover;border-radius:6px}
     .tile .meta{font-size:12px;color:#374151;margin-top:6px}
 
-    /* Fila de subida */
     .upload-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .upload-row input[type="file"]{flex:1 1 260px;min-width:220px}
     .upload-row input[type="text"]{flex:1 1 260px;min-width:220px}
     .upload-row .btn{flex:0 0 auto}
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
+
+    /* === Centrar columnas Fotos, Estado y Acciones === */
+    .tbl th:nth-child(2),
+    .tbl td:nth-child(2),
+    .tbl th:nth-child(3),
+    .tbl td:nth-child(3),
+    .tbl th:nth-child(4),
+    .tbl td:nth-child(4){
+      text-align:center;
+    }
+    .tbl td:nth-child(3) form{display:inline-block;}
+
+    /* Mini spinner del input */
+    .loading::after{
+      content: '';
+      width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#1d4ed8;border-radius:50%;
+      display:inline-block;margin-left:8px;vertical-align:middle;animation:spin .6s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 
   <div class="page-wrap py-6">
@@ -69,9 +97,10 @@
       <div class="flex items-center justify-between gap-3">
         <div class="text-lg font-semibold">Series registradas</div>
         <div class="flex items-center gap-2">
-          <form method="GET" class="flex items-center gap-2">
+          <form id="search-form" method="GET" class="flex items-center gap-2" onsubmit="return false">
             <label for="q" class="text-sm text-gray-600">Buscar:</label>
-            <input id="q" name="q" value="{{ $q ?? '' }}" class="border rounded px-3 py-1 focus:outline-none" placeholder="Serie...">
+            <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                   class="border rounded px-3 py-1 focus:outline-none" placeholder="Serie...">
           </form>
           <button id="open-bulk" type="button" class="btn btn-primary">Alta masiva</button>
           <a href="{{ route('productos.index') }}" class="btn btn-light">Volver a productos</a>
@@ -85,14 +114,16 @@
           <thead>
             <tr>
               <th>Serie</th>
-              <th style="width:180px">Estado</th>
-              <th style="width:140px">Acciones</th>
+              <th class="text-center" style="width:130px">Fotos</th>
+              <th class="text-center" style="width:200px">Estado</th>
+              <th class="text-center" style="width:120px">Acciones</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="series-tbody">
             @forelse($series as $s)
               @php $sp = $s->specs; @endphp
               <tr>
+                {{-- Serie + chips --}}
                 <td>
                   <div class="flex items-center gap-2">
                     <span class="font-mono">{{ $s->serie }}</span>
@@ -117,42 +148,56 @@
                   @endif
                 </td>
 
+                {{-- Fotos --}}
+                <td>
+                  <a href="#" class="text-blue-600 hover:underline" data-open-fotos="{{ $s->id }}">
+                    Fotos ({{ $s->fotos->count() }})
+                  </a>
+                </td>
+
+                {{-- Estado --}}
                 <td>
                   <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
                     @csrf @method('PUT')
-                    <select name="estado" class="border rounded px-2 py-1 text-sm" onchange="this.form.submit()">
-                      @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
-                        <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
-                      @endforeach
-                    </select>
+                    <span class="state-wrap">
+                      <select name="estado" class="state-select" onchange="this.form.submit()">
+                        @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
+                          <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
+                        @endforeach
+                      </select>
+                    </span>
                   </form>
                 </td>
 
+                {{-- Acciones --}}
                 <td>
-                  <div class="flex items-center gap-3">
-                    <a href="{{ route('series.edit', $s) }}" class="text-indigo-600 hover:underline">Editar</a>
-                    <a href="#" class="text-blue-600 hover:underline" data-open-fotos="{{ $s->id }}">Fotos ({{ $s->fotos->count() }})</a>
+                  <div class="flex items-center justify-center gap-3">
+                    <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
+                      <i class="fa-solid fa-pen"></i>
+                    </a>
                     @if($s->estado === 'disponible')
                       <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
                             onsubmit="return confirm('¿Eliminar esta serie?');">
                         @csrf @method('DELETE')
-                        <button class="text-red-600 hover:text-red-800" type="submit">Eliminar</button>
+                        <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
                       </form>
                     @else
-                      <span class="text-gray-400 text-sm">—</span>
+                      <span class="text-gray-400 text-sm"></span>
                     @endif
                   </div>
                 </td>
               </tr>
             @empty
-              <tr><td colspan="3" class="text-center text-gray-500 py-6">Sin series.</td></tr>
+              <tr><td colspan="4" class="text-center text-gray-500 py-6">Sin series.</td></tr>
             @endforelse
           </tbody>
         </table>
       </div>
 
-      <div class="mt-4">
-        {{ $series->links() }}
+      <div id="series-pagination" class="mt-4">
+        {{ $series->appends(['q' => $q ?? ''])->links() }}
       </div>
     </div>
   </div>
@@ -184,7 +229,6 @@
         <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
         <h3>Fotos — Serie {{ $s->serie }}</h3>
 
-        {{-- Contenido scrollable: galería --}}
         <div class="scroll">
           <div class="gallery">
             @forelse($s->fotos as $f)
@@ -205,7 +249,6 @@
           </div>
         </div>
 
-        {{-- Fila de subida (siempre visible, no se recorta) --}}
         <form method="POST" action="{{ route('productos.series.fotos.store', [$producto,$s]) }}"
               enctype="multipart/form-data">
           @csrf
@@ -221,6 +264,7 @@
   @endforeach
 
   <script>
+    // Modal "Alta masiva"
     (function(){
       const modal = document.getElementById('bulk-modal');
       const openBtn = document.getElementById('open-bulk');
@@ -234,6 +278,7 @@
   </script>
 
   <script>
+    // Abrir / cerrar modales de fotos
     (function(){
       document.querySelectorAll('[data-open-fotos]').forEach(a=>{
         a.addEventListener('click', (e)=>{
@@ -250,6 +295,97 @@
           document.querySelectorAll('[id^="fotos-modal-"].open').forEach(m=> m.classList.remove('open'));
         }
       });
+    })();
+  </script>
+
+  <script>
+    // === Búsqueda en vivo (debounced) sin perder el foco ===
+    (function(){
+      const input = document.getElementById('q');
+      const tbody = document.getElementById('series-tbody');
+      const pager = document.getElementById('series-pagination');
+      const form  = document.getElementById('search-form');
+
+      // Evitar que Enter envíe el form y te saque del input
+      form.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') e.preventDefault(); });
+
+      // Debounce + AbortController para cancelar peticiones previas
+      let t=null, controller=null;
+      function debounceFetch(){
+        clearTimeout(t);
+        t = setTimeout(runFetch, 300);
+        input.classList.add('loading');
+      }
+
+      function buildURL(q, page){
+        const url = new URL(window.location.href);
+        url.searchParams.set('q', q);
+        if(page) url.searchParams.set('page', page); else url.searchParams.delete('page');
+        return url;
+      }
+
+      async function runFetch(page=null){
+        const q = input.value || '';
+        const url = buildURL(q, page);
+
+        // Cancelar petición anterior
+        if(controller) controller.abort();
+        controller = new AbortController();
+
+        try{
+          const res = await fetch(url.toString(), {
+            headers: {'X-Requested-With':'XMLHttpRequest'},
+            signal: controller.signal
+          });
+          const html = await res.text();
+          const doc  = new DOMParser().parseFromString(html, 'text/html');
+
+          const newBody = doc.querySelector('#series-tbody');
+          const newPager= doc.querySelector('#series-pagination');
+
+          if(newBody) tbody.replaceChildren(...newBody.childNodes);
+          if(newPager) pager.replaceChildren(...newPager.childNodes);
+
+          // Actualizar la barra de direcciones sin recargar (para poder compartir / volver atrás)
+          window.history.replaceState({}, '', url.toString());
+
+          // Volver a enlazar handlers de modales de fotos porque reemplazamos el tbody
+          rebindFotoModals();
+          // Rebind de paginación para que pagine vía AJAX manteniendo el foco
+          rebindPaginationLinks();
+        }catch(err){
+          if(err.name !== 'AbortError'){ console.error(err); }
+        }finally{
+          input.classList.remove('loading');
+        }
+      }
+
+      function rebindFotoModals(){
+        document.querySelectorAll('[data-open-fotos]').forEach(a=>{
+          a.addEventListener('click', (e)=>{
+            e.preventDefault();
+            const id = a.getAttribute('data-open-fotos');
+            document.getElementById('fotos-modal-'+id)?.classList.add('open');
+          }, { once:true }); // nos aseguramos de no duplicar listeners
+        });
+      }
+
+      function rebindPaginationLinks(){
+        pager.querySelectorAll('a').forEach(a=>{
+          a.addEventListener('click', (e)=>{
+            e.preventDefault();
+            // tomar el "page" del href
+            const u = new URL(a.href);
+            const page = u.searchParams.get('page') || null;
+            runFetch(page);
+          }, { once:true });
+        });
+      }
+
+      // Bind inicial
+      input.addEventListener('input', debounceFetch);
+      rebindPaginationLinks();
+
     })();
   </script>
 </x-app-layout>

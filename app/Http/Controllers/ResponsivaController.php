@@ -22,6 +22,12 @@ class ResponsivaController extends Controller
         return (int) session('empresa_activa', auth()->user()?->empresa_id);
     }
 
+    /** Devuelve un ID de admin “por defecto” (el primero que encuentre) */
+    private function defaultAdminId(): ?int
+    {
+        return (int) User::role('Administrador')->orderBy('id')->value('id');
+    }
+
     /* ===================== INDEX (buscador + partial) ===================== */
     public function index(Request $request)
     {
@@ -123,27 +129,40 @@ class ResponsivaController extends Controller
             'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['nullable', $colExists],
-            'entrego_user_id'       => ['required', Rule::in($adminIds)],
+
+            // ahora son opcionales: se pondrán por defecto si vienen vacíos
+            'entrego_user_id'       => ['nullable', Rule::in($adminIds)],
             'autoriza_user_id'      => ['nullable', Rule::in($adminIds)],
+
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
             'observaciones'         => ['nullable','string','max:2000'],
+            'fecha_solicitud'       => ['nullable','date'],
+            'fecha_entrega'         => ['nullable','date'],
         ]);
 
         DB::transaction(function() use ($req, $tenantId) {
 
-            // Folio OES-00001 (por tenant) calculado bajo lock para evitar duplicados
             $folio = $this->nextFolio($tenantId);
+
+            // defaults para firmas
+            $entregoId = $req->entrego_user_id
+                ?: (auth()->user()?->hasRole('Administrador') ? auth()->id() : $this->defaultAdminId());
+
+            // puedes fijar un autorizador por config/app.php => 'responsivas_autoriza_user_id'
+            $autorizaFijo = (int) config('app.responsivas_autoriza_user_id', 0);
+            $autorizaId   = $req->autoriza_user_id ?: ($autorizaFijo ?: $this->defaultAdminId());
 
             $resp = Responsiva::create([
                 'empresa_tenant_id'     => $tenantId,
                 'folio'                 => $folio,
                 'colaborador_id'        => $req->colaborador_id,
                 'recibi_colaborador_id' => $req->recibi_colaborador_id ?: $req->colaborador_id,
-                'user_id'               => $req->entrego_user_id,
-                'autoriza_user_id'      => $req->autoriza_user_id,
+                'user_id'               => $entregoId,          // Entregó (auto)
+                'autoriza_user_id'      => $autorizaId,         // Autorizó (auto)
                 'motivo_entrega'        => $req->motivo_entrega,
-                'fecha_entrega'         => now()->toDateString(),
+                'fecha_solicitud'       => $req->fecha_solicitud,
+                'fecha_entrega'         => $req->fecha_entrega ?: now()->toDateString(),
                 'observaciones'         => $req->observaciones,
             ]);
 
@@ -326,7 +345,8 @@ class ResponsivaController extends Controller
     {
         $responsiva->load([
             'colaborador', 'usuario',
-            'detalles.producto', 'detalles.serie'
+            'entrego', 'autoriza',            // 👈 para que la vista pueda mostrar firmas/nombres sin N+1
+            'detalles.producto', 'detalles.serie',
         ]);
 
         return view('responsivas.show', compact('responsiva'));
@@ -336,7 +356,6 @@ class ResponsivaController extends Controller
     private function nextFolio(int $tenantId): string
     {
         // Debe llamarse DENTRO de una transacción.
-        // Bloqueamos el último registro del tenant para calcular el siguiente folio sin colisiones.
         $last = Responsiva::where('empresa_tenant_id', $tenantId)
             ->where('folio', 'like', 'OES-%')
             ->orderByDesc('id')

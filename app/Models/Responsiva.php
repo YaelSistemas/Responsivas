@@ -12,6 +12,7 @@ class Responsiva extends Model
         'folio',
         'colaborador_id',
         'user_id',
+        'fecha_solicitud',
         'fecha_entrega',
         'observaciones',
         'motivo_entrega',

@@ -76,12 +76,9 @@
 
                     {{-- RH (submenu con Colaboradores, Unidades, Áreas, Puestos, Subsidiarias) --}}
                     @php
-                        // Activo si estás en alguna ruta del módulo RH (ya sin prefijo admin)
                         $isRhActive = request()->routeIs(
                             'colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*'
                         );
-
-                        // ¿Tiene al menos UN permiso de RH? (si no, ocultamos todo el bloque RH)
                         $canRH = auth()->user()->canany([
                             'colaboradores.view',
                             'unidades.view','areas.view','puestos.view','subsidiarias.view',
@@ -107,28 +104,24 @@
                                         Colaboradores
                                     </a>
                                 @endcan
-
                                 @can('unidades.view')
                                     <a href="{{ route('unidades.index') }}"
                                         class="menu-item {{ request()->routeIs('unidades.*') ? 'menu-item--active' : '' }}">
                                         Unidades de servicio
                                     </a>
                                 @endcan
-
                                 @can('areas.view')
                                     <a href="{{ route('areas.index') }}"
                                         class="menu-item {{ request()->routeIs('areas.*') ? 'menu-item--active' : '' }}">
                                         Áreas
                                     </a>
                                 @endcan
-
                                 @can('puestos.view')
                                     <a href="{{ route('puestos.index') }}"
                                         class="menu-item {{ request()->routeIs('puestos.*') ? 'menu-item--active' : '' }}">
                                         Puestos
                                     </a>
                                 @endcan
-
                                 @can('subsidiarias.view')
                                     <a href="{{ route('subsidiarias.index') }}"
                                         class="menu-item {{ request()->routeIs('subsidiarias.*') ? 'menu-item--active' : '' }}">
@@ -140,35 +133,48 @@
                     </div>
                     @endif
 
-                    {{-- INVENTARIO (submenu con Productos) --}}
-@php
-    $isInvActive = request()->routeIs('productos.*');
-@endphp
+                    {{-- PRODUCTOS (enlace directo, SIN submenú) --}}
+                    @php
+                        $isProductosActive = request()->routeIs('productos.*');
+                    @endphp
+                    @canany(['productos.view','productos.create','productos.edit','productos.delete'])
+                        <div class="relative">
+                            <a href="{{ route('productos.index') }}"
+                               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
+                                      transition duration-150 ease-in-out
+                                      {{ $isProductosActive
+                                            ? 'border-indigo-500 text-gray-900'
+                                            : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
+                                Productos
+                            </a>
+                        </div>
+                    @endcanany
 
-@canany(['productos.view','productos.create','productos.edit','productos.delete'])
-<div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
-    <button type="button"
-            class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
-                   transition duration-150 ease-in-out
-                   {{ $isInvActive
-                        ? 'border-indigo-500 text-gray-900'
-                        : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
-        Inventario
-    </button>
+                    {{-- FORMATOS (submenu con Responsivas) --}}
+                    @php
+                        $isFormatosActive = request()->routeIs('responsivas.*');
+                    @endphp
+                    @can('responsivas.view')
+                    <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
+                        <button type="button"
+                                class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
+                                       transition duration-150 ease-in-out
+                                       {{ $isFormatosActive
+                                            ? 'border-indigo-500 text-gray-900'
+                                            : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
+                            Formatos
+                        </button>
 
-    <div x-show="open" x-transition class="menu-panel">
-        <div class="p-2">
-            @can('productos.view')
-                <a href="{{ route('productos.index') }}"
-                   class="menu-item {{ request()->routeIs('productos.*') ? 'menu-item--active' : '' }}">
-                    Productos
-                </a>
-            @endcan
-        </div>
-    </div>
-</div>
-@endcanany
-
+                        <div x-show="open" x-transition class="menu-panel">
+                            <div class="p-2">
+                                <a href="{{ route('responsivas.index') }}"
+                                   class="menu-item {{ request()->routeIs('responsivas.*') ? 'menu-item--active' : '' }}">
+                                    Responsivas
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    @endcan
                 </div>
             </div>
 

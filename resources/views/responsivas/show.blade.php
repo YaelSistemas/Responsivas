@@ -84,7 +84,6 @@
       : 'Se hace entrega de equipo y accesorios.';
 
     // ========= Razón social para "Recibí de:" =========
-    // En 'subsidiarias' la razón social está en 'descripcion'.
     $emisorRazon = $empresaNombre;
     if ($col) {
       $sub = $col->subsidiaria ?? $col?->subsidiary ?? null;
@@ -95,7 +94,7 @@
 
       if ($sub) {
         $emisorRazon = $sub->razon_social
-                      ?? $sub->descripcion      // razón social aquí
+                      ?? $sub->descripcion
                       ?? $sub->nombre_fiscal
                       ?? $sub->razon
                       ?? $sub->nombre
@@ -146,6 +145,29 @@
           ? $fe->format('d-m-Y')
           : \Illuminate\Support\Carbon::parse($fe)->format('d-m-Y');
     }
+
+    // ========= Firmas (busca por ID, slug del nombre o nombre exacto) =========
+    $firmaUrlFor = function ($user) {
+      if (!$user) return null;
+      $id   = $user->id ?? null;
+      $name = trim($user->name ?? '');
+      $cands = [];
+      foreach (['png','jpg','jpeg','webp','svg'] as $ext) {
+        if ($id)   $cands[] = "storage/firmas/{$id}.{$ext}";
+        if ($name !== '') {
+          $slug = \Illuminate\Support\Str::slug($name);
+          $cands[] = "storage/firmas/{$slug}.{$ext}"; // ej: admin-vysisa.png
+          $cands[] = "storage/firmas/{$name}.{$ext}"; // ej: Admin Vysisa.png
+        }
+      }
+      foreach ($cands as $rel) {
+        if (file_exists(public_path($rel))) return asset($rel);
+      }
+      return null;
+    };
+
+    $firmaEntrego  = $firmaUrlFor($responsiva->entrego ?? null);
+    $firmaAutoriza = $firmaUrlFor($responsiva->autoriza ?? null);
   @endphp
 
   <style>
@@ -188,7 +210,8 @@
     .sign{ flex:1; }
     .sign-title{ text-align:center; text-transform:uppercase; font-weight:700; margin-bottom:6px; }
     .sign-sub{ text-align:center; font-size:10px; text-transform:uppercase; margin:-2px 0 8px; }
-    .sign-space{ height:56px; }
+    .sign-space{ height:56px; display:flex; align-items:center; justify-content:center; }
+    .firma-img{ max-height:56px; max-width:100%; display:block; margin:0 auto; mix-blend-mode:multiply; }
     .sign-inner{ width:55%; margin:0 auto; }
     .sign-name{ text-align:center; font-size:11px; text-transform:uppercase; margin-bottom:2px; }
     .sign-line{ border-top:1px solid #111; height:1px; }
@@ -309,23 +332,43 @@
           </tr>
         </thead>
         <tbody>
-          @foreach($detalles as $d)
-            @php
-              $p   = $d->producto;
-              $s   = $d->serie;
-              $des = ($p?->tipo === 'impresora') ? ($p?->descripcion ?? '') : '';
-            @endphp
-            <tr>
-              <td style="text-transform:uppercase">{{ $p?->nombre }}</td>
-              <td>{{ $des }}</td>
-              <td>{{ $p?->marca }}</td>
-              <td>{{ $p?->modelo }}</td>
-              <td>{{ $s?->serie }}</td>
-            </tr>
-          @endforeach
-          @for($i=0; $i<$faltan; $i++)
-            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
-          @endfor
+        @foreach($detalles as $d)
+          @php
+            $p = $d->producto;
+            $s = $d->serie;
+
+            // specs como array (acepta array o JSON)
+            $specS = $s->specs ?? $s->especificaciones ?? null;
+            if (is_string($specS)) { $tmp = json_decode($specS, true); if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp; }
+            $specP = $p->specs ?? $p->especificaciones ?? null;
+            if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
+
+            // DESCRIPCIÓN:
+            // - equipo_pc => solo color (sin prefijo). Si no hay, usa descripción del producto.
+            // - otros tipos => descripción del producto
+            $des = '';
+            if (($p->tipo ?? null) === 'equipo_pc') {
+                $color = '';
+                if (is_array($specS)) $color = $specS['color'] ?? '';
+                if (!$color && is_array($specP)) $color = $specP['color'] ?? '';
+                $des = $color !== '' ? $color : ($p->descripcion ?? '');
+            } else {
+                $des = $p->descripcion ?? '';
+            }
+          @endphp
+
+          <tr>
+            <td style="text-transform:uppercase">{{ $p?->nombre }}</td>
+            <td>{{ $des }}</td>
+            <td>{{ $p?->marca }}</td>
+            <td>{{ $p?->modelo }}</td>
+            <td>{{ $s?->serie }}</td>
+          </tr>
+        @endforeach
+
+        @for($i=0; $i<$faltan; $i++)
+          <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>
+        @endfor
         </tbody>
       </table>
 
@@ -349,7 +392,11 @@
           <div class="sign">
             <div class="sign-title">ENTREGO</div>
             <div class="sign-sub">Departamento de Sistemas</div>
-            <div class="sign-space"></div>
+            <div class="sign-space">
+              @if($firmaEntrego)
+                <img class="firma-img" src="{{ $firmaEntrego }}" alt="Firma entregó">
+              @endif
+            </div>
             <div class="sign-inner">
               <div class="sign-name">{{ $entregoNombre }}</div>
               <div class="sign-line"></div>
@@ -372,7 +419,11 @@
         <div class="firma-row" style="justify-content:center; margin-top:16px;">
           <div class="sign" style="flex:0 0 70%;">
             <div class="sign-title">AUTORIZÓ</div>
-            <div class="sign-space"></div>
+            <div class="sign-space">
+              @if($firmaAutoriza)
+                <img class="firma-img" src="{{ $firmaAutoriza }}" alt="Firma autorizó">
+              @endif
+            </div>
             <div class="sign-inner sm">
               <div class="sign-name">{{ $autorizaNombre }}</div>
               <div class="sign-line"></div>
