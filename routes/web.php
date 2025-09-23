@@ -1,56 +1,65 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
+
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ColaboradorController;
 use App\Http\Controllers\SubsidiariaController;
 use App\Http\Controllers\UnidadServicioController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\PuestoController;
 use App\Http\Controllers\ProductoController;
-use App\Http\Controllers\ResponsivaController;
 use App\Http\Controllers\ProductoSerieController;
+use App\Http\Controllers\ResponsivaController;
+use App\Http\Controllers\PublicResponsivaController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+/*
+|--------------------------------------------------------------------------
+| Públicas (sin auth)
+|--------------------------------------------------------------------------
+*/
+Route::get('/', fn () => view('welcome'))->name('home');
 
+// Firma pública (colaborador)
+Route::get ('/firmar/{token}', [PublicResponsivaController::class, 'show'])->name('public.sign.show');
+Route::post('/firmar/{token}', [PublicResponsivaController::class, 'store'])->name('public.sign.store');
+
+/*
+|--------------------------------------------------------------------------
+| Dashboard (con auth)
+|--------------------------------------------------------------------------
+*/
 Route::get('/dashboard', function () {
     $empresa = Auth::user()->empresa;
     return view('dashboard', compact('empresa'));
 })->middleware(['auth'])->name('dashboard');
 
-/* Eliminado porque el sistema ya gestiona usuarios desde el panel admin
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-});*/
-
-// Montar rutas del panel admin
+/*
+|--------------------------------------------------------------------------
+| Rutas de autenticación y panel admin
+|--------------------------------------------------------------------------
+*/
 require __DIR__.'/admin.php';
-
-// Rutas de autenticación (Laravel Breeze, Jetstream, etc.)
 require __DIR__.'/auth.php';
 
-// Colaboradores
+/*
+|--------------------------------------------------------------------------
+| Aplicación (todo bajo auth)
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth'])->group(function () {
+
+    /*
+    |----------------------  RH  ----------------------
+    */
     Route::resource('colaboradores', ColaboradorController::class)
         ->names('colaboradores')
-        ->parameters([
-            'colaboradores' => 'colaborador'
-        ]);
-});
+        ->parameters(['colaboradores' => 'colaborador']);
 
-// Para Buscar Colaboradores en Unidades
-Route::middleware(['auth'])->get(
-    '/api/colaboradores/buscar',
-    [\App\Http\Controllers\ColaboradorController::class, 'buscar']
-)->name('api.colaboradores.buscar');
-
-// RH en el sistema normal (siguen siendo solo para Administrador)
-Route::middleware(['auth'])->group(function () {
+    // Buscar colaboradores (para selects, etc.)
+    Route::get('/api/colaboradores/buscar', [ColaboradorController::class, 'buscar'])
+        ->name('api.colaboradores.buscar');
 
     Route::resource('unidades', UnidadServicioController::class)
         ->names('unidades')
@@ -67,39 +76,51 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('subsidiarias', SubsidiariaController::class)
         ->names('subsidiarias')
         ->parameters(['subsidiarias' => 'subsidiaria']);
-});
 
-
-Route::middleware(['auth'])->group(function () {
+    /*
+    |--------------------  Productos  --------------------
+    */
     Route::resource('productos', ProductoController::class)
         ->parameters(['productos' => 'producto']);
 
-    // SERIES (para tracking = serial)
-    Route::get ('productos/{producto}/series',                 [ProductoController::class,'series'])->name('productos.series');
-    Route::post('productos/{producto}/series',                 [ProductoController::class,'seriesStore'])->name('productos.series.store');
-    Route::delete('productos/{producto}/series/{serie}',       [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
-    Route::put('productos/{producto}/series/{serie}/estado',   [ProductoController::class,'seriesEstado'])->name('productos.series.estado');
+    // Bloque de rutas anidadas de productos
+    Route::prefix('productos/{producto}')->group(function () {
+        // SERIES (tracking por número de serie)
+        Route::get   ('/series',               [ProductoController::class,'series'])->name('productos.series');
+        Route::post  ('/series',               [ProductoController::class,'seriesStore'])->name('productos.series.store');
+        Route::delete('/series/{serie}',       [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
+        Route::put   ('/series/{serie}/estado',[ProductoController::class,'seriesEstado'])->name('productos.series.estado');
 
-    // EXISTENCIA (para tracking = cantidad)
-    Route::get ('productos/{producto}/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
-    Route::post('productos/{producto}/existencia/ajustar',     [ProductoController::class,'existenciaAjustar'])->name('productos.existencia.ajustar');
+        // FOTOS de series
+        Route::post  ('/series/{serie}/fotos',       [ProductoSerieController::class, 'fotosStore'])->name('productos.series.fotos.store');
+        Route::delete('/series/{serie}/fotos/{foto}',[ProductoSerieController::class, 'fotosDestroy'])->name('productos.series.fotos.destroy');
+
+        // EXISTENCIA (tracking por cantidad)
+        Route::get ('/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
+        Route::post('/existencia/ajustar',     [ProductoController::class,'existenciaAjustar'])->name('productos.existencia.ajustar');
+    });
+
+    // Vista directa de series (si la usas)
+    Route::resource('series', ProductoSerieController::class)->only(['index','edit','update','show']);
+
+    /*
+    |--------------------  Responsivas  --------------------
+    */
+    Route::resource('responsivas', ResponsivaController::class)
+        ->only(['index','create','store','show','edit','update','destroy']);
+
+    // PDF (interno)
+    Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])->name('responsivas.pdf');
+
+    // Generar / renovar link de firma (alias NUEVO para el botón)
+    Route::post('/responsivas/{responsiva}/link', [ResponsivaController::class, 'emitirFirma'])
+        ->name('responsivas.link');
+
+    // Conserva también el name anterior por si alguna vista lo usa
+    Route::post('/responsivas/{responsiva}/emitir-firma', [ResponsivaController::class, 'emitirFirma'])
+        ->name('responsivas.emitirFirma');
+
+    // Firmar en sitio (sin link)
+    Route::post('/responsivas/{responsiva}/firmar-en-sitio', [ResponsivaController::class, 'firmarEnSitio'])
+        ->name('responsivas.firmarEnSitio');
 });
-
-Route::middleware(['auth'])->group(function(){
-    Route::resource('responsivas', ResponsivaController::class)->only(['index','create','store','show', 'edit', 'update', 'destroy']);
-});
-
-Route::middleware('auth')->group(function () {
-  Route::resource('series', ProductoSerieController::class)->only(['index','edit','update','show']);
-});
-
-Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])
-     ->name('responsivas.pdf');
-
-     Route::post('productos/{producto}/series/{serie}/fotos',
-    [\App\Http\Controllers\ProductoSerieController::class, 'fotosStore']
-)->name('productos.series.fotos.store');
-
-Route::delete('productos/{producto}/series/{serie}/fotos/{foto}',
-    [\App\Http\Controllers\ProductoSerieController::class, 'fotosDestroy']
-)->name('productos.series.fotos.destroy');

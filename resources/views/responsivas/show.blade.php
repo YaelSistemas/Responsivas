@@ -35,7 +35,7 @@
 
     // ===== LOGO y nombre de la empresa activa (para encabezado) =====
     $empresaId     = (int) session('empresa_activa', auth()->user()?->empresa_id);
-    $empresaNombre = config('app.name', 'Laravel'); // se mantiene como fallback interno
+    $empresaNombre = config('app.name', 'Laravel');
     $logo = asset('images/logos/default.png'); // fallback
 
     if (class_exists(\App\Models\Empresa::class) && $empresaId) {
@@ -156,8 +156,8 @@
         if ($id)   $cands[] = "storage/firmas/{$id}.{$ext}";
         if ($name !== '') {
           $slug = \Illuminate\Support\Str::slug($name);
-          $cands[] = "storage/firmas/{$slug}.{$ext}"; // ej: admin-vysisa.png
-          $cands[] = "storage/firmas/{$name}.{$ext}"; // ej: Admin Vysisa.png
+          $cands[] = "storage/firmas/{$slug}.{$ext}";
+          $cands[] = "storage/firmas/{$name}.{$ext}";
         }
       }
       foreach ($cands as $rel) {
@@ -173,7 +173,7 @@
   <style>
     .sheet { max-width: 940px; margin: 0 auto; }
     .doc { background:#fff; border:1px solid #111; border-radius:6px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-    .actions { display:flex; gap:10px; margin-bottom:14px; }
+    .actions { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
     .btn { padding:8px 12px; border-radius:6px; font-weight:600; border:1px solid transparent; }
     .btn-primary { background:#2563eb; color:#fff; }
     .btn-secondary { background:#f3f4f6; color:#111; border-color:#d1d5db; }
@@ -248,6 +248,23 @@
     <div class="actions">
       <a href="{{ url('/responsivas') }}" class="btn btn-secondary">← Responsivas</a>
       <a href="{{ route('responsivas.pdf', $responsiva) }}" class="btn btn-primary">Descargar PDF</a>
+
+      @if (empty($responsiva->firma_colaborador_path))
+        <button type="button" class="btn btn-secondary" onclick="openFirma()">
+          Firmar en sitio
+        </button>
+
+        <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
+          @csrf
+          <button class="btn btn-secondary">Generar/renovar link de firma</button>
+        </form>
+      @endif
+
+      @if (session('firma_link'))
+        <div style="margin-top:8px">
+          <small>Link de firma: <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a></small>
+        </div>
+      @endif
     </div>
 
     <div id="printable" class="doc">
@@ -258,7 +275,6 @@
           <td class="logo-cell" rowspan="3">
             <div class="logo-box"><img src="{{ $logo }}" alt=""></div>
           </td>
-          {{-- Título fijo solicitado --}}
           <td class="title-row title-main">Grupo Vysisa</td>
         </tr>
         <tr><td class="title-row title-sub">Departamento de Sistemas</td></tr>
@@ -337,15 +353,11 @@
             $p = $d->producto;
             $s = $d->serie;
 
-            // specs como array (acepta array o JSON)
             $specS = $s->specs ?? $s->especificaciones ?? null;
             if (is_string($specS)) { $tmp = json_decode($specS, true); if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp; }
             $specP = $p->specs ?? $p->especificaciones ?? null;
             if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-            // DESCRIPCIÓN:
-            // - equipo_pc => solo color (sin prefijo). Si no hay, usa descripción del producto.
-            // - otros tipos => descripción del producto
             $des = '';
             if (($p->tipo ?? null) === 'equipo_pc') {
                 $color = '';
@@ -388,9 +400,10 @@
 
       {{-- FIRMAS --}}
       <div class="firmas-wrap">
+        {{-- Fila 1: Entregó / Recibió --}}
         <div class="firma-row">
           <div class="sign">
-            <div class="sign-title">ENTREGO</div>
+            <div class="sign-title">ENTREGÓ</div>
             <div class="sign-sub">Departamento de Sistemas</div>
             <div class="sign-space">
               @if($firmaEntrego)
@@ -405,9 +418,17 @@
           </div>
 
           <div class="sign">
-            <div class="sign-title">RECIBIO</div>
+            <div class="sign-title">RECIBIÓ</div>
             <div class="sign-sub">Recibí de conformidad Usuario</div>
-            <div class="sign-space"></div>
+            <div class="sign-space" style="position:relative;">
+              @if($responsiva->firma_colaborador_url)
+                <img
+                  src="{{ $responsiva->firma_colaborador_url }}"
+                  alt="Firma colaborador"
+                  style="position:absolute;left:50%;top:50%;transform:translate(-50%,-55%);
+                         max-width:180px;max-height:70px;opacity:.9;">
+              @endif
+            </div>
             <div class="sign-inner">
               <div class="sign-name">{{ $nombreCompleto }}</div>
               <div class="sign-line"></div>
@@ -416,8 +437,9 @@
           </div>
         </div>
 
+        {{-- Fila 2: Autorizó (centrado debajo) --}}
         <div class="firma-row" style="justify-content:center; margin-top:16px;">
-          <div class="sign" style="flex:0 0 70%;">
+          <div class="sign" style="flex:0 0 60%; max-width:60%;">
             <div class="sign-title">AUTORIZÓ</div>
             <div class="sign-space">
               @if($firmaAutoriza)
@@ -432,6 +454,128 @@
           </div>
         </div>
       </div>
+
+      {{-- Modal firma en sitio (reemplaza tu bloque actual) --}}
+      @if (empty($responsiva->firma_colaborador_path))
+        <div id="modalFirmar"
+            class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4"
+            style="z-index:60;"
+            onclick="closeFirma()">
+          <div class="bg-white rounded-lg p-4 w-[640px] max-w-[92vw]"
+              onclick="event.stopPropagation()">
+            <h3 class="text-lg font-semibold mb-3">Firmar en sitio</h3>
+
+            <form id="formFirmaEnSitio" method="POST" action="{{ route('responsivas.firmarEnSitio', $responsiva) }}">
+              @csrf
+              <input type="hidden" name="firma" id="firmaData">
+
+              <div class="border border-dashed rounded p-2 mb-2" style="border-color:#94a3b8">
+                <canvas id="canvasFirma" width="560" height="180" style="width:100%;height:180px;touch-action:none;"></canvas>
+              </div>
+
+              <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
+                <button type="button" class="btn btn-secondary" onclick="closeFirma()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Firmar y guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <script>
+        function openFirma(){
+          const m = document.getElementById('modalFirmar');
+          m.classList.remove('hidden'); m.classList.add('flex');
+          document.documentElement.classList.add('overflow-hidden');
+          document.body.classList.add('overflow-hidden');
+          // recalcular tamaño cuando se abre
+          setTimeout(resizeCanvas, 50);
+        }
+        function closeFirma(){
+          const m = document.getElementById('modalFirmar');
+          m.classList.remove('flex'); m.classList.add('hidden');
+          document.documentElement.classList.remove('overflow-hidden');
+          document.body.classList.remove('overflow-hidden');
+        }
+        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeFirma(); });
+
+        // ====== Canvas firma (mouse + touch) ======
+        const c   = document.getElementById('canvasFirma');
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        c.style.touchAction = 'none'; // evita scroll/zoom gestual sobre el canvas
+        c.style.pointerEvents = 'auto';
+        let drawing = false, hasStrokes = false, lastX = 0, lastY = 0;
+
+        function resizeCanvas(){
+          const DPR = window.devicePixelRatio || 1;
+          const rect = c.getBoundingClientRect();
+          // Mantén la altura visual del estilo y ajusta resolución interna
+          c.width  = Math.max(1, Math.floor(rect.width  * DPR));
+          c.height = Math.max(1, Math.floor(rect.height * DPR));
+          ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+          ctx.lineWidth = 2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#111';
+          ctx.clearRect(0, 0, c.width, c.height);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        // si entras por primera vez sin abrir modal, lo inicializamos igual
+        setTimeout(resizeCanvas, 0);
+
+        function relPos(clientX, clientY){
+          const r = c.getBoundingClientRect();
+          return [clientX - r.left, clientY - r.top];
+        }
+
+        // Mouse
+        c.addEventListener('mousedown', e => {
+          drawing = true; hasStrokes = true;
+          [lastX, lastY] = relPos(e.clientX, e.clientY);
+          e.preventDefault();
+        });
+        c.addEventListener('mousemove', e => {
+          if(!drawing) return;
+          const [x, y] = relPos(e.clientX, e.clientY);
+          ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+          lastX = x; lastY = y; e.preventDefault();
+        });
+        window.addEventListener('mouseup', () => { drawing = false; });
+
+        // Touch
+        c.addEventListener('touchstart', e => {
+          if(!e.touches.length) return;
+          drawing = true; hasStrokes = true;
+          const t = e.touches[0];
+          [lastX, lastY] = relPos(t.clientX, t.clientY);
+          e.preventDefault();
+        }, { passive:false });
+        c.addEventListener('touchmove', e => {
+          if(!drawing || !e.touches.length) return;
+          const t = e.touches[0];
+          const [x, y] = relPos(t.clientX, t.clientY);
+          ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+          lastX = x; lastY = y; e.preventDefault();
+        }, { passive:false });
+        window.addEventListener('touchend', () => { drawing = false; });
+
+        // Botón limpiar
+        document.getElementById('btnLimpiar').addEventListener('click', () => {
+          ctx.clearRect(0,0,c.width,c.height);
+          hasStrokes = false;
+        });
+
+        // Envío
+        document.getElementById('formFirmaEnSitio').addEventListener('submit', (ev) => {
+          if(!hasStrokes){
+            ev.preventDefault();
+            alert('Por favor dibuja tu firma antes de continuar.');
+            return;
+          }
+          document.getElementById('firmaData').value = c.toDataURL('image/png');
+        });
+      </script>
+      @endif
 
     </div> <!-- /#printable -->
   </div>

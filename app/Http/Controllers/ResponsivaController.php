@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class ResponsivaController extends Controller
 {
@@ -25,7 +27,8 @@ class ResponsivaController extends Controller
     /** Devuelve un ID de admin “por defecto” (el primero que encuentre) */
     private function defaultAdminId(): ?int
     {
-        return (int) User::role('Administrador')->orderBy('id')->value('id');
+        $id = User::role('Administrador')->orderBy('id')->value('id');
+        return $id ? (int) $id : null;
     }
 
     /* ===================== INDEX (buscador + partial) ===================== */
@@ -130,7 +133,7 @@ class ResponsivaController extends Controller
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['nullable', $colExists],
 
-            // ahora son opcionales: se pondrán por defecto si vienen vacíos
+            // opcionales (ponemos default si vienen vacíos)
             'entrego_user_id'       => ['nullable', Rule::in($adminIds)],
             'autoriza_user_id'      => ['nullable', Rule::in($adminIds)],
 
@@ -141,17 +144,22 @@ class ResponsivaController extends Controller
             'fecha_entrega'         => ['nullable','date'],
         ]);
 
-        DB::transaction(function() use ($req, $tenantId) {
+        $resp = null;
+
+        DB::transaction(function() use ($req, $tenantId, &$resp) {
 
             $folio = $this->nextFolio($tenantId);
 
-            // defaults para firmas
+            // === defaults para firmantes (entregó / autorizó)
             $entregoId = $req->entrego_user_id
                 ?: (auth()->user()?->hasRole('Administrador') ? auth()->id() : $this->defaultAdminId());
+            if (!$entregoId) { $entregoId = auth()->id(); } // último fallback
 
-            // puedes fijar un autorizador por config/app.php => 'responsivas_autoriza_user_id'
             $autorizaFijo = (int) config('app.responsivas_autoriza_user_id', 0);
             $autorizaId   = $req->autoriza_user_id ?: ($autorizaFijo ?: $this->defaultAdminId());
+
+            // === token público para firma del colaborador
+            $signDays = (int) config('app.responsiva_sign_days', 7);
 
             $resp = Responsiva::create([
                 'empresa_tenant_id'     => $tenantId,
@@ -164,6 +172,9 @@ class ResponsivaController extends Controller
                 'fecha_solicitud'       => $req->fecha_solicitud,
                 'fecha_entrega'         => $req->fecha_entrega ?: now()->toDateString(),
                 'observaciones'         => $req->observaciones,
+
+                'sign_token'            => Str::random(64),
+                'sign_token_expires_at' => $signDays > 0 ? now()->addDays($signDays) : null,
             ]);
 
             $series = ProductoSerie::deEmpresa($tenantId)
@@ -202,8 +213,13 @@ class ResponsivaController extends Controller
             }
         });
 
-        $created = Responsiva::latest('id')->first();
-        return redirect()->route('responsivas.show', $created)->with('ok', 'Responsiva creada.');
+        // Link público para firma (lo mandamos en flash para que lo copies/envíes)
+        $linkFirma = $resp?->sign_token ? route('public.sign.show', $resp->sign_token) : null;
+
+        return redirect()
+            ->route('responsivas.show', $resp)
+            ->with('ok', 'Responsiva creada.')
+            ->with('firma_link', $linkFirma);
     }
 
     /* ===================== EDIT ===================== */
@@ -345,7 +361,7 @@ class ResponsivaController extends Controller
     {
         $responsiva->load([
             'colaborador', 'usuario',
-            'entrego', 'autoriza',            // 👈 para que la vista pueda mostrar firmas/nombres sin N+1
+            'entrego', 'autoriza',            // para vista (evitar N+1)
             'detalles.producto', 'detalles.serie',
         ]);
 
@@ -410,5 +426,79 @@ class ResponsivaController extends Controller
         return redirect()
             ->route('responsivas.index')
             ->with('deleted', 'Responsiva eliminada. Los equipos quedaron disponibles.');
+    }
+
+    public function emitirFirma(Responsiva $responsiva)
+    {
+        // Si tienes multi-tenant por GlobalScope, ya está protegido. Si no, aquí verifica empresa activa.
+
+        // Si ya está firmada, salimos (evita regenerar/ensuciar)
+        if (Schema::hasColumn('responsivas', 'signed_at') && $responsiva->signed_at) {
+            return back()->with('error', 'Esta responsiva ya está firmada.');
+        }
+
+        $now = now();
+        $expired = false;
+
+        if ($responsiva->sign_token_expires_at) {
+            $expired = $now->greaterThan($responsiva->sign_token_expires_at);
+        }
+
+        if (!$responsiva->sign_token || $expired) {
+            $responsiva->sign_token = Str::random(64);
+            $days = (int) config('app.responsiva_sign_days', 7);
+            $responsiva->sign_token_expires_at = $days > 0 ? $now->addDays($days) : null;
+            $responsiva->save();
+        }
+
+        $linkFirma = route('public.sign.show', $responsiva->sign_token);
+
+        return back()
+            ->with('ok', 'Link de firma generado.')
+            ->with('firma_link', $linkFirma);
+    }
+
+    public function firmarEnSitio(Request $req, Responsiva $responsiva)
+    {
+        // Solo si no está firmada
+        if (!empty($responsiva->firma_colaborador_path)) {
+            return back()->with('ok', 'La responsiva ya estaba firmada.');
+        }
+
+        $req->validate([
+            'firma'  => ['required'],             // dataURL base64 desde el <canvas>
+            'nombre' => ['nullable','string','max:255'], // opcional (si quieres sobreescribir)
+        ]);
+
+        // Parsear dataURL -> PNG bytes
+        $pngBytes = null;
+        $firma = (string) $req->input('firma');
+        if (Str::startsWith($firma, 'data:image')) {
+            [$meta, $data] = explode(',', $firma, 2);
+            $pngBytes = base64_decode($data);
+        }
+
+        if (!$pngBytes) {
+            return back()->withErrors(['firma' => 'No se pudo leer la firma.']);
+        }
+
+        // Guardar PNG en storage público (mismo path que la firma remota)
+        $dir  = 'firmas_colaboradores';
+        $path = "{$dir}/responsiva-{$responsiva->id}.png";
+        Storage::disk('public')->put($path, $pngBytes);
+
+        // Actualizar responsiva
+        $responsiva->firma_colaborador_path = $path;
+        $responsiva->firmado_en  = now();
+        $responsiva->firmado_por = $req->input('nombre') ?: ($responsiva->colaborador->nombre ?? null);
+        $responsiva->firmado_ip  = $req->ip();
+
+        // Si existía un token, anularlo
+        $responsiva->sign_token = null;
+        $responsiva->sign_token_expires_at = null;
+
+        $responsiva->save();
+
+        return back()->with('ok', 'Responsiva firmada en sitio.');
     }
 }
