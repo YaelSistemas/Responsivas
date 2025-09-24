@@ -8,6 +8,8 @@
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
+    .btn-link{color:#1f2937;text-decoration:underline}
+    .btn-danger{color:#b91c1c}
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
     .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
@@ -30,7 +32,11 @@
     {{-- Header --}}
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Unidades de servicio</h2>
-      <a href="{{ route('unidades.create') }}" class="btn btn-primary">Nueva unidad</a>
+
+      {{-- SOLO si tiene permiso para crear --}}
+      @can('unidades.create')
+        <a href="{{ route('unidades.create') }}" class="btn btn-primary">Nueva unidad</a>
+      @endcan
     </div>
 
     {{-- Toolbar --}}

@@ -15,9 +15,27 @@ use Illuminate\Validation\ValidationException;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class ResponsivaController extends Controller
+class ResponsivaController extends Controller implements HasMiddleware
 {
+    /** ====== Spatie: permisos por acción ====== */
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('auth'),
+            // Ver solo (lista, detalle, pdf)
+            new Middleware('permission:responsivas.view',   only: ['index','show','pdf']),
+            // Crear
+            new Middleware('permission:responsivas.create', only: ['create','store']),
+            // Editar (incluye emitirFirma y firmarEnSitio)
+            new Middleware('permission:responsivas.edit',   only: ['edit','update','emitirFirma','firmarEnSitio']),
+            // Eliminar
+            new Middleware('permission:responsivas.delete', only: ['destroy']),
+        ];
+    }
+
     /* ===================== Helpers ===================== */
     private function tenantId(): int
     {
@@ -60,7 +78,7 @@ class ResponsivaController extends Controller
         $rows = Responsiva::query()
             ->with($with)
             ->withCount('detalles')
-            ->whereHas('detalles.serie', fn($s) => $s->where('empresa_tenant_id', $tenantId))
+            ->where('empresa_tenant_id', $tenantId) // <— filtro por tenant directo
             ->when($q !== '', function ($query) use ($q) {
                 $query->where(function ($w) use ($q) {
                     $w->where('folio', 'like', "%{$q}%")
@@ -83,9 +101,17 @@ class ResponsivaController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
-        return $request->boolean('partial')
-            ? view('responsivas.partials.table', compact('rows'))->render()
-            : view('responsivas.index', compact('rows', 'perPage', 'q'));
+        if ($request->boolean('partial')) {
+            // Pasamos ambas llaves para compatibilidad con tu parcial
+            return view('responsivas.partials.table', ['responsivas' => $rows, 'rows' => $rows])->render();
+        }
+
+        return view('responsivas.index', [
+            'responsivas' => $rows,
+            'rows'        => $rows,
+            'perPage'     => $perPage,
+            'q'           => $q,
+        ]);
     }
 
     /* ===================== CREATE ===================== */
@@ -111,6 +137,9 @@ class ResponsivaController extends Controller
             ->get(['id','producto_id','serie','estado','especificaciones']);
 
         $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
+
+//        // Si quieres bloquear aquí también (además del middleware):
+//        // abort_unless(auth()->user()->can('responsivas.create'), 403);
 
         return view('responsivas.create', compact('colaboradores','series','admins'));
     }
@@ -225,6 +254,9 @@ class ResponsivaController extends Controller
     /* ===================== EDIT ===================== */
     public function edit(Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         $tenantId = $this->tenantId();
 
         $responsiva->load(['detalles.producto','detalles.serie','colaborador']);
@@ -268,6 +300,9 @@ class ResponsivaController extends Controller
     /* ===================== UPDATE ===================== */
     public function update(Request $req, Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         $tenantId = $this->tenantId();
 
         $adminIds  = User::role('Administrador')->pluck('id')->all();
@@ -359,9 +394,12 @@ class ResponsivaController extends Controller
     /* ===================== SHOW ===================== */
     public function show(Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         $responsiva->load([
             'colaborador', 'usuario',
-            'entrego', 'autoriza',            // para vista (evitar N+1)
+            'entrego', 'autoriza',
             'detalles.producto', 'detalles.serie',
         ]);
 
@@ -389,6 +427,9 @@ class ResponsivaController extends Controller
     /* ===================== PDF ===================== */
     public function pdf(Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         $pdf = Pdf::loadView('responsivas.pdf', compact('responsiva'))
                   ->setPaper('a4', 'portrait')
                   ->setOptions(['isRemoteEnabled' => true]);
@@ -399,6 +440,9 @@ class ResponsivaController extends Controller
     /* ===================== DESTROY ===================== */
     public function destroy(Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         $tenantId = $this->tenantId();
 
         DB::transaction(function () use ($responsiva, $tenantId) {
@@ -430,7 +474,8 @@ class ResponsivaController extends Controller
 
     public function emitirFirma(Responsiva $responsiva)
     {
-        // Si tienes multi-tenant por GlobalScope, ya está protegido. Si no, aquí verifica empresa activa.
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         // Si ya está firmada, salimos (evita regenerar/ensuciar)
         if (Schema::hasColumn('responsivas', 'signed_at') && $responsiva->signed_at) {
@@ -460,6 +505,9 @@ class ResponsivaController extends Controller
 
     public function firmarEnSitio(Request $req, Responsiva $responsiva)
     {
+        // Tenant guard
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
         // Solo si no está firmada
         if (!empty($responsiva->firma_colaborador_path)) {
             return back()->with('ok', 'La responsiva ya estaba firmada.');

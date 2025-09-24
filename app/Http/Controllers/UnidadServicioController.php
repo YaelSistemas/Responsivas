@@ -31,7 +31,7 @@ class UnidadServicioController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = (int) $request->query('per_page', 25);
         $q       = trim((string) $request->query('q', ''));
         $tenant  = $this->tenantId();
 

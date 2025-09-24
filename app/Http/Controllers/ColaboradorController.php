@@ -53,7 +53,7 @@ class ColaboradorController extends Controller implements HasMiddleware
                 });
             })
             ->latest()
-            ->paginate((int)request('per_page', 10))
+            ->paginate((int)request('per_page', 50))
             ->withQueryString();
 
         if (request()->ajax() || request()->boolean('partial')) {

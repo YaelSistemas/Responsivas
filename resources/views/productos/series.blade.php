@@ -17,17 +17,15 @@
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
     .err{color:#dc2626;font-size:12px;margin-top:6px}
 
-    /* chips de specs */
     .chips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.35rem}
     .chip{font-size:.72rem;border:1px solid #e5e7eb;background:#f3f4f6;color:#374151;border-radius:9999px;padding:.12rem .5rem}
     .badge-mod{font-size:.65rem;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:9999px;padding:.08rem .4rem}
 
-    /* ===== Select Estado: sin solaparse con la flecha ===== */
     .state-wrap{position:relative;display:inline-block}
     .state-select{
       -webkit-appearance:none;appearance:none;
       background:#fff;border:1px solid #d1d5db;border-radius:8px;
-      padding:.4rem 2rem .4rem .6rem; /* espacio a la derecha para la flecha */
+      padding:.4rem 2rem .4rem .6rem;
       min-width:160px;font-size:.9rem;line-height:1.25;
     }
     .state-wrap::after{
@@ -35,7 +33,6 @@
       color:#6b7280;pointer-events:none;font-size:.85rem;
     }
 
-    /* ===== Modal base ===== */
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
     .modal.open{display:flex}
     .modal .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
@@ -60,18 +57,11 @@
     .upload-row .btn{flex:0 0 auto}
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
 
-    /* === Centrar columnas Fotos, Estado y Acciones === */
-    .tbl th:nth-child(2),
-    .tbl td:nth-child(2),
-    .tbl th:nth-child(3),
-    .tbl td:nth-child(3),
-    .tbl th:nth-child(4),
-    .tbl td:nth-child(4){
-      text-align:center;
-    }
+    .tbl th:nth-child(2), .tbl td:nth-child(2),
+    .tbl th:nth-child(3), .tbl td:nth-child(3),
+    .tbl th:nth-child(4), .tbl td:nth-child(4){ text-align:center; }
     .tbl td:nth-child(3) form{display:inline-block;}
 
-    /* Mini spinner del input */
     .loading::after{
       content: '';
       width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#1d4ed8;border-radius:50%;
@@ -102,7 +92,11 @@
             <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
                    class="border rounded px-3 py-1 focus:outline-none" placeholder="Serie...">
           </form>
-          <button id="open-bulk" type="button" class="btn btn-primary">Alta masiva</button>
+
+          @can('productos.create')
+            <button id="open-bulk" type="button" class="btn btn-primary">Alta masiva</button>
+          @endcan
+
           <a href="{{ route('productos.index') }}" class="btn btn-light">Volver a productos</a>
         </div>
       </div>
@@ -157,35 +151,42 @@
 
                 {{-- Estado --}}
                 <td>
-                  <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
-                    @csrf @method('PUT')
-                    <span class="state-wrap">
-                      <select name="estado" class="state-select" onchange="this.form.submit()">
-                        @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
-                          <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
-                        @endforeach
-                      </select>
-                    </span>
-                  </form>
+                  @can('productos.edit')
+                    <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
+                      @csrf @method('PUT')
+                      <span class="state-wrap">
+                        <select name="estado" class="state-select" onchange="this.form.submit()">
+                          @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
+                            <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
+                          @endforeach
+                        </select>
+                      </span>
+                    </form>
+                  @else
+                    <span class="chip">{{ ucfirst($s->estado) }}</span>
+                  @endcan
                 </td>
 
                 {{-- Acciones --}}
                 <td>
                   <div class="flex items-center justify-center gap-3">
-                    <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
-                      <i class="fa-solid fa-pen"></i>
-                    </a>
-                    @if($s->estado === 'disponible')
-                      <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
-                            onsubmit="return confirm('¿Eliminar esta serie?');">
-                        @csrf @method('DELETE')
-                        <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
-                          <i class="fa-solid fa-trash"></i>
-                        </button>
-                      </form>
-                    @else
-                      <span class="text-gray-400 text-sm"></span>
-                    @endif
+                    @can('productos.edit')
+                      <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
+                        <i class="fa-solid fa-pen"></i>
+                      </a>
+                    @endcan
+
+                    @can('productos.delete')
+                      @if($s->estado === 'disponible')
+                        <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
+                              onsubmit="return confirm('¿Eliminar esta serie?');">
+                          @csrf @method('DELETE')
+                          <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
+                            <i class="fa-solid fa-trash"></i>
+                          </button>
+                        </form>
+                      @endif
+                    @endcan
                   </div>
                 </td>
               </tr>
@@ -202,24 +203,26 @@
     </div>
   </div>
 
-  {{-- MODAL: Alta masiva --}}
-  <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="backdrop" data-close="1"></div>
-    <div class="panel">
-      <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
-      <h3>Alta masiva de series</h3>
-      <form method="POST" action="{{ route('productos.series.store', $producto) }}">
-        @csrf
-        <textarea name="lotes" rows="8" placeholder="Pega o escribe una serie por línea...">{{ old('lotes') }}</textarea>
-        <div class="hint">Se crearán como <b>disponibles</b>. Duplicadas se omiten.</div>
-        @error('lotes') <div class="err">{{ $message }}</div> @enderror
-        <div class="actions">
-          <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Agregar series</button>
-        </div>
-      </form>
+  {{-- MODAL: Alta masiva (solo crear) --}}
+  @can('productos.create')
+    <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="backdrop" data-close="1"></div>
+      <div class="panel">
+        <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
+        <h3>Alta masiva de series</h3>
+        <form method="POST" action="{{ route('productos.series.store', $producto) }}">
+          @csrf
+          <textarea name="lotes" rows="8" placeholder="Pega o escribe una serie por línea...">{{ old('lotes') }}</textarea>
+          <div class="hint">Se crearán como <b>disponibles</b>. Duplicadas se omiten.</div>
+          @error('lotes') <div class="err">{{ $message }}</div> @enderror
+          <div class="actions">
+            <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Agregar series</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
+  @endcan
 
   {{-- MODALES DE FOTOS (uno por serie) --}}
   @foreach($series as $s)
@@ -237,11 +240,14 @@
                   <img src="{{ $f->url }}" alt="foto">
                 </a>
                 <div class="meta">{{ $f->caption }}</div>
-                <form method="POST" action="{{ route('productos.series.fotos.destroy', [$producto,$s,$f]) }}"
-                      onsubmit="return confirm('¿Eliminar esta foto?')" style="margin-top:6px">
-                  @csrf @method('DELETE')
-                  <button class="btn btn-light" type="submit">Eliminar</button>
-                </form>
+
+                @can('productos.edit')
+                  <form method="POST" action="{{ route('productos.series.fotos.destroy', [$producto,$s,$f]) }}"
+                        onsubmit="return confirm('¿Eliminar esta foto?')" style="margin-top:6px">
+                    @csrf @method('DELETE')
+                    <button class="btn btn-light" type="submit">Eliminar</button>
+                  </form>
+                @endcan
               </div>
             @empty
               <div style="grid-column:1/-1;color:#6b7280;text-align:center">Sin fotos.</div>
@@ -249,22 +255,23 @@
           </div>
         </div>
 
-        <form method="POST" action="{{ route('productos.series.fotos.store', [$producto,$s]) }}"
-              enctype="multipart/form-data">
-          @csrf
-          <div class="upload-row">
-            <input type="file" name="imagenes[]" accept="image/*" multiple required>
-            <input type="text" name="caption" placeholder="Nota / descripción (opcional)" class="border rounded px-2 py-1">
-            <button type="submit" class="btn btn-primary">Subir</button>
-          </div>
-          <div class="hint">Puedes seleccionar varias imágenes a la vez. Máx. 4MB por archivo.</div>
-        </form>
+        @can('productos.edit')
+          <form method="POST" action="{{ route('productos.series.fotos.store', [$producto,$s]) }}"
+                enctype="multipart/form-data">
+            @csrf
+            <div class="upload-row">
+              <input type="file" name="imagenes[]" accept="image/*" multiple required>
+              <input type="text" name="caption" placeholder="Nota / descripción (opcional)" class="border rounded px-2 py-1">
+              <button type="submit" class="btn btn-primary">Subir</button>
+            </div>
+            <div class="hint">Puedes seleccionar varias imágenes a la vez. Máx. 4MB por archivo.</div>
+          </form>
+        @endcan
       </div>
     </div>
   @endforeach
 
   <script>
-    // Modal "Alta masiva"
     (function(){
       const modal = document.getElementById('bulk-modal');
       const openBtn = document.getElementById('open-bulk');
@@ -272,13 +279,12 @@
       function closeModal(){ modal.classList.remove('open'); }
       openBtn?.addEventListener('click', openModal);
       modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
-      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal.classList.contains('open')) closeModal(); });
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal?.classList.contains('open')) closeModal(); });
       @if ($errors->has('lotes')) openModal(); @endif
     })();
   </script>
 
   <script>
-    // Abrir / cerrar modales de fotos
     (function(){
       document.querySelectorAll('[data-open-fotos]').forEach(a=>{
         a.addEventListener('click', (e)=>{
@@ -299,17 +305,14 @@
   </script>
 
   <script>
-    // === Búsqueda en vivo (debounced) sin perder el foco ===
     (function(){
       const input = document.getElementById('q');
       const tbody = document.getElementById('series-tbody');
       const pager = document.getElementById('series-pagination');
       const form  = document.getElementById('search-form');
 
-      // Evitar que Enter envíe el form y te saque del input
       form.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') e.preventDefault(); });
 
-      // Debounce + AbortController para cancelar peticiones previas
       let t=null, controller=null;
       function debounceFetch(){
         clearTimeout(t);
@@ -328,7 +331,6 @@
         const q = input.value || '';
         const url = buildURL(q, page);
 
-        // Cancelar petición anterior
         if(controller) controller.abort();
         controller = new AbortController();
 
@@ -346,12 +348,9 @@
           if(newBody) tbody.replaceChildren(...newBody.childNodes);
           if(newPager) pager.replaceChildren(...newPager.childNodes);
 
-          // Actualizar la barra de direcciones sin recargar (para poder compartir / volver atrás)
           window.history.replaceState({}, '', url.toString());
 
-          // Volver a enlazar handlers de modales de fotos porque reemplazamos el tbody
           rebindFotoModals();
-          // Rebind de paginación para que pagine vía AJAX manteniendo el foco
           rebindPaginationLinks();
         }catch(err){
           if(err.name !== 'AbortError'){ console.error(err); }
@@ -366,7 +365,7 @@
             e.preventDefault();
             const id = a.getAttribute('data-open-fotos');
             document.getElementById('fotos-modal-'+id)?.classList.add('open');
-          }, { once:true }); // nos aseguramos de no duplicar listeners
+          }, { once:true });
         });
       }
 
@@ -374,7 +373,6 @@
         pager.querySelectorAll('a').forEach(a=>{
           a.addEventListener('click', (e)=>{
             e.preventDefault();
-            // tomar el "page" del href
             const u = new URL(a.href);
             const page = u.searchParams.get('page') || null;
             runFetch(page);
@@ -382,7 +380,6 @@
         });
       }
 
-      // Bind inicial
       input.addEventListener('input', debounceFetch);
       rebindPaginationLinks();
 

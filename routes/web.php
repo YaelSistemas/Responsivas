@@ -86,14 +86,14 @@ Route::middleware(['auth'])->group(function () {
     // Bloque de rutas anidadas de productos
     Route::prefix('productos/{producto}')->group(function () {
         // SERIES (tracking por número de serie)
-        Route::get   ('/series',               [ProductoController::class,'series'])->name('productos.series');
-        Route::post  ('/series',               [ProductoController::class,'seriesStore'])->name('productos.series.store');
-        Route::delete('/series/{serie}',       [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
-        Route::put   ('/series/{serie}/estado',[ProductoController::class,'seriesEstado'])->name('productos.series.estado');
+        Route::get   ('/series',                [ProductoController::class,'series'])->name('productos.series');
+        Route::post  ('/series',                [ProductoController::class,'seriesStore'])->name('productos.series.store');
+        Route::delete('/series/{serie}',        [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
+        Route::put   ('/series/{serie}/estado', [ProductoController::class,'seriesEstado'])->name('productos.series.estado');
 
         // FOTOS de series
-        Route::post  ('/series/{serie}/fotos',       [ProductoSerieController::class, 'fotosStore'])->name('productos.series.fotos.store');
-        Route::delete('/series/{serie}/fotos/{foto}',[ProductoSerieController::class, 'fotosDestroy'])->name('productos.series.fotos.destroy');
+        Route::post  ('/series/{serie}/fotos',        [ProductoSerieController::class, 'fotosStore'])->name('productos.series.fotos.store');
+        Route::delete('/series/{serie}/fotos/{foto}', [ProductoSerieController::class, 'fotosDestroy'])->name('productos.series.fotos.destroy');
 
         // EXISTENCIA (tracking por cantidad)
         Route::get ('/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
@@ -109,18 +109,23 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('responsivas', ResponsivaController::class)
         ->only(['index','create','store','show','edit','update','destroy']);
 
-    // PDF (interno)
-    Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])->name('responsivas.pdf');
+    // PDF (interno) — requiere permiso de ver responsivas
+    Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])
+        ->middleware('permission:responsivas.view')
+        ->name('responsivas.pdf');
 
-    // Generar / renovar link de firma (alias NUEVO para el botón)
+    // Generar / renovar link de firma — requiere permiso de editar responsivas
     Route::post('/responsivas/{responsiva}/link', [ResponsivaController::class, 'emitirFirma'])
+        ->middleware('permission:responsivas.edit')
         ->name('responsivas.link');
 
-    // Conserva también el name anterior por si alguna vista lo usa
+    // Alias antiguo para compatibilidad
     Route::post('/responsivas/{responsiva}/emitir-firma', [ResponsivaController::class, 'emitirFirma'])
+        ->middleware('permission:responsivas.edit')
         ->name('responsivas.emitirFirma');
 
-    // Firmar en sitio (sin link)
+    // Firmar en sitio — requiere permiso de editar responsivas
     Route::post('/responsivas/{responsiva}/firmar-en-sitio', [ResponsivaController::class, 'firmarEnSitio'])
+        ->middleware('permission:responsivas.edit')
         ->name('responsivas.firmarEnSitio');
 });

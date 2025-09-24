@@ -12,7 +12,6 @@
     .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
-
     /* Toolbar */
     #areas-toolbar .select-wrap{position:relative;display:inline-block}
     #areas-toolbar select[name="per_page"]{
@@ -26,11 +25,17 @@
     }
   </style>
 
+  @php
+    $canCreate   = auth()->user()?->can('areas.create');
+  @endphp
+
   <div class="page-wrap py-6">
     {{-- Header --}}
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Áreas</h2>
-      <a href="{{ route('areas.create') }}" class="btn btn-primary">Nueva área</a>
+      @if($canCreate)
+        <a href="{{ route('areas.create') }}" class="btn btn-primary">Nueva área</a>
+      @endif
     </div>
 
     {{-- Toolbar --}}

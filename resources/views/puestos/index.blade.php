@@ -28,11 +28,17 @@
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace}
   </style>
 
+  @php
+    $canCreate = auth()->user()?->can('puestos.create');
+  @endphp
+
   <div class="page-wrap py-6">
     {{-- Header --}}
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Puestos</h2>
-      <a href="{{ route('puestos.create') }}" class="btn btn-primary">Nuevo puesto</a>
+      @if($canCreate)
+        <a href="{{ route('puestos.create') }}" class="btn btn-primary">Nuevo puesto</a>
+      @endif
     </div>
 
     {{-- Toolbar --}}

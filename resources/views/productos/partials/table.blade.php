@@ -113,11 +113,13 @@
 
           {{-- Serie/Existencia links --}}
           <td>
-            @if($p->tracking === 'serial')
-              <a href="{{ route('productos.series', $p) }}" class="text-indigo-600 hover:underline">Ver series</a>
-            @else
-              <a href="{{ route('productos.existencia', $p) }}" class="text-indigo-600 hover:underline">Ver existencia</a>
-            @endif
+            @can('productos.view')
+              @if($p->tracking === 'serial')
+                <a href="{{ route('productos.series', $p) }}" class="text-indigo-600 hover:underline">Ver series</a>
+              @else
+                <a href="{{ route('productos.existencia', $p) }}" class="text-indigo-600 hover:underline">Ver existencia</a>
+              @endif
+            @endcan
           </td>
 
           {{-- Acciones --}}

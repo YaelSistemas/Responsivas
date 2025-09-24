@@ -61,6 +61,7 @@
                             @case('puestos') Puestos @break
                             @case('subsidiarias') Subsidiarias @break
                             @case('productos') Productos @break
+                            @case('responsivas') Responsivas @break
                             @default {{ ucfirst($groupKey) }}
                         @endswitch
                     </div>

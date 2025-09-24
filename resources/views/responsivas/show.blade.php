@@ -250,21 +250,25 @@
       <a href="{{ route('responsivas.pdf', $responsiva) }}" class="btn btn-primary">Descargar PDF</a>
 
       @if (empty($responsiva->firma_colaborador_path))
-        <button type="button" class="btn btn-secondary" onclick="openFirma()">
-          Firmar en sitio
-        </button>
+        @can('responsivas.edit')
+          <button type="button" class="btn btn-secondary" onclick="openFirma()">
+            Firmar en sitio
+          </button>
 
-        <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
-          @csrf
-          <button class="btn btn-secondary">Generar/renovar link de firma</button>
-        </form>
+          <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
+            @csrf
+            <button class="btn btn-secondary">Generar/renovar link de firma</button>
+          </form>
+        @endcan
       @endif
 
-      @if (session('firma_link'))
-        <div style="margin-top:8px">
-          <small>Link de firma: <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a></small>
-        </div>
-      @endif
+      @can('responsivas.edit')
+        @if (session('firma_link'))
+          <div style="margin-top:8px">
+            <small>Link de firma: <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a></small>
+          </div>
+        @endif
+      @endcan
     </div>
 
     <div id="printable" class="doc">
@@ -455,127 +459,129 @@
         </div>
       </div>
 
-      {{-- Modal firma en sitio (reemplaza tu bloque actual) --}}
-      @if (empty($responsiva->firma_colaborador_path))
-        <div id="modalFirmar"
-            class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4"
-            style="z-index:60;"
-            onclick="closeFirma()">
-          <div class="bg-white rounded-lg p-4 w-[640px] max-w-[92vw]"
-              onclick="event.stopPropagation()">
-            <h3 class="text-lg font-semibold mb-3">Firmar en sitio</h3>
+      {{-- Modal firma en sitio (protegido por permiso) --}}
+      @can('responsivas.edit')
+        @if (empty($responsiva->firma_colaborador_path))
+          <div id="modalFirmar"
+              class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4"
+              style="z-index:60;"
+              onclick="closeFirma()">
+            <div class="bg-white rounded-lg p-4 w-[640px] max-w-[92vw]"
+                onclick="event.stopPropagation()">
+              <h3 class="text-lg font-semibold mb-3">Firmar en sitio</h3>
 
-            <form id="formFirmaEnSitio" method="POST" action="{{ route('responsivas.firmarEnSitio', $responsiva) }}">
-              @csrf
-              <input type="hidden" name="firma" id="firmaData">
+              <form id="formFirmaEnSitio" method="POST" action="{{ route('responsivas.firmarEnSitio', $responsiva) }}">
+                @csrf
+                <input type="hidden" name="firma" id="firmaData">
 
-              <div class="border border-dashed rounded p-2 mb-2" style="border-color:#94a3b8">
-                <canvas id="canvasFirma" width="560" height="180" style="width:100%;height:180px;touch-action:none;"></canvas>
-              </div>
+                <div class="border border-dashed rounded p-2 mb-2" style="border-color:#94a3b8">
+                  <canvas id="canvasFirma" width="560" height="180" style="width:100%;height:180px;touch-action:none;"></canvas>
+                </div>
 
-              <div style="display:flex;gap:8px;justify-content:flex-end;">
-                <button type="button" class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
-                <button type="button" class="btn btn-secondary" onclick="closeFirma()">Cancelar</button>
-                <button type="submit" class="btn btn-primary">Firmar y guardar</button>
-              </div>
-            </form>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                  <button type="button" class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
+                  <button type="button" class="btn btn-secondary" onclick="closeFirma()">Cancelar</button>
+                  <button type="submit" class="btn btn-primary">Firmar y guardar</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
 
-        <script>
-        function openFirma(){
-          const m = document.getElementById('modalFirmar');
-          m.classList.remove('hidden'); m.classList.add('flex');
-          document.documentElement.classList.add('overflow-hidden');
-          document.body.classList.add('overflow-hidden');
-          // recalcular tamaño cuando se abre
-          setTimeout(resizeCanvas, 50);
-        }
-        function closeFirma(){
-          const m = document.getElementById('modalFirmar');
-          m.classList.remove('flex'); m.classList.add('hidden');
-          document.documentElement.classList.remove('overflow-hidden');
-          document.body.classList.remove('overflow-hidden');
-        }
-        document.addEventListener('keydown', e => { if(e.key === 'Escape') closeFirma(); });
-
-        // ====== Canvas firma (mouse + touch) ======
-        const c   = document.getElementById('canvasFirma');
-        const ctx = c.getContext('2d', { willReadFrequently: true });
-        c.style.touchAction = 'none'; // evita scroll/zoom gestual sobre el canvas
-        c.style.pointerEvents = 'auto';
-        let drawing = false, hasStrokes = false, lastX = 0, lastY = 0;
-
-        function resizeCanvas(){
-          const DPR = window.devicePixelRatio || 1;
-          const rect = c.getBoundingClientRect();
-          // Mantén la altura visual del estilo y ajusta resolución interna
-          c.width  = Math.max(1, Math.floor(rect.width  * DPR));
-          c.height = Math.max(1, Math.floor(rect.height * DPR));
-          ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.strokeStyle = '#111';
-          ctx.clearRect(0, 0, c.width, c.height);
-        }
-        window.addEventListener('resize', resizeCanvas);
-        // si entras por primera vez sin abrir modal, lo inicializamos igual
-        setTimeout(resizeCanvas, 0);
-
-        function relPos(clientX, clientY){
-          const r = c.getBoundingClientRect();
-          return [clientX - r.left, clientY - r.top];
-        }
-
-        // Mouse
-        c.addEventListener('mousedown', e => {
-          drawing = true; hasStrokes = true;
-          [lastX, lastY] = relPos(e.clientX, e.clientY);
-          e.preventDefault();
-        });
-        c.addEventListener('mousemove', e => {
-          if(!drawing) return;
-          const [x, y] = relPos(e.clientX, e.clientY);
-          ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
-          lastX = x; lastY = y; e.preventDefault();
-        });
-        window.addEventListener('mouseup', () => { drawing = false; });
-
-        // Touch
-        c.addEventListener('touchstart', e => {
-          if(!e.touches.length) return;
-          drawing = true; hasStrokes = true;
-          const t = e.touches[0];
-          [lastX, lastY] = relPos(t.clientX, t.clientY);
-          e.preventDefault();
-        }, { passive:false });
-        c.addEventListener('touchmove', e => {
-          if(!drawing || !e.touches.length) return;
-          const t = e.touches[0];
-          const [x, y] = relPos(t.clientX, t.clientY);
-          ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
-          lastX = x; lastY = y; e.preventDefault();
-        }, { passive:false });
-        window.addEventListener('touchend', () => { drawing = false; });
-
-        // Botón limpiar
-        document.getElementById('btnLimpiar').addEventListener('click', () => {
-          ctx.clearRect(0,0,c.width,c.height);
-          hasStrokes = false;
-        });
-
-        // Envío
-        document.getElementById('formFirmaEnSitio').addEventListener('submit', (ev) => {
-          if(!hasStrokes){
-            ev.preventDefault();
-            alert('Por favor dibuja tu firma antes de continuar.');
-            return;
+          <script>
+          function openFirma(){
+            const m = document.getElementById('modalFirmar');
+            m.classList.remove('hidden'); m.classList.add('flex');
+            document.documentElement.classList.add('overflow-hidden');
+            document.body.classList.add('overflow-hidden');
+            // recalcular tamaño cuando se abre
+            setTimeout(resizeCanvas, 50);
           }
-          document.getElementById('firmaData').value = c.toDataURL('image/png');
-        });
-      </script>
-      @endif
+          function closeFirma(){
+            const m = document.getElementById('modalFirmar');
+            m.classList.remove('flex'); m.classList.add('hidden');
+            document.documentElement.classList.remove('overflow-hidden');
+            document.body.classList.remove('overflow-hidden');
+          }
+          document.addEventListener('keydown', e => { if(e.key === 'Escape') closeFirma(); });
+
+          // ====== Canvas firma (mouse + touch) ======
+          const c   = document.getElementById('canvasFirma');
+          const ctx = c.getContext('2d', { willReadFrequently: true });
+          c.style.touchAction = 'none'; // evita scroll/zoom gestual sobre el canvas
+          c.style.pointerEvents = 'auto';
+          let drawing = false, hasStrokes = false, lastX = 0, lastY = 0;
+
+          function resizeCanvas(){
+            const DPR = window.devicePixelRatio || 1;
+            const rect = c.getBoundingClientRect();
+            // Mantén la altura visual del estilo y ajusta resolución interna
+            c.width  = Math.max(1, Math.floor(rect.width  * DPR));
+            c.height = Math.max(1, Math.floor(rect.height * DPR));
+            ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#111';
+            ctx.clearRect(0, 0, c.width, c.height);
+          }
+          window.addEventListener('resize', resizeCanvas);
+          // si entras por primera vez sin abrir modal, lo inicializamos igual
+          setTimeout(resizeCanvas, 0);
+
+          function relPos(clientX, clientY){
+            const r = c.getBoundingClientRect();
+            return [clientX - r.left, clientY - r.top];
+          }
+
+          // Mouse
+          c.addEventListener('mousedown', e => {
+            drawing = true; hasStrokes = true;
+            [lastX, lastY] = relPos(e.clientX, e.clientY);
+            e.preventDefault();
+          });
+          c.addEventListener('mousemove', e => {
+            if(!drawing) return;
+            const [x, y] = relPos(e.clientX, e.clientY);
+            ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+            lastX = x; lastY = y; e.preventDefault();
+          });
+          window.addEventListener('mouseup', () => { drawing = false; });
+
+          // Touch
+          c.addEventListener('touchstart', e => {
+            if(!e.touches.length) return;
+            drawing = true; hasStrokes = true;
+            const t = e.touches[0];
+            [lastX, lastY] = relPos(t.clientX, t.clientY);
+            e.preventDefault();
+          }, { passive:false });
+          c.addEventListener('touchmove', e => {
+            if(!drawing || !e.touches.length) return;
+            const t = e.touches[0];
+            const [x, y] = relPos(t.clientX, t.clientY);
+            ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+            lastX = x; lastY = y; e.preventDefault();
+          }, { passive:false });
+          window.addEventListener('touchend', () => { drawing = false; });
+
+          // Botón limpiar
+          document.getElementById('btnLimpiar').addEventListener('click', () => {
+            ctx.clearRect(0,0,c.width,c.height);
+            hasStrokes = false;
+          });
+
+          // Envío
+          document.getElementById('formFirmaEnSitio').addEventListener('submit', (ev) => {
+            if(!hasStrokes){
+              ev.preventDefault();
+              alert('Por favor dibuja tu firma antes de continuar.');
+              return;
+            }
+            document.getElementById('firmaData').value = c.toDataURL('image/png');
+          });
+        </script>
+        @endif
+      @endcan
 
     </div> <!-- /#printable -->
   </div>

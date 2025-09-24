@@ -3,7 +3,7 @@
   use Illuminate\Support\Carbon;
   use Illuminate\Pagination\AbstractPaginator;
 
-  // Robustez: toma $responsivas si existe, o cae a otros nombres comunes.
+  // Toma $responsivas si existe, o cae a otros nombres comunes:
   $responsivas = $responsivas
       ?? ($rows ?? $paginator ?? $lista ?? $records ?? $items ?? $data ?? $collection ?? collect());
 
@@ -11,7 +11,7 @@
 @endphp
 
 <style>
-  /* pequeños estilos para los iconos de acciones */
+  /* Botones de acciones */
   .tbl td.actions a,
   .tbl td.actions button{
     display:inline-flex; align-items:center; justify-content:center;
@@ -22,22 +22,23 @@
   .tbl td.actions button:hover{ background:#eef2ff; color:#1e40af; }
   .tbl td.actions .danger{ background:#fef2f2; color:#991b1b; }
   .tbl td.actions .danger:hover{ background:#fee2e2; color:#7f1d1d; }
+
   .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 </style>
 
 <table class="tbl">
-  {{-- Distribución de anchos para que COLABORADOR y EQUIPO queden parecidos --}}
+  {{-- Anchos: deben coincidir con el CSS del index --}}
   <colgroup>
-    <col class="c-folio">     {{-- 9%  --}}
-    <col class="c-fsol">      {{-- 9%  --}}
-    <col class="c-colab">     {{-- 17% --}}
-    <col class="c-area">      {{-- 10% --}}
-    <col class="c-motivo">    {{-- 11% --}}
-    <col class="c-equipo">    {{-- 17% --}}
-    <col class="c-entrega">   {{-- 9%  --}}
-    <col class="c-fent">      {{-- 9%  --}}
-    <col class="c-items">     {{-- 4%  --}}
-    <col class="c-acc">       {{-- 5%  --}}
+    <col class="c-folio">   {{-- 8%  --}}
+    <col class="c-fsol">    {{-- 9%  --}}
+    <col class="c-colab">   {{-- 20% --}}
+    <col class="c-area">    {{-- 9%  --}}
+    <col class="c-motivo">  {{-- 10% --}}
+    <col class="c-equipo">  {{-- 20% --}}
+    <col class="c-entrega"> {{-- 7%  --}}
+    <col class="c-fent">    {{-- 9%  --}}
+    <col class="c-items">   {{-- 4%  --}}
+    <col class="c-acc">     {{-- 4%  --}}
   </colgroup>
 
   <thead>
@@ -54,10 +55,11 @@
       <th>Acciones</th>
     </tr>
   </thead>
+
   <tbody>
     @forelse ($responsivas as $r)
       @php
-        // Fechas d-m-Y (sin hora)
+        // Fechas (d-m-Y)
         $fechaSol = !empty($r->fecha_solicitud)
           ? ($r->fecha_solicitud instanceof \Illuminate\Support\Carbon
               ? $r->fecha_solicitud->format('d-m-Y')
@@ -103,13 +105,8 @@
         $equipoTxt = $nombres->take(2)->implode(', ');
         if ($nombres->count() > 2) $equipoTxt .= ' +'.($nombres->count()-2);
 
-        // Entrega por
-        $entregoNombre = '';
-        if (!empty($r->entrego) && !is_string($r->entrego)) {
-          $entregoNombre = $r->entrego->name ?? '';
-        } elseif (!empty($r->entrego_user_id) && class_exists(\App\Models\User::class)) {
-          $entregoNombre = \App\Models\User::find($r->entrego_user_id)?->name ?? '';
-        }
+        // Entrega por (usuario eager-loaded en el index)
+        $entregoNombre = $r->usuario->name ?? '';
       @endphp
 
       <tr>
@@ -150,7 +147,9 @@
         </td>
       </tr>
     @empty
-      <tr><td colspan="10" class="text-center text-gray-500 py-6">Sin resultados.</td></tr>
+      <tr>
+        <td colspan="10" class="text-center text-gray-500 py-6">Sin resultados.</td>
+      </tr>
     @endforelse
   </tbody>
 </table>

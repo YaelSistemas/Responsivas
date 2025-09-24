@@ -28,11 +28,17 @@
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace}
   </style>
 
+  @php
+    $canCreate = auth()->user()?->can('subsidiarias.create');
+  @endphp
+
   <div class="page-wrap py-6">
     {{-- Header --}}
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Empresas</h2>
-      <a href="{{ route('subsidiarias.create') }}" class="btn btn-primary">Nueva empresa</a>
+      @if($canCreate)
+        <a href="{{ route('subsidiarias.create') }}" class="btn btn-primary">Nueva empresa</a>
+      @endif
     </div>
 
     {{-- Toolbar --}}
@@ -54,7 +60,7 @@
           <label for="q">Buscar:</label>
           <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
                  class="border rounded px-3 py-1 w-56 focus:outline-none"
-                 placeholder="Nombre o descripción">
+                 placeholder="Nombre o razón social">
         </div>
       </div>
     </form>
@@ -118,6 +124,7 @@
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
 
+      // Actualiza URL sin el flag 'partial'
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');

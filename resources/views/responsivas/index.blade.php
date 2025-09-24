@@ -29,12 +29,12 @@
       line-height:1.15;
     }
 
-    /* Badges del motivo (ya usados en el partial) */
+    /* Badges del motivo (por si los usas en el partial) */
     .badge{display:inline-block;padding:.18rem .55rem;border-radius:9999px;font-weight:700;font-size:.75rem;line-height:1;border:1px solid transparent}
     .badge-green{background:#dcfce7;color:#166534;border-color:#86efac}
     .badge-yellow{background:#fef9c3;color:#854d0e;border-color:#fde68a}
 
-    /* Anchos de columnas (coinciden con el <colgroup> del partial) */
+    /* Anchos de columnas (usa <colgroup> en el partial para aplicarlos) */
     .tbl col.c-folio   { width:8%  }
     .tbl col.c-fsol    { width:9%  }
     .tbl col.c-colab   { width:20% }
@@ -46,16 +46,21 @@
     .tbl col.c-items   { width:4%  }
     .tbl col.c-acc     { width:4%  }
 
+    /* Toolbar */
     #resp-toolbar .select-wrap{position:relative;display:inline-block}
     #resp-toolbar select[name="per_page"]{
       -webkit-appearance:none;appearance:none;background-image:none;width:88px;
       padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;
       background:#fff;border:1px solid #d1d5db;border-radius:6px;
     }
-    #resp-toolbar .select-wrap .caret{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#6b7280;font-size:12px}
+    #resp-toolbar .select-wrap .caret{
+      position:absolute;right:10px;top:50%;transform:translateY(-50%);
+      pointer-events:none;color:#6b7280;font-size:12px
+    }
   </style>
 
   <div class="page-wrap py-6">
+    {{-- Header --}}
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-semibold">Responsivas</h2>
       @can('responsivas.create')
@@ -63,6 +68,7 @@
       @endcan
     </div>
 
+    {{-- Toolbar --}}
     <form id="resp-toolbar" method="GET" action="{{ route('responsivas.index') }}" class="mb-3">
       <div class="flex items-center justify-between gap-3">
         <div class="text-sm text-gray-700 flex items-center gap-2">
@@ -85,27 +91,33 @@
       </div>
     </form>
 
+    {{-- Alerts --}}
     @if (session('created') || session('updated') || session('deleted') || session('error'))
       @php
-        $msg = session('created') ? 'Responsiva creado.' :
-               (session('updated') ? 'Responsiva actualizada.' :
-               (session('deleted') ? 'Responsiva eliminada.' : (session('error') ?: '')));
+        $msg = session('created') ? 'Responsiva creada.'
+             : (session('updated') ? 'Responsiva actualizada.'
+             : (session('deleted') ? 'Responsiva eliminada.'
+             : (session('error') ?: '')));
         $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
              : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
              : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
              : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
       @endphp
       <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-      <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
+      <script>
+        setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+      </script>
     @endif
 
+    {{-- Tabla (parcial) --}}
     <div class="card">
-      <div id="resp-wrap">
+      <div class="overflow-x-auto" id="resp-wrap">
         @include('responsivas.partials.table')
       </div>
     </div>
   </div>
 
+  {{-- AJAX: búsqueda / per_page / paginación --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -114,7 +126,7 @@
     let t, ctl;
 
     function buildUrl(pageUrl = null){
-      const base = pageUrl || "{{ route('responsivas.index') }}"; // <- corregido
+      const base = pageUrl || "{{ route('responsivas.index') }}";
       const url = new URL(base, window.location.origin);
       const q = (input?.value || '').trim();
       const per = perPageSelect ? perPageSelect.value : '';
@@ -137,14 +149,20 @@
       if(ctl) ctl.abort();
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
+
+      // URL bonita sin ?partial=1
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
         history.pushState({}, '', pretty.toString());
       }
+
       fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
         .then(r=>r.text())
-        .then(html=>{ wrap.innerHTML = html.trim(); wirePagination(); })
+        .then(html=>{
+          wrap.innerHTML = html.trim();
+          wirePagination();
+        })
         .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
     }
 
@@ -153,6 +171,7 @@
       input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
     }
     if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
+
     wirePagination();
   })();
   </script>

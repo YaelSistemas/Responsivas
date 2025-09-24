@@ -52,13 +52,15 @@
             @foreach($groups as $groupKey => $items)
                 <div class="mt-4">
                     <div class="section-title">
-                        Permisos: 
+                        Permisos:
                         @switch($groupKey)
                             @case('colaboradores') Colaboradores @break
                             @case('unidades') Unidades de servicio @break
                             @case('areas') Áreas @break
                             @case('puestos') Puestos @break
                             @case('subsidiarias') Subsidiarias @break
+                            @case('productos') Productos @break
+                            @case('responsivas') Responsivas @break
                             @default {{ ucfirst($groupKey) }}
                         @endswitch
                     </div>

@@ -84,215 +84,227 @@
     $selSeries         = collect(old('series_ids', $selectedSeries ?? []))->map(fn($v)=> (string)$v)->all();
   @endphp
 
-  <div class="py-6">
-    <div class="wrap">
+  @can('responsivas.edit')
+    <div class="py-6">
+      <div class="wrap">
 
-      @if ($errors->any())
-        <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
-          <b>Revisa los campos:</b>
-          <ul style="margin-left:18px;list-style:disc;">
-            @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
-          </ul>
-        </div>
-      @endif
-
-      <form method="POST" action="{{ route('responsivas.update', $responsiva) }}">
-        @csrf @method('PUT')
-
-        {{-- ======= Datos ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Datos</div>
-          <div class="line"></div>
-        </div>
-
-        <div class="grid2 row">
-          <div>
-            <label>Motivo de entrega</label>
-            <select name="motivo_entrega">
-              <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
-              <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
-            </select>
+        @if ($errors->any())
+          <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
+            <b>Revisa los campos:</b>
+            <ul style="margin-left:18px;list-style:disc;">
+              @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
+            </ul>
           </div>
-          <div>
-            <label>Colaborador</label>
-            <select name="colaborador_id" id="colaborador_id" required>
-              <option value="" disabled>Selecciona colaborador…</option>
-              @foreach($colaboradores as $c)
-                <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>{{ $c->nombre }}</option>
-              @endforeach
-            </select>
-            @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
-          </div>
-        </div>
+        @endif
 
-        <div class="grid2 row">
-          <div>
-            <label>Fecha de solicitud</label>
-            <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}">
-            @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
-          </div>
-          <div>
-            <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-            <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
-            @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
-          </div>
-        </div>
+        <form method="POST" action="{{ route('responsivas.update', $responsiva) }}">
+          @csrf @method('PUT')
 
-        {{-- ======= Productos ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Productos</div>
-          <div class="line"></div>
-        </div>
-
-        <div class="row toolrow">
-          <input id="searchBox" placeholder="Buscar por serie / producto…" />
-          <div class="toolbar-right">
-            <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
-            <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
+          {{-- ======= Datos ======= --}}
+          <div class="section-sep">
+            <div class="line"></div>
+            <div class="label">Datos</div>
+            <div class="line"></div>
           </div>
-        </div>
 
-        <div class="row">
-          <label>Series (selecciona una o varias)</label>
-          <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
-          <div class="hint">Incluye las series actuales + disponibles. Quitar una serie la libera.</div>
-          @error('series_ids') <div class="err">{{ $message }}</div> @enderror
-          @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
-        </div>
-
-        {{-- ======= Firmas ======= --}}
-        <div class="section-sep">
-          <div class="line"></div>
-          <div class="label">Firmas</div>
-          <div class="line"></div>
-        </div>
-
-        <div class="grid3 row">
-          <div>
-            <label>Entregó (solo administradores)</label>
-            <select name="entrego_user_id" id="entrego_user_id">
-              <option value="">— Selecciona —</option>
-              @foreach($admins as $u)
-                <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
-              @endforeach
-            </select>
+          <div class="grid2 row">
+            <div>
+              <label>Motivo de entrega</label>
+              <select name="motivo_entrega">
+                <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
+                <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
+              </select>
+            </div>
+            <div>
+              <label>Colaborador</label>
+              <select name="colaborador_id" id="colaborador_id" required>
+                <option value="" disabled>Selecciona colaborador…</option>
+                @foreach($colaboradores as $c)
+                  <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>{{ $c->nombre }}</option>
+                @endforeach
+              </select>
+              @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
+            </div>
           </div>
-          <div>
-            <label>Recibí (colaborador)</label>
-            <select name="recibi_colaborador_id" id="recibi_colaborador_id">
-              <option value="">— Selecciona —</option>
-              @foreach($colaboradores as $c)
-                <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre }}</option>
-              @endforeach
-            </select>
-            <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
-          </div>
-          <div>
-            <label>Autorizó (solo administradores)</label>
-            <select name="autoriza_user_id" id="autoriza_user_id">
-              <option value="">— Selecciona —</option>
-              @foreach($admins as $u)
-                <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
-              @endforeach
-            </select>
-          </div>
-        </div>
 
-        <div class="grid2">
-          <a href="{{ route('responsivas.show', $responsiva) }}" class="btn-cancel">Cancelar</a>
-          <button type="submit" class="btn">Actualizar responsiva</button>
-        </div>
-      </form>
+          <div class="grid2 row">
+            <div>
+              <label>Fecha de solicitud</label>
+              <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}">
+              @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
+            </div>
+            <div>
+              <label>Fecha de entrega <span class="hint">(requerida)</span></label>
+              <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
+              @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
+            </div>
+          </div>
+
+          {{-- ======= Productos ======= --}}
+          <div class="section-sep">
+            <div class="line"></div>
+            <div class="label">Productos</div>
+            <div class="line"></div>
+          </div>
+
+          <div class="row toolrow">
+            <input id="searchBox" placeholder="Buscar por serie / producto…" />
+            <div class="toolbar-right">
+              <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
+              <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <label>Series (selecciona una o varias)</label>
+            <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
+            <div class="hint">Incluye las series actuales + disponibles. Quitar una serie la libera.</div>
+            @error('series_ids') <div class="err">{{ $message }}</div> @enderror
+            @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
+          </div>
+
+          {{-- ======= Firmas ======= --}}
+          <div class="section-sep">
+            <div class="line"></div>
+            <div class="label">Firmas</div>
+            <div class="line"></div>
+          </div>
+
+          <div class="grid3 row">
+            <div>
+              <label>Entregó (solo administradores)</label>
+              <select name="entrego_user_id" id="entrego_user_id">
+                <option value="">— Selecciona —</option>
+                @foreach($admins as $u)
+                  <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div>
+              <label>Recibí (colaborador)</label>
+              <select name="recibi_colaborador_id" id="recibi_colaborador_id">
+                <option value="">— Selecciona —</option>
+                @foreach($colaboradores as $c)
+                  <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre }}</option>
+                @endforeach
+              </select>
+              <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
+            </div>
+            <div>
+              <label>Autorizó (solo administradores)</label>
+              <select name="autoriza_user_id" id="autoriza_user_id">
+                <option value="">— Selecciona —</option>
+                @foreach($admins as $u)
+                  <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                @endforeach
+              </select>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <a href="{{ route('responsivas.show', $responsiva) }}" class="btn-cancel">Cancelar</a>
+            <button type="submit" class="btn">Actualizar responsiva</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <script>
-    (function(){
-      const DATA   = @json($data);
-      const PRESEL = new Set(@json($selSeries));
-      const select = document.getElementById('seriesSelect');
-      const search = document.getElementById('searchBox');
-      const btnAll = document.getElementById('btnSelectVisible');
-      const btnClr = document.getElementById('btnClearSel');
+    <script>
+      (function(){
+        const DATA   = @json($data);
+        const PRESEL = new Set(@json($selSeries));
+        const select = document.getElementById('seriesSelect');
+        const search = document.getElementById('searchBox');
+        const btnAll = document.getElementById('btnSelectVisible');
+        const btnClr = document.getElementById('btnClearSel');
 
-      // Sincroniza "Recibí" con "Colaborador"
-      const colSel = document.getElementById('colaborador_id');
-      const recibi = document.getElementById('recibi_colaborador_id');
-      if (colSel && recibi) {
-        colSel.addEventListener('change', () => {
-          const v = colSel.value;
-          if (v && recibi.querySelector(`option[value="${v}"]`)) recibi.value = v;
-        });
-        if (!recibi.value && colSel.value && recibi.querySelector(`option[value="${colSel.value}"]`)) {
-          recibi.value = colSel.value;
-        }
-      }
-
-      function render(filterText='') {
-        const q = (filterText || '').toLowerCase().trim();
-        const selected = new Set(Array.from(select.selectedOptions).map(o => String(o.value)));
-        // incluir preseleccionadas (primer render)
-        PRESEL.forEach(v => selected.add(String(v)));
-
-        select.innerHTML = '';
-        let groupsRendered = 0;
-
-        DATA.forEach(g => {
-          const groupMatches = g.label.toLowerCase().includes(q) || g.producto.toLowerCase().includes(q);
-          const opts = [];
-          g.options.forEach(o => {
-            const text = (o.text || '').toLowerCase();
-            const match = groupMatches || text.includes(q) || (o.serie || '').toLowerCase().includes(q);
-            if (q === '' || match) opts.push(o);
+        // Sincroniza "Recibí" con "Colaborador"
+        const colSel = document.getElementById('colaborador_id');
+        const recibi = document.getElementById('recibi_colaborador_id');
+        if (colSel && recibi) {
+          colSel.addEventListener('change', () => {
+            const v = colSel.value;
+            if (v && recibi.querySelector(`option[value="${v}"]`)) recibi.value = v;
           });
+          if (!recibi.value && colSel.value && recibi.querySelector(`option[value="${colSel.value}"]`)) {
+            recibi.value = colSel.value;
+          }
+        }
 
-          if (opts.length) {
-            groupsRendered++;
-            const og = document.createElement('optgroup');
-            og.label = g.label;
+        function render(filterText='') {
+          const q = (filterText || '').toLowerCase().trim();
+          const selected = new Set(Array.from(select.selectedOptions).map(o => String(o.value)));
+          // incluir preseleccionadas (primer render)
+          PRESEL.forEach(v => selected.add(String(v)));
 
-            opts.forEach(o => {
-              const opt = document.createElement('option');
-              opt.value = String(o.id);
-              opt.textContent = o.text;
-              if (selected.has(String(o.id))) opt.selected = true;
-              og.appendChild(opt);
+          select.innerHTML = '';
+          let groupsRendered = 0;
+
+          DATA.forEach(g => {
+            const groupMatches = g.label.toLowerCase().includes(q) || g.producto.toLowerCase().includes(q);
+            const opts = [];
+            g.options.forEach(o => {
+              const text = (o.text || '').toLowerCase();
+              const match = groupMatches || text.includes(q) || (o.serie || '').toLowerCase().includes(q);
+              if (q === '' || match) opts.push(o);
             });
 
-            const sep = document.createElement('option');
-            sep.textContent = '────────────────────────';
-            sep.disabled = true;
-            sep.className = 'sep-option';
-            og.appendChild(sep);
+            if (opts.length) {
+              groupsRendered++;
+              const og = document.createElement('optgroup');
+              og.label = g.label;
 
+              opts.forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = String(o.id);
+                opt.textContent = o.text;
+                if (selected.has(String(o.id))) opt.selected = true;
+                og.appendChild(opt);
+              });
+
+              const sep = document.createElement('option');
+              sep.textContent = '────────────────────────';
+              sep.disabled = true;
+              sep.className = 'sep-option';
+              og.appendChild(sep);
+
+              select.appendChild(og);
+            }
+          });
+
+          if (!groupsRendered) {
+            const og = document.createElement('optgroup');
+            og.label = 'Sin coincidencias';
+            const opt = document.createElement('option');
+            opt.textContent = 'No hay series que coincidan con la búsqueda.';
+            opt.disabled = true;
+            og.appendChild(opt);
             select.appendChild(og);
           }
+        }
+
+        search.addEventListener('input', () => render(search.value));
+        btnAll.addEventListener('click', () => {
+          Array.from(select.options).forEach(o => { if (!o.disabled) o.selected = true; });
+          select.focus();
+        });
+        btnClr.addEventListener('click', () => {
+          Array.from(select.options).forEach(o => o.selected = false);
+          select.focus();
         });
 
-        if (!groupsRendered) {
-          const og = document.createElement('optgroup');
-          og.label = 'Sin coincidencias';
-          const opt = document.createElement('option');
-          opt.textContent = 'No hay series que coincidan con la búsqueda.';
-          opt.disabled = true;
-          og.appendChild(opt);
-          select.appendChild(og);
-        }
-      }
-
-      search.addEventListener('input', () => render(search.value));
-      btnAll.addEventListener('click', () => {
-        Array.from(select.options).forEach(o => { if (!o.disabled) o.selected = true; });
-        select.focus();
-      });
-      btnClr.addEventListener('click', () => {
-        Array.from(select.options).forEach(o => o.selected = false);
-        select.focus();
-      });
-
-      render('');
-    })();
-  </script>
+        render('');
+      })();
+    </script>
+  @else
+    <div class="py-6">
+      <div class="wrap">
+        <p>No tienes permiso para <b>editar</b> responsivas.</p>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <a href="{{ route('responsivas.show', $responsiva) }}" class="btn-cancel" style="text-decoration:none">← Volver a la responsiva</a>
+          <a href="{{ route('responsivas.index') }}" class="btn" style="text-decoration:none;background:#2563eb">Ir al listado</a>
+        </div>
+      </div>
+    </div>
+  @endcan
 </x-app-layout>
