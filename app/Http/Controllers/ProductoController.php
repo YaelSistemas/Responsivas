@@ -19,7 +19,7 @@ class ProductoController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('auth'),
-            new Middleware('permission:productos.view',   only: ['index','show']),
+            new Middleware('permission:productos.view',   only: ['index','show','existencia','series']),
             new Middleware('permission:productos.create', only: ['create','store']),
             new Middleware('permission:productos.edit',   only: ['edit','update','seriesStore','seriesEstado','existenciaAjustar']),
             new Middleware('permission:productos.delete', only: ['destroy','seriesDestroy']),

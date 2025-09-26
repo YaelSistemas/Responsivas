@@ -30,7 +30,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             // Crear
             new Middleware('permission:responsivas.create', only: ['create','store']),
             // Editar (incluye emitirFirma y firmarEnSitio)
-            new Middleware('permission:responsivas.edit',   only: ['edit','update','emitirFirma','firmarEnSitio']),
+            new Middleware('permission:responsivas.edit',   only: ['edit','update','emitirFirma','firmarEnSitio','destroyFirma']),
             // Eliminar
             new Middleware('permission:responsivas.delete', only: ['destroy']),
         ];
@@ -549,4 +549,54 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         return back()->with('ok', 'Responsiva firmada en sitio.');
     }
+
+    public function destroyFirma(Responsiva $responsiva)
+{
+    // Tenant guard
+    abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+
+    // 1) Intentar borrar archivo si hay path local
+    $path = $responsiva->firma_colaborador_path;
+
+    if (!empty($path)) {
+        // Si usas 'public' (storage/app/public) + storage:link
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        } else {
+            // Si eventualmente mueves a otro disco (p. ej. s3) y no guardas el disco en DB:
+            foreach (['s3','local'] as $disk) {
+                try {
+                    if (Storage::disk($disk)->exists($path)) {
+                        Storage::disk($disk)->delete($path);
+                        break;
+                    }
+                } catch (\Throwable $e) { /* ignorar */ }
+            }
+        }
+    }
+
+    // 2) Limpiar campos relacionados a firma (ajusta a tus columnas reales)
+    $toNull = [
+        'firma_colaborador_path',
+        'firma_colaborador_url',     // si guardas url absoluta
+        'firmado_en',
+        'firmado_por',
+        'firmado_ip',
+        'sign_token',                // invalida links públicos (por si acaso)
+        'sign_token_expires_at',
+        'signed_at',                 // si existiera
+        'firma_colaborador_user_agent', // si existiera
+    ];
+
+    foreach ($toNull as $col) {
+        if (\Schema::hasColumn($responsiva->getTable(), $col)) {
+            $responsiva->{$col} = null;
+        }
+    }
+
+    $responsiva->save();
+
+    return back()->with('status', 'Firma del colaborador eliminada correctamente.');
+}
+
 }

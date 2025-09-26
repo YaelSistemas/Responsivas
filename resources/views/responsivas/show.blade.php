@@ -185,10 +185,15 @@
     /* ====== Estilos de la hoja ====== */
     .sheet { max-width: 940px; margin: 0 auto; }
     .doc { background:#fff; border:1px solid #111; border-radius:6px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,.08); }
-    .actions { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+
+    /* acciones: ahora con align-items y spacer */
+    .actions{ display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+    .actions .spacer{ flex:1 1 auto; }
+
     .btn { padding:8px 12px; border-radius:6px; font-weight:600; border:1px solid transparent; }
     .btn-primary { background:#2563eb; color:#fff; }
     .btn-secondary { background:#f3f4f6; color:#111; border-color:#d1d5db; }
+    .btn-danger{ background:#dc2626; color:#fff; border-color:#b91c1c; }
     .btn:hover { filter:brightness(.97); }
 
     .tbl { width:100%; border-collapse:collapse; table-layout:fixed; }
@@ -262,14 +267,15 @@
     <div class="zoom-inner">
       <div class="py-6 sheet">
         <div class="actions">
+          {{-- IZQUIERDA: botones normales --}}
           <a href="{{ url('/responsivas') }}" class="btn btn-secondary">← Responsivas</a>
-          <a href="{{ route('responsivas.pdf', $responsiva) }}" class="btn btn-primary" target="_blank" rel="noopener">Descargar PDF</a>
+          <a href="{{ route('responsivas.pdf', $responsiva) }}" class="btn btn-primary" target="_blank" rel="noopener">
+            Descargar PDF
+          </a>
 
           @if (empty($responsiva->firma_colaborador_path))
             @can('responsivas.edit')
-              <button type="button" class="btn btn-secondary" onclick="openFirma()">
-                Firmar en sitio
-              </button>
+              <button type="button" class="btn btn-secondary" onclick="openFirma()">Firmar en sitio</button>
 
               <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
                 @csrf
@@ -281,8 +287,26 @@
           @can('responsivas.edit')
             @if (session('firma_link'))
               <div style="margin-top:8px">
-                <small>Link de firma: <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a></small>
+                <small>Link de firma:
+                  <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a>
+                </small>
               </div>
+            @endif
+          @endcan
+
+          {{-- DERECHA: botón rojo borrar firma --}}
+          @can('responsivas.edit')
+            @if (!empty($responsiva->firma_colaborador_path) || !empty($responsiva->firma_colaborador_url))
+              <form method="POST"
+                    action="{{ route('responsivas.firma.destroy', $responsiva) }}"
+                    onsubmit="return confirm('¿Seguro que deseas borrar la firma del colaborador?');"
+                    style="display:inline; margin-left:auto;">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="btn btn-danger">
+                  Borrar firma de colaborador
+                </button>
+              </form>
             @endif
           @endcan
         </div>
@@ -509,7 +533,7 @@
         </div>
       </div>
     @endif
-  @endcan
+  @endcan>
 
   <script>
     // ===== Abrir / cerrar modal =====

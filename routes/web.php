@@ -102,6 +102,10 @@ Route::middleware(['auth'])->group(function () {
         // EXISTENCIA (tracking por cantidad)
         Route::get ('/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
         Route::post('/existencia/ajustar',     [ProductoController::class,'existenciaAjustar'])->name('productos.existencia.ajustar');
+
+        Route::post('/existencia/ajustar', [ProductoController::class,'existenciaAjustar'])
+            ->middleware('permission:productos.edit') // SOLO con permiso se puede mover stock
+            ->name('productos.existencia.ajustar');
     });
 
     // Vista directa de series (si la usas)
@@ -132,4 +136,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/responsivas/{responsiva}/firmar-en-sitio', [ResponsivaController::class, 'firmarEnSitio'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firmarEnSitio');
+
+    // Eliminar Firma — requiere permiso de editar responsivas    
+    Route::delete('/responsivas/{responsiva}/firma', [ResponsivaController::class, 'destroyFirma'])
+        ->middleware('permission:responsivas.edit')
+        ->name('responsivas.firma.destroy');
 });

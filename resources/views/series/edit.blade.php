@@ -19,10 +19,11 @@
       transform-origin: top left;
       width: calc(100% / var(--zoom));
     }
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } }
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } }
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.75; } }
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.60; } }
+    /* Breakpoints: ajusta los factores según prefieras */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
 
     /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width: 768px){ input, select, textarea{ font-size:16px; } }

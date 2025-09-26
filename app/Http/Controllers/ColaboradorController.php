@@ -32,36 +32,40 @@ class ColaboradorController extends Controller implements HasMiddleware
     }
 
     public function index()
-    {
-        $q = request('q');
-        $tenant = $this->tenantId();
+{
+    $q = request('q');
+    $tenant = $this->tenantId();
 
-        $colaboradores = Colaborador::with([
-                'subsidiaria:id,nombre',
-                'unidadServicio:id,nombre',
-                'area:id,nombre',
-                'puesto:id,nombre'
-            ])
-            ->where('empresa_tenant_id', $tenant)
-            ->when($q, function ($query) use ($q) {
-                $query->where(function ($qq) use ($q) {
-                    $qq->where('nombre', 'like', "%{$q}%")
-                       ->orWhere('apellidos', 'like', "%{$q}%")
-                       ->orWhereHas('subsidiaria', fn($s) => $s->where('nombre','like',"%{$q}%"))
-                       ->orWhereHas('area',        fn($a) => $a->where('nombre','like',"%{$q}%"))
-                       ->orWhereHas('puesto',      fn($p) => $p->where('nombre','like',"%{$q}%"));
-                });
-            })
-            ->latest()
-            ->paginate((int)request('per_page', 50))
-            ->withQueryString();
+    $colaboradores = Colaborador::with([
+            'subsidiaria:id,nombre',
+            'unidadServicio:id,nombre',
+            'area:id,nombre',
+            'puesto:id,nombre'
+        ])
+        ->where('empresa_tenant_id', $tenant)
+        ->when($q, function ($query) use ($q) {
+            $query->where(function ($qq) use ($q) {
+                $qq->where('nombre', 'like', "%{$q}%")
+                   ->orWhere('apellidos', 'like', "%{$q}%")
+                   ->orWhereHas('subsidiaria', fn($s) => $s->where('nombre','like',"%{$q}%"))
+                   ->orWhereHas('area',        fn($a) => $a->where('nombre','like',"%{$q}%"))
+                   ->orWhereHas('puesto',      fn($p) => $p->where('nombre','like',"%{$q}%"));
+            });
+        })
+        // Orden alfabético: primero apellidos, luego nombre
+        ->orderByRaw("COALESCE(nombre,'') ASC")
+        ->orderByRaw("COALESCE(apellidos,'') ASC")
+        // Default 50 por página (se puede sobreescribir con ?per_page=...)
+        ->paginate((int) request('per_page', 50))
+        ->withQueryString();
 
-        if (request()->ajax() || request()->boolean('partial')) {
-            return response()->view('colaboradores.partials.table', compact('colaboradores', 'q'));
-        }
-
-        return view('colaboradores.index', compact('colaboradores', 'q'));
+    if (request()->ajax() || request()->boolean('partial')) {
+        return response()->view('colaboradores.partials.table', compact('colaboradores', 'q'));
     }
+
+    return view('colaboradores.index', compact('colaboradores', 'q'));
+}
+
 
     public function create()
     {
