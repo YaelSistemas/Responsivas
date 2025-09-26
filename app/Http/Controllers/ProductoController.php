@@ -6,6 +6,7 @@ use App\Models\Producto;
 use App\Models\ProductoExistencia;
 use App\Models\ProductoSerie;
 use App\Models\ProductoMovimiento;
+use App\Models\ResponsivaDetalle; // relación con responsivas
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -21,7 +22,7 @@ class ProductoController extends Controller implements HasMiddleware
             new Middleware('auth'),
             new Middleware('permission:productos.view',   only: ['index','show','existencia','series']),
             new Middleware('permission:productos.create', only: ['create','store']),
-            new Middleware('permission:productos.edit',   only: ['edit','update','seriesStore','seriesEstado','existenciaAjustar']),
+            new Middleware('permission:productos.edit',   only: ['edit','update','seriesStore','seriesEstado','existenciaAjustar','seriesEdit','seriesUpdate']),
             new Middleware('permission:productos.delete', only: ['destroy','seriesDestroy']),
         ];
     }
@@ -35,70 +36,70 @@ class ProductoController extends Controller implements HasMiddleware
     private function trackingByTipo(string $tipo, ?string $input): string
     {
         return match ($tipo) {
-            'equipo_pc', 'impresora', 'monitor', 'pantalla' => 'serial',
-            'periferico', 'consumible' => 'cantidad',
-            'otro' => in_array($input, ['serial','cantidad'], true) ? $input : 'serial', // fallback
+            // Periférico ahora es por serie (como PC / impresora / monitor / pantalla)
+            'equipo_pc', 'impresora', 'monitor', 'pantalla', 'periferico' => 'serial',
+            'consumible' => 'cantidad',
+            'otro' => in_array($input, ['serial','cantidad'], true) ? $input : 'serial',
             default => 'cantidad',
         };
     }
 
     // ===================== LISTADO =====================
     public function index(Request $request)
-{
-    $tenant  = (int) session('empresa_activa', auth()->user()?->empresa_id);
-    $perPage = (int) $request->query('per_page', 10);
-    $q       = trim((string) $request->query('q', ''));
+    {
+        $tenant  = (int) session('empresa_activa', auth()->user()?->empresa_id);
+        $perPage = (int) $request->query('per_page', 50);
+        $q       = trim((string) $request->query('q', ''));
 
-    $productos = \App\Models\Producto::query()
-        ->where('empresa_tenant_id', $tenant)
-        ->when($q, function ($w) use ($q, $tenant) {
-            $w->where(function ($qq) use ($q, $tenant) {
-                $qq->where('nombre', 'like', "%{$q}%")
-                   ->orWhere('sku', 'like', "%{$q}%")
-                   ->orWhere('marca', 'like', "%{$q}%")
-                   ->orWhere('modelo', 'like', "%{$q}%")
-                   ->orWhereHas('series', function ($s) use ($q, $tenant) {
-                       $s->where('empresa_tenant_id', $tenant)
-                         ->where('serie', 'like', "%{$q}%");
-                   });
-            });
-        })
-        ->withCount([
-            'series as series_disponibles_count' => function ($s) use ($tenant) {
-                $s->where('empresa_tenant_id', $tenant)->where('estado', 'disponible');
-            },
-            'series as series_total_count' => function ($s) use ($tenant) {
-                $s->where('empresa_tenant_id', $tenant);
-            },
-        ])
-        ->with(['existencia' => function ($q2) use ($tenant) {
-            $q2->where('empresa_tenant_id', $tenant);
-        }])
-        ->orderBy('nombre')
-        ->paginate($perPage)
-        ->withQueryString();
+        $productos = \App\Models\Producto::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->when($q, function ($w) use ($q, $tenant) {
+                $w->where(function ($qq) use ($q, $tenant) {
+                    $qq->where('nombre', 'like', "%{$q}%")
+                       ->orWhere('sku', 'like', "%{$q}%")
+                       ->orWhere('marca', 'like', "%{$q}%")
+                       ->orWhere('modelo', 'like', "%{$q}%")
+                       ->orWhereHas('series', function ($s) use ($q, $tenant) {
+                           $s->where('empresa_tenant_id', $tenant)
+                             ->where('serie', 'like', "%{$q}%");
+                       });
+                });
+            })
+            ->withCount([
+                'series as series_disponibles_count' => function ($s) use ($tenant) {
+                    $s->where('empresa_tenant_id', $tenant)->where('estado', 'disponible');
+                },
+                'series as series_total_count' => function ($s) use ($tenant) {
+                    $s->where('empresa_tenant_id', $tenant);
+                },
+            ])
+            ->with(['existencia' => function ($q2) use ($tenant) {
+                $q2->where('empresa_tenant_id', $tenant);
+            }])
+            ->orderBy('nombre')
+            ->paginate($perPage)
+            ->withQueryString();
 
-    // ====== Series de los productos en la página (con motivo de responsiva) ======
-    $ids = $productos->getCollection()->pluck('id')->all();
+        // Series de los productos en la página
+        $ids = $productos->getCollection()->pluck('id')->all();
 
-    $seriesQuery = \App\Models\ProductoSerie::deEmpresa($tenant)
-        ->whereIn('producto_id', $ids)
-        ->select('id','producto_id','serie','estado','asignado_en_responsiva_id')
-        ->orderBy('serie');
+        $seriesQuery = \App\Models\ProductoSerie::deEmpresa($tenant)
+            ->whereIn('producto_id', $ids)
+            ->select('id','producto_id','serie','estado','asignado_en_responsiva_id')
+            ->orderBy('serie');
 
-    if (method_exists(\App\Models\ProductoSerie::class, 'responsivaAsignada')) {
-        $seriesQuery->with('responsivaAsignada:id,motivo_entrega');
+        if (method_exists(\App\Models\ProductoSerie::class, 'responsivaAsignada')) {
+            $seriesQuery->with('responsivaAsignada:id,motivo_entrega');
+        }
+
+        $seriesByProduct = $seriesQuery->get()->groupBy('producto_id');
+
+        if ($request->boolean('partial')) {
+            return view('productos.partials.table', compact('productos','seriesByProduct'))->render();
+        }
+
+        return view('productos.index', compact('productos','perPage','q','seriesByProduct'));
     }
-
-    $seriesByProduct = $seriesQuery->get()->groupBy('producto_id');
-
-    if ($request->boolean('partial')) {
-        return view('productos.partials.table', compact('productos','seriesByProduct'))->render();
-    }
-
-    return view('productos.index', compact('productos','perPage','q','seriesByProduct'));
-}
-
 
     // ===================== CREAR =====================
     public function create()
@@ -124,17 +125,14 @@ class ProductoController extends Controller implements HasMiddleware
             'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)],
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora', 'monitor','pantalla', 'periferico','consumible','otro'])],
-            // tracking solo requerido si tipo = otro
+            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','monitor','pantalla','periferico','consumible','otro'])],
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
-
             // Carga inicial
-            'series_lotes'   => 'nullable|string',         // tracking=serial
-            'stock_inicial'  => 'nullable|integer|min:0',  // tracking=cantidad
-
-            // ===== Especificaciones (solo equipo_pc) =====
+            'series_lotes'   => 'nullable|string',
+            'stock_inicial'  => 'nullable|integer|min:0',
+            // Especificaciones
             'spec.color'                               => ['nullable','string','max:50'],
             'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
             'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
@@ -142,15 +140,12 @@ class ProductoController extends Controller implements HasMiddleware
             'spec.procesador'                          => ['nullable','string','max:120'],
         ]);
 
-        // tracking definitivo según tipo (ignoramos manipulaciones client-side)
         $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
 
-        // normaliza unidad solo si es por cantidad
         $unidad = $tracking === 'cantidad'
             ? ($data['unidad_medida'] ?: 'pieza')
-            : 'pieza'; // serial: nunca null
+            : 'pieza';
 
-        // Especificaciones base (solo equipo_pc)
         $specs = null;
         if ($data['tipo'] === 'equipo_pc') {
             $specs = array_filter([
@@ -183,12 +178,11 @@ class ProductoController extends Controller implements HasMiddleware
                 'especificaciones'  => $specs,
             ]);
 
-            // tracking virtual -> mapea en el modelo (mutator)
+            // tracking virtual
             $producto->tracking = $tracking;
             $producto->save();
 
             if ($tracking === 'serial') {
-                // series iniciales
                 $raw = preg_split('/\r\n|\r|\n/', (string)($data['series_lotes'] ?? ''));
                 $items = collect($raw)->map(fn($s)=>trim($s))->filter()->unique()->values();
 
@@ -200,12 +194,9 @@ class ProductoController extends Controller implements HasMiddleware
                             'serie'             => $serie,
                             'estado'            => 'disponible',
                         ]);
-                    } catch (\Throwable $e) {
-                        // duplicadas: ignorar
-                    }
+                    } catch (\Throwable $e) { /* duplicadas: ignorar */ }
                 }
             } else {
-                // existencias iniciales
                 $stockInicial = (int) ($data['stock_inicial'] ?? 0);
 
                 $stock = ProductoExistencia::firstOrCreate(
@@ -266,13 +257,11 @@ class ProductoController extends Controller implements HasMiddleware
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
             'tipo'           => ['required', Rule::in(['equipo_pc','impresora','monitor','pantalla','periferico','consumible','otro'])],
-            // tracking solo requerido si tipo = otro
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
             'activo'         => 'sometimes|boolean',
-
-            // ===== Especificaciones (solo equipo_pc) =====
+            // Especificaciones
             'spec.color'                               => ['nullable','string','max:50'],
             'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
             'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
@@ -284,9 +273,8 @@ class ProductoController extends Controller implements HasMiddleware
 
         $unidad = $tracking === 'cantidad'
             ? ($data['unidad_medida'] ?: 'pieza')
-            : ($producto->unidad ?: 'pieza'); // serial: conserva o 'pieza'
+            : ($producto->unidad ?: 'pieza');
 
-        // Especificaciones base (solo equipo_pc) o null si cambia a otro tipo
         $specs = null;
         if ($data['tipo'] === 'equipo_pc') {
             $specs = array_filter([
@@ -301,7 +289,6 @@ class ProductoController extends Controller implements HasMiddleware
             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
         }
 
-        // Actualiza SOLO columnas reales
         $producto->update([
             'nombre'           => $data['nombre'],
             'sku'              => $data['sku'] ?? null,
@@ -314,7 +301,7 @@ class ProductoController extends Controller implements HasMiddleware
             'especificaciones' => $specs,
         ]);
 
-        // tracking virtual -> mapea a es_serializado (mutator en el modelo)
+        // tracking virtual
         $producto->tracking = $tracking;
         $producto->save();
 
@@ -333,6 +320,15 @@ class ProductoController extends Controller implements HasMiddleware
     public function destroy(Producto $producto)
     {
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
+
+        // Bloquea si está relacionado con alguna responsiva (en cualquier momento)
+        $relacionado = ResponsivaDetalle::where('producto_id', $producto->id)->exists();
+        if ($relacionado) {
+            return redirect()
+                ->route('productos.index')
+                ->with('error', 'No se puede eliminar este producto: está relacionado con una o más responsivas.');
+        }
+
         $producto->delete();
         return redirect()->route('productos.index')->with('deleted', true);
     }
@@ -362,7 +358,7 @@ class ProductoController extends Controller implements HasMiddleware
         if ($producto->tracking !== 'serial') abort(403);
 
         $data = $request->validate([
-            'lotes' => 'required|string', // una por línea
+            'lotes' => 'required|string',
         ]);
 
         $tenant = $this->tenantId();
@@ -397,6 +393,12 @@ class ProductoController extends Controller implements HasMiddleware
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
         abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
 
+        // ⛔ No permitir borrar si la serie está/estuvo en alguna responsiva
+        $tieneHistorial = ResponsivaDetalle::where('producto_serie_id', $serie->id)->exists();
+        if ($tieneHistorial) {
+            return back()->with('error','No puedes eliminar esta serie: ya está relacionada con una responsiva.');
+        }
+
         if ($serie->estado !== 'disponible') {
             return back()->with('error','Solo puedes eliminar series en estado "disponible".');
         }
@@ -414,8 +416,99 @@ class ProductoController extends Controller implements HasMiddleware
             'estado' => 'required|in:disponible,asignado,devuelto,baja,reparacion',
         ]);
 
+        // Solo tocamos 'estado'. No limpiamos 'asignado_en_responsiva_id' para conservar el rastro histórico.
         $serie->update(['estado' => $data['estado']]);
+
         return back()->with('updated', true);
+    }
+
+    // ===================== EDITAR UNA SERIE (vista condicional) =====================
+    public function seriesEdit(Producto $producto, ProductoSerie $serie)
+    {
+        abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
+        abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
+
+        // Si es equipo de cómputo => vista completa de overrides (color/ram/almacenamiento/cpu)
+        if ($producto->tipo === 'equipo_pc') {
+            return view('series.edit_specs', [
+                'producto' => $producto,
+                'serie'    => $serie,
+                'over'     => (array) ($serie->especificaciones ?? []), // overrides actuales
+            ]);
+        }
+
+        // Para cualquier otro tipo solo una caja de descripción
+        return view('series.edit_desc', [
+            'producto'    => $producto,
+            'serie'       => $serie,
+            'descripcion' => data_get($serie->especificaciones, 'descripcion'),
+        ]);
+    }
+
+    public function seriesUpdate(Request $request, Producto $producto, ProductoSerie $serie)
+    {
+        abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
+        abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
+
+        // Equipo de cómputo: mismo formulario completo
+        if ($producto->tipo === 'equipo_pc') {
+            $data = $request->validate([
+                'spec.color'                               => ['nullable','string','max:50'],
+                'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
+                'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
+                'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
+                'spec.procesador'                          => ['nullable','string','max:120'],
+                'clear_overrides'                          => ['nullable','boolean'],
+            ]);
+
+            // Limpiar overrides y regresar al listado con alerta
+            if ($request->boolean('clear_overrides')) {
+                $serie->especificaciones = null;
+                $serie->save();
+
+                return redirect()
+                    ->route('productos.series', $producto)
+                    ->with('updated', 'Serie actualizada.');
+            }
+
+            // Guardar solo lo que venga con valor
+            $over = array_filter([
+                'color' => $request->input('spec.color'),
+                'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
+                'almacenamiento' => array_filter([
+                    'tipo' => $request->input('spec.almacenamiento.tipo'),
+                    'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
+                        ? (int)$request->input('spec.almacenamiento.capacidad_gb') : null,
+                ], fn($v)=>$v!==null && $v!==''),
+                'procesador' => $request->input('spec.procesador'),
+            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+
+            $serie->especificaciones = $over ?: null;
+            $serie->save();
+
+            return redirect()
+                ->route('productos.series', $producto)
+                ->with('updated', 'Serie actualizada.');
+        }
+
+        // Otros tipos: solo descripción
+        $data = $request->validate([
+            'descripcion' => ['nullable','string','max:2000'],
+        ]);
+
+        $over = (array) ($serie->especificaciones ?? []);
+        if (filled($data['descripcion'] ?? null)) {
+            $over['descripcion'] = $data['descripcion'];
+        } else {
+            unset($over['descripcion']);
+        }
+
+        $serie->especificaciones = $over ?: null;
+        $serie->save();
+
+        return redirect()
+            ->route('productos.series', $producto)
+            ->with('updated', 'Serie actualizada.');
     }
 
     // ===================== EXISTENCIA (NO SERIAL) =====================
@@ -447,7 +540,7 @@ class ProductoController extends Controller implements HasMiddleware
 
         $data = $request->validate([
             'tipo'       => 'required|in:entrada,salida,ajuste',
-            'cantidad'   => 'required|integer', // en “ajuste” puede ser negativo
+            'cantidad'   => 'required|integer',
             'motivo'     => 'nullable|string|max:255',
             'referencia' => 'nullable|string|max:100',
         ]);
@@ -460,11 +553,9 @@ class ProductoController extends Controller implements HasMiddleware
                 ['cantidad'=>0]
             );
 
-            // Calcula delta
             $delta = (int) $data['cantidad'];
             if ($data['tipo']==='entrada')  { $delta =  abs($delta); }
             if ($data['tipo']==='salida')   { $delta = -abs($delta); }
-            // en “ajuste” se respeta el signo
 
             $nuevo = $stock->cantidad + $delta;
             if ($nuevo < 0) {

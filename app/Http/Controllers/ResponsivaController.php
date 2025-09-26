@@ -78,7 +78,7 @@ class ResponsivaController extends Controller implements HasMiddleware
         $rows = Responsiva::query()
             ->with($with)
             ->withCount('detalles')
-            ->where('empresa_tenant_id', $tenantId) // <— filtro por tenant directo
+            ->where('empresa_tenant_id', $tenantId)
             ->when($q !== '', function ($query) use ($q) {
                 $query->where(function ($w) use ($q) {
                     $w->where('folio', 'like', "%{$q}%")
@@ -102,7 +102,6 @@ class ResponsivaController extends Controller implements HasMiddleware
             ->withQueryString();
 
         if ($request->boolean('partial')) {
-            // Pasamos ambas llaves para compatibilidad con tu parcial
             return view('responsivas.partials.table', ['responsivas' => $rows, 'rows' => $rows])->render();
         }
 
@@ -130,16 +129,15 @@ class ResponsivaController extends Controller implements HasMiddleware
         }
         $colaboradores = $colabQ->get();
 
+        // ⬇️ Solo series disponibles de productos ACTIVOS
         $series = ProductoSerie::deEmpresa($tenantId)
             ->disponibles()
-            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones')
+            ->whereHas('producto', fn($q) => $q->where('activo', true))
+            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones,activo')
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado','especificaciones']);
 
         $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
-
-//        // Si quieres bloquear aquí también (además del middleware):
-//        // abort_unless(auth()->user()->can('responsivas.create'), 403);
 
         return view('responsivas.create', compact('colaboradores','series','admins'));
     }
@@ -161,11 +159,8 @@ class ResponsivaController extends Controller implements HasMiddleware
             'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['nullable', $colExists],
-
-            // opcionales (ponemos default si vienen vacíos)
             'entrego_user_id'       => ['nullable', Rule::in($adminIds)],
             'autoriza_user_id'      => ['nullable', Rule::in($adminIds)],
-
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
             'observaciones'         => ['nullable','string','max:2000'],
@@ -179,15 +174,15 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             $folio = $this->nextFolio($tenantId);
 
-            // === defaults para firmantes (entregó / autorizó)
+            // defaults para firmantes
             $entregoId = $req->entrego_user_id
                 ?: (auth()->user()?->hasRole('Administrador') ? auth()->id() : $this->defaultAdminId());
-            if (!$entregoId) { $entregoId = auth()->id(); } // último fallback
+            if (!$entregoId) { $entregoId = auth()->id(); }
 
             $autorizaFijo = (int) config('app.responsivas_autoriza_user_id', 0);
             $autorizaId   = $req->autoriza_user_id ?: ($autorizaFijo ?: $this->defaultAdminId());
 
-            // === token público para firma del colaborador
+            // token público
             $signDays = (int) config('app.responsiva_sign_days', 7);
 
             $resp = Responsiva::create([
@@ -195,20 +190,21 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'folio'                 => $folio,
                 'colaborador_id'        => $req->colaborador_id,
                 'recibi_colaborador_id' => $req->recibi_colaborador_id ?: $req->colaborador_id,
-                'user_id'               => $entregoId,          // Entregó (auto)
-                'autoriza_user_id'      => $autorizaId,         // Autorizó (auto)
+                'user_id'               => $entregoId,
+                'autoriza_user_id'      => $autorizaId,
                 'motivo_entrega'        => $req->motivo_entrega,
                 'fecha_solicitud'       => $req->fecha_solicitud,
                 'fecha_entrega'         => $req->fecha_entrega ?: now()->toDateString(),
                 'observaciones'         => $req->observaciones,
-
                 'sign_token'            => Str::random(64),
                 'sign_token_expires_at' => $signDays > 0 ? now()->addDays($signDays) : null,
             ]);
 
+            // ⬇️ Traer series y verificar que su producto esté ACTIVO
             $series = ProductoSerie::deEmpresa($tenantId)
                 ->whereIn('id', $req->series_ids)
                 ->lockForUpdate()
+                ->with('producto:id,activo')
                 ->get(['id','producto_id','serie','estado']);
 
             if ($series->count() !== count($req->series_ids)) {
@@ -221,6 +217,11 @@ class ResponsivaController extends Controller implements HasMiddleware
             $asignado   = defined(ProductoSerie::class.'::ESTADO_ASIGNADO')   ? ProductoSerie::ESTADO_ASIGNADO   : 'asignado';
 
             foreach ($series as $s) {
+                if (!$s->producto || !$s->producto->activo) {
+                    throw ValidationException::withMessages([
+                        'series_ids' => "La serie {$s->serie} pertenece a un producto inactivo.",
+                    ]);
+                }
                 if ($s->estado !== $disponible) {
                     throw ValidationException::withMessages([
                         'series_ids' => "La serie {$s->serie} ya no está disponible.",
@@ -242,7 +243,6 @@ class ResponsivaController extends Controller implements HasMiddleware
             }
         });
 
-        // Link público para firma (lo mandamos en flash para que lo copies/envíes)
         $linkFirma = $resp?->sign_token ? route('public.sign.show', $resp->sign_token) : null;
 
         return redirect()
@@ -254,7 +254,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== EDIT ===================== */
     public function edit(Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $tenantId = $this->tenantId();
@@ -272,9 +271,11 @@ class ResponsivaController extends Controller implements HasMiddleware
         }
         $colaboradores = $colabQ->get();
 
+        // ⬇️ Series disponibles SOLO de productos ACTIVOS
         $seriesDisponibles = ProductoSerie::deEmpresa($tenantId)
             ->disponibles()
-            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones')
+            ->whereHas('producto', fn($q) => $q->where('activo', true))
+            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones,activo')
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado']);
 
@@ -282,7 +283,7 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         $misSeries = ProductoSerie::deEmpresa($tenantId)
             ->whereIn('id', $idsActuales)
-            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones')
+            ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones,activo')
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado']);
 
@@ -300,7 +301,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== UPDATE ===================== */
     public function update(Request $req, Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $tenantId = $this->tenantId();
@@ -337,16 +337,26 @@ class ResponsivaController extends Controller implements HasMiddleware
             $asignado   = defined(ProductoSerie::class.'::ESTADO_ASIGNADO')   ? ProductoSerie::ESTADO_ASIGNADO   : 'asignado';
 
             if ($toAdd) {
+                // ⬇️ Verificar producto ACTIVO y estado disponible
                 $seriesAdd = ProductoSerie::deEmpresa($tenantId)
-                    ->whereIn('id',$toAdd)->lockForUpdate()->get(['id','producto_id','serie','estado']);
+                    ->whereIn('id',$toAdd)
+                    ->lockForUpdate()
+                    ->with('producto:id,activo')
+                    ->get(['id','producto_id','serie','estado']);
 
                 foreach ($seriesAdd as $s) {
+                    if (!$s->producto || !$s->producto->activo) {
+                        throw ValidationException::withMessages([
+                            'series_ids' => "La serie {$s->serie} pertenece a un producto inactivo.",
+                        ]);
+                    }
                     if ($s->estado !== $disponible) {
                         throw ValidationException::withMessages([
                             'series_ids' => "La serie {$s->serie} no está disponible.",
                         ]);
                     }
                 }
+
                 foreach ($seriesAdd as $s) {
                     ResponsivaDetalle::create([
                         'responsiva_id'     => $responsiva->id,
@@ -394,7 +404,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== SHOW ===================== */
     public function show(Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $responsiva->load([
@@ -409,7 +418,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== FOLIO: OES-00001 por tenant ===================== */
     private function nextFolio(int $tenantId): string
     {
-        // Debe llamarse DENTRO de una transacción.
         $last = Responsiva::where('empresa_tenant_id', $tenantId)
             ->where('folio', 'like', 'OES-%')
             ->orderByDesc('id')
@@ -427,7 +435,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== PDF ===================== */
     public function pdf(Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $pdf = Pdf::loadView('responsivas.pdf', compact('responsiva'))
@@ -440,7 +447,6 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== DESTROY ===================== */
     public function destroy(Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $tenantId = $this->tenantId();
@@ -474,10 +480,8 @@ class ResponsivaController extends Controller implements HasMiddleware
 
     public function emitirFirma(Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
-        // Si ya está firmada, salimos (evita regenerar/ensuciar)
         if (Schema::hasColumn('responsivas', 'signed_at') && $responsiva->signed_at) {
             return back()->with('error', 'Esta responsiva ya está firmada.');
         }
@@ -505,20 +509,17 @@ class ResponsivaController extends Controller implements HasMiddleware
 
     public function firmarEnSitio(Request $req, Responsiva $responsiva)
     {
-        // Tenant guard
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
-        // Solo si no está firmada
         if (!empty($responsiva->firma_colaborador_path)) {
             return back()->with('ok', 'La responsiva ya estaba firmada.');
         }
 
         $req->validate([
-            'firma'  => ['required'],             // dataURL base64 desde el <canvas>
-            'nombre' => ['nullable','string','max:255'], // opcional (si quieres sobreescribir)
+            'firma'  => ['required'],
+            'nombre' => ['nullable','string','max:255'],
         ]);
 
-        // Parsear dataURL -> PNG bytes
         $pngBytes = null;
         $firma = (string) $req->input('firma');
         if (Str::startsWith($firma, 'data:image')) {
@@ -530,18 +531,15 @@ class ResponsivaController extends Controller implements HasMiddleware
             return back()->withErrors(['firma' => 'No se pudo leer la firma.']);
         }
 
-        // Guardar PNG en storage público (mismo path que la firma remota)
         $dir  = 'firmas_colaboradores';
         $path = "{$dir}/responsiva-{$responsiva->id}.png";
         Storage::disk('public')->put($path, $pngBytes);
 
-        // Actualizar responsiva
         $responsiva->firma_colaborador_path = $path;
         $responsiva->firmado_en  = now();
         $responsiva->firmado_por = $req->input('nombre') ?: ($responsiva->colaborador->nombre ?? null);
         $responsiva->firmado_ip  = $req->ip();
 
-        // Si existía un token, anularlo
         $responsiva->sign_token = null;
         $responsiva->sign_token_expires_at = null;
 
@@ -551,52 +549,46 @@ class ResponsivaController extends Controller implements HasMiddleware
     }
 
     public function destroyFirma(Responsiva $responsiva)
-{
-    // Tenant guard
-    abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
+    {
+        abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
-    // 1) Intentar borrar archivo si hay path local
-    $path = $responsiva->firma_colaborador_path;
+        $path = $responsiva->firma_colaborador_path;
 
-    if (!empty($path)) {
-        // Si usas 'public' (storage/app/public) + storage:link
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
-        } else {
-            // Si eventualmente mueves a otro disco (p. ej. s3) y no guardas el disco en DB:
-            foreach (['s3','local'] as $disk) {
-                try {
-                    if (Storage::disk($disk)->exists($path)) {
-                        Storage::disk($disk)->delete($path);
-                        break;
-                    }
-                } catch (\Throwable $e) { /* ignorar */ }
+        if (!empty($path)) {
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            } else {
+                foreach (['s3','local'] as $disk) {
+                    try {
+                        if (Storage::disk($disk)->exists($path)) {
+                            Storage::disk($disk)->delete($path);
+                            break;
+                        }
+                    } catch (\Throwable $e) { /* ignorar */ }
+                }
             }
         }
-    }
 
-    // 2) Limpiar campos relacionados a firma (ajusta a tus columnas reales)
-    $toNull = [
-        'firma_colaborador_path',
-        'firma_colaborador_url',     // si guardas url absoluta
-        'firmado_en',
-        'firmado_por',
-        'firmado_ip',
-        'sign_token',                // invalida links públicos (por si acaso)
-        'sign_token_expires_at',
-        'signed_at',                 // si existiera
-        'firma_colaborador_user_agent', // si existiera
-    ];
+        $toNull = [
+            'firma_colaborador_path',
+            'firma_colaborador_url',
+            'firmado_en',
+            'firmado_por',
+            'firmado_ip',
+            'sign_token',
+            'sign_token_expires_at',
+            'signed_at',
+            'firma_colaborador_user_agent',
+        ];
 
-    foreach ($toNull as $col) {
-        if (\Schema::hasColumn($responsiva->getTable(), $col)) {
-            $responsiva->{$col} = null;
+        foreach ($toNull as $col) {
+            if (\Schema::hasColumn($responsiva->getTable(), $col)) {
+                $responsiva->{$col} = null;
+            }
         }
+
+        $responsiva->save();
+
+        return back()->with('status', 'Firma del colaborador eliminada correctamente.');
     }
-
-    $responsiva->save();
-
-    return back()->with('status', 'Firma del colaborador eliminada correctamente.');
-}
-
 }

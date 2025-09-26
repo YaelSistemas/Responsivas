@@ -87,7 +87,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('productos', ProductoController::class)
         ->parameters(['productos' => 'producto']);
 
-    // Bloque de rutas anidadas de productos
+    // Rutas anidadas de productos
     Route::prefix('productos/{producto}')->group(function () {
         // SERIES (tracking por número de serie)
         Route::get   ('/series',                [ProductoController::class,'series'])->name('productos.series');
@@ -95,21 +95,23 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/series/{serie}',        [ProductoController::class,'seriesDestroy'])->name('productos.series.destroy');
         Route::put   ('/series/{serie}/estado', [ProductoController::class,'seriesEstado'])->name('productos.series.estado');
 
+        // Editar/actualizar serie (anidado al producto)
+        Route::get  ('/series/{serie}/edit', [ProductoController::class,'seriesEdit'])->name('productos.series.edit');
+        Route::put  ('/series/{serie}',      [ProductoController::class,'seriesUpdate'])->name('productos.series.update');
+
         // FOTOS de series
         Route::post  ('/series/{serie}/fotos',        [ProductoSerieController::class, 'fotosStore'])->name('productos.series.fotos.store');
         Route::delete('/series/{serie}/fotos/{foto}', [ProductoSerieController::class, 'fotosDestroy'])->name('productos.series.fotos.destroy');
 
         // EXISTENCIA (tracking por cantidad)
-        Route::get ('/existencia',             [ProductoController::class,'existencia'])->name('productos.existencia');
-        Route::post('/existencia/ajustar',     [ProductoController::class,'existenciaAjustar'])->name('productos.existencia.ajustar');
-
+        Route::get ('/existencia',         [ProductoController::class,'existencia'])->name('productos.existencia');
         Route::post('/existencia/ajustar', [ProductoController::class,'existenciaAjustar'])
-            ->middleware('permission:productos.edit') // SOLO con permiso se puede mover stock
+            ->middleware('permission:productos.edit')
             ->name('productos.existencia.ajustar');
     });
 
-    // Vista directa de series (si la usas)
-    Route::resource('series', ProductoSerieController::class)->only(['index','edit','update','show']);
+    // Vista directa de series (solo index/show para evitar choques con las rutas anidadas)
+    Route::resource('series', ProductoSerieController::class)->only(['index','show']);
 
     /*
     |--------------------  Responsivas  --------------------
@@ -117,27 +119,27 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('responsivas', ResponsivaController::class)
         ->only(['index','create','store','show','edit','update','destroy']);
 
-    // PDF (interno) — requiere permiso de ver responsivas
+    // PDF (interno)
     Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])
         ->middleware('permission:responsivas.view')
         ->name('responsivas.pdf');
 
-    // Generar / renovar link de firma — requiere permiso de editar responsivas
+    // Generar / renovar link de firma
     Route::post('/responsivas/{responsiva}/link', [ResponsivaController::class, 'emitirFirma'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.link');
 
-    // Alias antiguo para compatibilidad
+    // Alias antiguo (compatibilidad)
     Route::post('/responsivas/{responsiva}/emitir-firma', [ResponsivaController::class, 'emitirFirma'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.emitirFirma');
 
-    // Firmar en sitio — requiere permiso de editar responsivas
+    // Firmar en sitio
     Route::post('/responsivas/{responsiva}/firmar-en-sitio', [ResponsivaController::class, 'firmarEnSitio'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firmarEnSitio');
 
-    // Eliminar Firma — requiere permiso de editar responsivas    
+    // Eliminar firma
     Route::delete('/responsivas/{responsiva}/firma', [ResponsivaController::class, 'destroyFirma'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firma.destroy');

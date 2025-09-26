@@ -154,16 +154,30 @@
                       @if($producto->tipo === 'equipo_pc' && !empty($sp))
                         <div class="chips">
                           @if(!empty($sp['procesador'])) <span class="chip">{{ $sp['procesador'] }}</span>@endif
-                          @if(!empty($sp['ram_gb'])) <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
+                          @if(!empty($sp['ram_gb']))     <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
                           @php
                             $alm = $sp['almacenamiento'] ?? [];
                             $t = $alm['tipo'] ?? null; $cap = $alm['capacidad_gb'] ?? null;
                           @endphp
                           @if($t || $cap)
-                            <span class="chip">{{ strtoupper($t ?? '') }}@if($t && $cap) @endif @if($cap) {{ (int)$cap }} GB @endif</span>
+                            <span class="chip">{{ strtoupper($t ?? '') }} @if($cap) {{ (int)$cap }} GB @endif</span>
                           @endif
                           @if(!empty($sp['color'])) <span class="chip">Color: {{ $sp['color'] }}</span>@endif
                         </div>
+                      @else
+                        @php
+                          // 1) override de la serie si existe, 2) cae a la descripción del producto
+                          $descSerie = data_get($s->especificaciones, 'descripcion');
+                          $descProd  = $producto->descripcion;
+                          $desc      = $descSerie ?? $descProd;
+                        @endphp
+                        @if($desc)
+                          <div class="chips">
+                            <span class="chip" title="{{ $desc }}">
+                              {{ \Illuminate\Support\Str::limit($desc, 70) }}
+                            </span>
+                          </div>
+                        @endif
                       @endif
                     </td>
 
@@ -196,7 +210,8 @@
                     <td>
                       <div class="flex items-center justify-center gap-3">
                         @can('productos.edit')
-                          <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
+                          <a href="{{ route('productos.series.edit', [$producto, $s]) }}" 
+                          class="text-gray-800 hover:text-gray-900" title="Editar">
                             <i class="fa-solid fa-pen"></i>
                           </a>
                         @endcan

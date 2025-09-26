@@ -397,19 +397,24 @@
                 $p = $d->producto;
                 $s = $d->serie;
 
-                $specS = $s->specs ?? $s->especificaciones ?? null;
+                // Si guardaste JSON como string, decodifica por si acaso (opcional)
+                $specS = $s->especificaciones;
                 if (is_string($specS)) { $tmp = json_decode($specS, true); if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp; }
-                $specP = $p->specs ?? $p->especificaciones ?? null;
+                $specP = $p->especificaciones;
                 if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-                $des = '';
+                // DESCRIPCIÓN PARA LA TABLA
                 if (($p->tipo ?? null) === 'equipo_pc') {
-                    $color = '';
-                    if (is_array($specS)) $color = $specS['color'] ?? '';
-                    if (!$color && is_array($specP)) $color = $specP['color'] ?? '';
-                    $des = $color !== '' ? $color : ($p->descripcion ?? '');
+                    // Para PC seguimos mostrando el color (override de serie > del producto)
+                    $colorSerie = data_get($specS, 'color');
+                    $colorProd  = data_get($specP, 'color');
+                    $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($p->descripcion ?? ''));
                 } else {
-                    $des = $p->descripcion ?? '';
+                    // Para cualquier otro tipo:
+                    // 1) Usa la descripción de la SERIE si existe
+                    // 2) Si no, cae a la descripción del PRODUCTO
+                    $descSerie = data_get($specS, 'descripcion');
+                    $des = filled($descSerie) ? $descSerie : ($p->descripcion ?? '');
                 }
               @endphp
 

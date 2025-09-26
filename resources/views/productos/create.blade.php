@@ -3,25 +3,22 @@
 
   <style>
     /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+      width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (ajusta si gustas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width: 768px){
       input, select, textarea{ font-size:16px; }
     }
 
-    /* ====== Estilos propios ====== */
     .form-container{max-width:700px;margin:0 auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     .form-group{margin-bottom:16px}
     .form-container input,.form-container select,.form-container textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
@@ -149,7 +146,7 @@
               </div>
             </div>
 
-            {{-- ====== Descripción (visible impresora | monitor | pantalla | periférico | otro). ====== --}}
+            {{-- Descripción (visible impresora | monitor | pantalla | periférico | otro) --}}
             <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
               <label>Descripción</label>
               <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
@@ -208,10 +205,10 @@
     const colorInput   = document.getElementById('colorInput');
     const descripcion  = document.getElementById('descripcion');
 
-    // defaults por tipo (incluye monitor y pantalla como impresora)
+    // defaults por tipo (monitor y pantalla como impresora; periférico ahora serial)
     const defaultTracking = {
       consumible: 'cantidad',
-      periferico: 'cantidad',
+      periferico: 'serial',   // ⬅️ CAMBIO: antes 'cantidad'
       equipo_pc:  'serial',
       impresora:  'serial',
       monitor:    'serial',
