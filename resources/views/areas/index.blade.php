@@ -4,6 +4,27 @@
   </x-slot>
 
   <style>
+    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
+    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-inner{
+      --zoom: 1;                       /* valor por defecto en desktop */
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      /* compensamos el ancho para que visualmente quepa todo sin recortar */
+      width: calc(100% / var(--zoom));
+    }
+    /* Breakpoints (ajusta si quieres) */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    
+    /* iOS: evita auto-zoom al enfocar inputs */
+    @media (max-width: 768px){
+      input, select, textarea{ font-size:16px; }
+    }
+
+    /* ====== Estilos propios de la vista ====== */
     .page-wrap{max-width:1100px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
@@ -12,6 +33,7 @@
     .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+
     /* Toolbar */
     #areas-toolbar .select-wrap{position:relative;display:inline-block}
     #areas-toolbar select[name="per_page"]{
@@ -26,64 +48,69 @@
   </style>
 
   @php
-    $canCreate   = auth()->user()?->can('areas.create');
+    $canCreate = auth()->user()?->can('areas.create');
   @endphp
 
-  <div class="page-wrap py-6">
-    {{-- Header --}}
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-semibold">Áreas</h2>
-      @if($canCreate)
-        <a href="{{ route('areas.create') }}" class="btn btn-primary">Nueva área</a>
-      @endif
-    </div>
+  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="page-wrap py-6">
+        {{-- Header --}}
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Áreas</h2>
+          @if($canCreate)
+            <a href="{{ route('areas.create') }}" class="btn btn-primary">Nueva área</a>
+          @endif
+        </div>
 
-    {{-- Toolbar --}}
-    <form id="areas-toolbar" method="GET" action="{{ route('areas.index') }}" class="mb-3">
-      <div class="flex items-center justify-between gap-3">
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <span>Mostrar</span>
-          <div class="select-wrap">
-            <select name="per_page">
-              @foreach([10,25,50,100] as $n)
-                <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
-              @endforeach
-            </select>
-            <span class="caret">▾</span>
+        {{-- Toolbar --}}
+        <form id="areas-toolbar" method="GET" action="{{ route('areas.index') }}" class="mb-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <span>Mostrar</span>
+              <div class="select-wrap">
+                <select name="per_page">
+                  @foreach([10,25,50,100] as $n)
+                    <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                  @endforeach
+                </select>
+                <span class="caret">▾</span>
+              </div>
+            </div>
+
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <label for="q">Buscar:</label>
+              <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                     class="border rounded px-3 py-1 w-56 focus:outline-none"
+                     placeholder="Nombre o descripción">
+            </div>
+          </div>
+        </form>
+
+        {{-- Alerts --}}
+        @if (session('created') || session('updated') || session('deleted') || session('error'))
+          @php
+            $msg = session('created') ? 'Área creada.'
+                 : (session('updated') ? 'Área actualizada.'
+                 : (session('deleted') ? 'Área eliminada.'
+                 : (session('error') ?: '')));
+            $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
+                 : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
+          @endphp
+          <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
+          <script>
+            setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+          </script>
+        @endif
+
+        {{-- Tabla (parcial AJAX) --}}
+        <div class="card">
+          <div class="overflow-x-auto" id="areas-wrap">
+            @include('areas.partials.table', ['areas' => $areas])
           </div>
         </div>
-
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <label for="q">Buscar:</label>
-          <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
-                 class="border rounded px-3 py-1 w-56 focus:outline-none"
-                 placeholder="Nombre o descripción">
-        </div>
-      </div>
-    </form>
-
-    {{-- Alerts --}}
-    @if (session('created') || session('updated') || session('deleted') || session('error'))
-      @php
-        $msg = session('created') ? 'Área creada.'
-             : (session('updated') ? 'Área actualizada.'
-             : (session('deleted') ? 'Área eliminada.'
-             : (session('error') ?: '')));
-        $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
-             : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
-      @endphp
-      <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-      <script>
-        setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
-      </script>
-    @endif
-
-    {{-- Tabla (parcial AJAX) --}}
-    <div class="card">
-      <div class="overflow-x-auto" id="areas-wrap">
-        @include('areas.partials.table', ['areas' => $areas])
       </div>
     </div>
   </div>

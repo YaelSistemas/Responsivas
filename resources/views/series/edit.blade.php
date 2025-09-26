@@ -6,127 +6,200 @@
   </x-slot>
 
   @php
-    // Efectivos (producto + overrides)
-    $eff  = (array) ($s->specs ?? []);
-    // Overrides ya guardados en esta serie
-    $over = (array) ($s->especificaciones ?? []);
+    $eff  = (array) ($s->specs ?? []);             // Valores efectivos (producto + overrides)
+    $over = (array) ($s->especificaciones ?? []);  // Overrides propios de la serie
   @endphp
 
   <style>
+    /* ====== Zoom responsivo (misma vista, solo escala en móvil) ====== */
+    .zoom-outer{ overflow-x:hidden; }
+    .zoom-inner{
+      --zoom: 1;
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      width: calc(100% / var(--zoom));
+    }
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.75; } }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.60; } }
+
+    /* iOS: evita auto-zoom al enfocar inputs */
+    @media (max-width: 768px){ input, select, textarea{ font-size:16px; } }
+
+    /* ====== Estilos de la vista ====== */
     .box{max-width:760px;margin:0 auto;background:#fff;padding:24px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     label{display:block;margin-bottom:6px;color:#111827;font-weight:600}
     .inp{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px}
     .hint{font-size:12px;color:#6b7280}
     .err{color:#dc2626;font-size:12px;margin-top:6px}
-    .actions{display:flex;justify-content:space-between;gap:10px;margin-top:14px}
+    .actions{display:flex;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
     .btn-save{background:#16a34a;color:#fff;padding:10px 16px;border:none;border-radius:8px;font-weight:700;cursor:pointer}
     .btn-save:hover{background:#15803d}
     .btn-cancel{background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;padding:10px 16px;border-radius:8px;font-weight:700;text-decoration:none}
   </style>
 
-  <div class="py-6">
-    <div class="box space-y-4">
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="py-6">
+        <div class="box space-y-4">
 
-      @if ($errors->any())
-        <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;">
-          <b>Revisa los campos:</b>
-          <ul style="margin-left:18px;list-style:disc;">
-            @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
-          </ul>
+          @if ($errors->any())
+            <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;">
+              <b>Revisa los campos:</b>
+              <ul style="margin-left:18px;list-style:disc;">
+                @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
+              </ul>
+            </div>
+          @endif
+
+          <form id="serieForm" method="POST" action="{{ route('series.update', $s) }}">
+            @csrf @method('PUT')
+
+            <p class="hint">
+              Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.
+            </p>
+
+            <div class="grid2">
+              {{-- Color --}}
+              <div>
+                <label>Color</label>
+                <input
+                  class="inp"
+                  id="color"
+                  name="spec[color]"
+                  value="{{ old('spec.color', data_get($over,'color')) }}"
+                  placeholder="{{ data_get($eff,'color') }}">
+                @error('spec.color') <div class="err">{{ $message }}</div> @enderror
+              </div>
+
+              {{-- RAM --}}
+              <div>
+                <label>RAM (GB)</label>
+                <input
+                  class="inp"
+                  id="ram"
+                  type="number" min="1" step="1"
+                  name="spec[ram_gb]"
+                  value="{{ old('spec.ram_gb', data_get($over,'ram_gb')) }}"
+                  placeholder="{{ data_get($eff,'ram_gb') }}">
+                @error('spec.ram_gb') <div class="err">{{ $message }}</div> @enderror
+              </div>
+
+              {{-- Almacenamiento tipo --}}
+              <div>
+                <label>Almacenamiento (tipo)</label>
+                @php
+                  $curTipoOver = old('spec.almacenamiento.tipo', data_get($over,'almacenamiento.tipo'));
+                  $effTipo     = strtoupper((string) data_get($eff,'almacenamiento.tipo'));
+                @endphp
+                <select class="inp" id="alm_tipo" name="spec[almacenamiento][tipo]">
+                  <option value="">Selecciona…</option>
+                  @foreach (['ssd'=>'SSD','hdd'=>'HDD','m2'=>'M.2'] as $k=>$v)
+                    <option value="{{ $k }}" @selected($curTipoOver===$k)>{{ $v }}</option>
+                  @endforeach
+                </select>
+                @error('spec.almacenamiento.tipo') <div class="err">{{ $message }}</div> @enderror
+              </div>
+
+              {{-- Almacenamiento capacidad --}}
+              <div>
+                <label>Almacenamiento (capacidad GB)</label>
+                <input
+                  class="inp"
+                  id="alm_cap"
+                  type="number" min="1" step="1"
+                  name="spec[almacenamiento][capacidad_gb]"
+                  value="{{ old('spec.almacenamiento.capacidad_gb', data_get($over,'almacenamiento.capacidad_gb')) }}"
+                  placeholder="{{ data_get($eff,'almacenamiento.capacidad_gb') }}">
+                @error('spec.almacenamiento.capacidad_gb') <div class="err">{{ $message }}</div> @enderror
+              </div>
+
+              {{-- CPU (fila completa) --}}
+              <div style="grid-column:1/-1">
+                <label>Procesador</label>
+                <input
+                  class="inp"
+                  id="cpu"
+                  name="spec[procesador]"
+                  value="{{ old('spec.procesador', data_get($over,'procesador')) }}"
+                  placeholder="{{ data_get($eff,'procesador') }}">
+                @error('spec.procesador') <div class="err">{{ $message }}</div> @enderror
+              </div>
+            </div>
+
+            <div class="actions">
+              <a href="{{ url()->previous() }}" class="btn-cancel">Cancelar</a>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" class="btn-cancel" id="btn-clear-all">Limpiar overrides</button>
+                <button class="btn-save" type="submit" id="btn-submit">Guardar</button>
+              </div>
+            </div>
+          </form>
+
+          {{-- Valores efectivos informativos --}}
+          <div class="hint">
+            <b>Valores Actuales:</b><br>
+            Color: {{ data_get($eff,'color') ?: '—' }} |
+            RAM: {{ data_get($eff,'ram_gb') ? (int) data_get($eff,'ram_gb').' GB' : '—' }} |
+            Almacenamiento: {{ strtoupper((string) data_get($eff,'almacenamiento.tipo')) ?: '—' }}
+            {{ data_get($eff,'almacenamiento.capacidad_gb') ? (int) data_get($eff,'almacenamiento.capacidad_gb').' GB' : '' }} |
+            CPU: {{ data_get($eff,'procesador') ?: '—' }}
+          </div>
+
         </div>
-      @endif
-
-      <form method="POST" action="{{ route('series.update', $s) }}">
-        @csrf @method('PUT')
-
-        <p class="hint">
-          Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.
-        </p>
-
-        <div class="grid2">
-          {{-- Color --}}
-          <div>
-            <label>Color</label>
-            <input
-              class="inp"
-              name="spec[color]"
-              value="{{ old('spec.color', data_get($over,'color')) }}"
-              placeholder="{{ data_get($eff,'color') }}">
-            @error('spec.color') <div class="err">{{ $message }}</div> @enderror
-          </div>
-
-          {{-- RAM --}}
-          <div>
-            <label>RAM (GB)</label>
-            <input
-              class="inp"
-              type="number" min="1" step="1"
-              name="spec[ram_gb]"
-              value="{{ old('spec.ram_gb', data_get($over,'ram_gb')) }}"
-              placeholder="{{ data_get($eff,'ram_gb') }}">
-            @error('spec.ram_gb') <div class="err">{{ $message }}</div> @enderror
-          </div>
-
-          {{-- Almacenamiento tipo --}}
-          <div>
-            <label>Almacenamiento (tipo)</label>
-            @php
-              $curTipoOver = old('spec.almacenamiento.tipo', data_get($over,'almacenamiento.tipo'));
-              $effTipo     = strtoupper((string) data_get($eff,'almacenamiento.tipo'));
-            @endphp
-            <select class="inp" name="spec[almacenamiento][tipo]">
-              <option value="">
-                usar del producto {{ $effTipo ? "($effTipo)" : '' }}
-              </option>
-              @foreach (['ssd'=>'SSD','hdd'=>'HDD','m2'=>'M.2'] as $k=>$v)
-                <option value="{{ $k }}" @selected($curTipoOver===$k)>{{ $v }}</option>
-              @endforeach
-            </select>
-            @error('spec.almacenamiento.tipo') <div class="err">{{ $message }}</div> @enderror
-          </div>
-
-          {{-- Almacenamiento capacidad --}}
-          <div>
-            <label>Almacenamiento (capacidad GB)</label>
-            <input
-              class="inp"
-              type="number" min="1" step="1"
-              name="spec[almacenamiento][capacidad_gb]"
-              value="{{ old('spec.almacenamiento.capacidad_gb', data_get($over,'almacenamiento.capacidad_gb')) }}"
-              placeholder="{{ data_get($eff,'almacenamiento.capacidad_gb') }}">
-            @error('spec.almacenamiento.capacidad_gb') <div class="err">{{ $message }}</div> @enderror
-          </div>
-
-          {{-- CPU (fila completa) --}}
-          <div style="grid-column:1/-1">
-            <label>Procesador</label>
-            <input
-              class="inp"
-              name="spec[procesador]"
-              value="{{ old('spec.procesador', data_get($over,'procesador')) }}"
-              placeholder="{{ data_get($eff,'procesador') }}">
-            @error('spec.procesador') <div class="err">{{ $message }}</div> @enderror
-          </div>
-        </div>
-
-        <div class="actions">
-          {{-- Puedes cambiar a route('productos.series', $s->producto) si prefieres volver a la lista --}}
-          <a href="{{ url()->previous() }}" class="btn-cancel">Cancelar</a>
-          <button class="btn-save" type="submit">Guardar</button>
-        </div>
-      </form>
-
-      {{-- Valores efectivos informativos --}}
-      <div class="hint">
-        <b>Valores efectivos (producto + overrides):</b><br>
-        Color: {{ data_get($eff,'color') ?: '—' }} |
-        RAM: {{ data_get($eff,'ram_gb') ? (int) data_get($eff,'ram_gb').' GB' : '—' }} |
-        Almacenamiento: {{ strtoupper((string) data_get($eff,'almacenamiento.tipo')) ?: '—' }}
-        {{ data_get($eff,'almacenamiento.capacidad_gb') ? (int) data_get($eff,'almacenamiento.capacidad_gb').' GB' : '' }} |
-        CPU: {{ data_get($eff,'procesador') ?: '—' }}
       </div>
-
     </div>
   </div>
+
+  <script>
+    (function(){
+      const form = document.getElementById('serieForm');
+      const btnClearAll = document.getElementById('btn-clear-all');
+      const btnSubmit = document.getElementById('btn-submit');
+
+      // Autofocus en el primer campo vacío, si existe
+      const fields = ['#color','#ram','#alm_tipo','#alm_cap','#cpu'].map(s=>document.querySelector(s)).filter(Boolean);
+      const firstEmpty = fields.find(el => (el.tagName==='SELECT' ? !el.value : (el.value||'').trim()===''));
+      (firstEmpty || fields[0])?.focus();
+
+      // Limpiar todos los overrides
+      btnClearAll?.addEventListener('click', ()=>{
+        fields.forEach(el => { if(el.tagName==='SELECT'){ el.value=''; } else { el.value=''; } });
+      });
+
+      // Previene doble envío
+      let sending = false;
+      form.addEventListener('submit', (e)=>{
+        if(sending){ e.preventDefault(); return; }
+        sending = true;
+        btnSubmit.disabled = true;
+        btnSubmit.style.opacity = .7;
+      });
+
+      // Atajos: Ctrl/Cmd+S guarda, Esc cancela
+      document.addEventListener('keydown', (e)=>{
+        if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='s'){
+          e.preventDefault();
+          btnSubmit?.click();
+        }
+        if(e.key === 'Escape'){
+          e.preventDefault();
+          const back = document.querySelector('.btn-cancel');
+          if(back) window.location.href = back.getAttribute('href');
+        }
+      });
+
+      // Aviso al salir con cambios
+      let dirty = false;
+      form.addEventListener('input', ()=> { dirty = true; });
+      window.addEventListener('beforeunload', (e)=>{
+        if(dirty && !sending){
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+    })();
+  </script>
 </x-app-layout>

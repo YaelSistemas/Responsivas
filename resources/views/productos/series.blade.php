@@ -6,6 +6,26 @@
   </x-slot>
 
   <style>
+    /* ====== Zoom responsivo: MISMA VISTA, solo “más pequeña” en pantallas chicas ====== */
+    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-inner{
+      --zoom: 1;                       /* desktop */
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+    }
+    /* Breakpoints (ajusta si quieres) */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+
+    /* iOS: evita auto-zoom al enfocar inputs en móvil */
+    @media (max-width:768px){
+      input, select, textarea{ font-size:16px; }
+    }
+
+    /* ====== Estilos propios ====== */
     .page-wrap{max-width:950px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
@@ -70,135 +90,142 @@
     @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 
-  <div class="page-wrap py-6">
-    @if (session('created') || session('updated') || session('deleted') || session('error'))
-      @php
-        $msg = session('created') ?: (session('updated') ?: (session('deleted') ?: (session('error') ?: '')));
-        $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
-             : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
-      @endphp
-      <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-      <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
-    @endif
+  <!-- Escalamos SOLO el contenido principal.
+       Dejamos los modales FUERA del .zoom-inner para que su position:fixed
+       siga anclado al viewport y no al contenedor transformado. -->
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="page-wrap py-6">
+        @if (session('created') || session('updated') || session('deleted') || session('error'))
+          @php
+            $msg = session('created') ?: (session('updated') ?: (session('deleted') ?: (session('error') ?: '')));
+            $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
+                 : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
+          @endphp
+          <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
+          <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
+        @endif
 
-    <div class="card p-4 mb-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="text-lg font-semibold">Series registradas</div>
-        <div class="flex items-center gap-2">
-          <form id="search-form" method="GET" class="flex items-center gap-2" onsubmit="return false">
-            <label for="q" class="text-sm text-gray-600">Buscar:</label>
-            <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
-                   class="border rounded px-3 py-1 focus:outline-none" placeholder="Serie...">
-          </form>
+        <div class="card p-4 mb-4">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-lg font-semibold">Series registradas</div>
+            <div class="flex items-center gap-2">
+              <form id="search-form" method="GET" class="flex items-center gap-2" onsubmit="return false">
+                <label for="q" class="text-sm text-gray-600">Buscar:</label>
+                <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                       class="border rounded px-3 py-1 focus:outline-none" placeholder="Serie...">
+              </form>
 
-          @can('productos.create')
-            <button id="open-bulk" type="button" class="btn btn-primary">Alta masiva</button>
-          @endcan
+              @can('productos.create')
+                <button id="open-bulk" type="button" class="btn btn-primary">Alta masiva</button>
+              @endcan
 
-          <a href="{{ route('productos.index') }}" class="btn btn-light">Volver a productos</a>
+              <a href="{{ route('productos.index') }}" class="btn btn-light">Volver a productos</a>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="card p-4">
-      <div class="overflow-x-auto">
-        <table class="tbl w-full">
-          <thead>
-            <tr>
-              <th>Serie</th>
-              <th class="text-center" style="width:130px">Fotos</th>
-              <th class="text-center" style="width:200px">Estado</th>
-              <th class="text-center" style="width:120px">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="series-tbody">
-            @forelse($series as $s)
-              @php $sp = $s->specs; @endphp
-              <tr>
-                {{-- Serie + chips --}}
-                <td>
-                  <div class="flex items-center gap-2">
-                    <span class="font-mono">{{ $s->serie }}</span>
-                    @if(!empty($s->especificaciones))
-                      <span class="badge-mod">Mod.</span>
-                    @endif
-                  </div>
+        <div class="card p-4">
+          <div class="overflow-x-auto">
+            <table class="tbl w-full">
+              <thead>
+                <tr>
+                  <th>Serie</th>
+                  <th class="text-center" style="width:130px">Fotos</th>
+                  <th class="text-center" style="width:200px">Estado</th>
+                  <th class="text-center" style="width:120px">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="series-tbody">
+                @forelse($series as $s)
+                  @php $sp = $s->specs; @endphp
+                  <tr>
+                    {{-- Serie + chips --}}
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <span class="font-mono">{{ $s->serie }}</span>
+                        @if(!empty($s->especificaciones))
+                          <span class="badge-mod">Mod.</span>
+                        @endif
+                      </div>
 
-                  @if($producto->tipo === 'equipo_pc' && !empty($sp))
-                    <div class="chips">
-                      @if(!empty($sp['procesador'])) <span class="chip">{{ $sp['procesador'] }}</span>@endif
-                      @if(!empty($sp['ram_gb'])) <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
-                      @php
-                        $alm = $sp['almacenamiento'] ?? [];
-                        $t = $alm['tipo'] ?? null; $cap = $alm['capacidad_gb'] ?? null;
-                      @endphp
-                      @if($t || $cap)
-                        <span class="chip">{{ strtoupper($t ?? '') }}{{ $t && $cap ? ' ' : '' }}@if($cap) {{ (int)$cap }} GB @endif</span>
+                      @if($producto->tipo === 'equipo_pc' && !empty($sp))
+                        <div class="chips">
+                          @if(!empty($sp['procesador'])) <span class="chip">{{ $sp['procesador'] }}</span>@endif
+                          @if(!empty($sp['ram_gb'])) <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
+                          @php
+                            $alm = $sp['almacenamiento'] ?? [];
+                            $t = $alm['tipo'] ?? null; $cap = $alm['capacidad_gb'] ?? null;
+                          @endphp
+                          @if($t || $cap)
+                            <span class="chip">{{ strtoupper($t ?? '') }}@if($t && $cap) @endif @if($cap) {{ (int)$cap }} GB @endif</span>
+                          @endif
+                          @if(!empty($sp['color'])) <span class="chip">Color: {{ $sp['color'] }}</span>@endif
+                        </div>
                       @endif
-                      @if(!empty($sp['color'])) <span class="chip">Color: {{ $sp['color'] }}</span>@endif
-                    </div>
-                  @endif
-                </td>
+                    </td>
 
-                {{-- Fotos --}}
-                <td>
-                  <a href="#" class="text-blue-600 hover:underline" data-open-fotos="{{ $s->id }}">
-                    Fotos ({{ $s->fotos->count() }})
-                  </a>
-                </td>
-
-                {{-- Estado --}}
-                <td>
-                  @can('productos.edit')
-                    <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
-                      @csrf @method('PUT')
-                      <span class="state-wrap">
-                        <select name="estado" class="state-select" onchange="this.form.submit()">
-                          @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
-                            <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
-                          @endforeach
-                        </select>
-                      </span>
-                    </form>
-                  @else
-                    <span class="chip">{{ ucfirst($s->estado) }}</span>
-                  @endcan
-                </td>
-
-                {{-- Acciones --}}
-                <td>
-                  <div class="flex items-center justify-center gap-3">
-                    @can('productos.edit')
-                      <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
-                        <i class="fa-solid fa-pen"></i>
+                    {{-- Fotos --}}
+                    <td>
+                      <a href="#" class="text-blue-600 hover:underline" data-open-fotos="{{ $s->id }}">
+                        Fotos ({{ $s->fotos->count() }})
                       </a>
-                    @endcan
+                    </td>
 
-                    @can('productos.delete')
-                      @if($s->estado === 'disponible')
-                        <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
-                              onsubmit="return confirm('¿Eliminar esta serie?');">
-                          @csrf @method('DELETE')
-                          <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
-                            <i class="fa-solid fa-trash"></i>
-                          </button>
+                    {{-- Estado --}}
+                    <td>
+                      @can('productos.edit')
+                        <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
+                          @csrf @method('PUT')
+                          <span class="state-wrap">
+                            <select name="estado" class="state-select" onchange="this.form.submit()">
+                              @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
+                                <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
+                              @endforeach
+                            </select>
+                          </span>
                         </form>
-                      @endif
-                    @endcan
-                  </div>
-                </td>
-              </tr>
-            @empty
-              <tr><td colspan="4" class="text-center text-gray-500 py-6">Sin series.</td></tr>
-            @endforelse
-          </tbody>
-        </table>
-      </div>
+                      @else
+                        <span class="chip">{{ ucfirst($s->estado) }}</span>
+                      @endcan
+                    </td>
 
-      <div id="series-pagination" class="mt-4">
-        {{ $series->appends(['q' => $q ?? ''])->links() }}
+                    {{-- Acciones --}}
+                    <td>
+                      <div class="flex items-center justify-center gap-3">
+                        @can('productos.edit')
+                          <a href="{{ route('series.edit', $s) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
+                            <i class="fa-solid fa-pen"></i>
+                          </a>
+                        @endcan
+
+                        @can('productos.delete')
+                          @if($s->estado === 'disponible')
+                            <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
+                                  onsubmit="return confirm('¿Eliminar esta serie?');">
+                              @csrf @method('DELETE')
+                              <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
+                                <i class="fa-solid fa-trash"></i>
+                              </button>
+                            </form>
+                          @endif
+                        @endcan
+                      </div>
+                    </td>
+                  </tr>
+                @empty
+                  <tr><td colspan="4" class="text-center text-gray-500 py-6">Sin series.</td></tr>
+                @endforelse
+              </tbody>
+            </table>
+          </div>
+
+          <div id="series-pagination" class="mt-4">
+            {{ $series->appends(['q' => $q ?? ''])->links() }}
+          </div>
+        </div>
       </div>
     </div>
   </div>

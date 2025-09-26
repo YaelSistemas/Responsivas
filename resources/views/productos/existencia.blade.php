@@ -6,6 +6,26 @@
   </x-slot>
 
   <style>
+    /* ====== Zoom responsivo: MISMA VISTA, solo más “pequeña” en móvil ====== */
+    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-inner{
+      --zoom: 1;                       /* desktop */
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+    }
+    /* Breakpoints (ajusta si quieres) */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+
+    /* iOS: evita auto-zoom al enfocar inputs */
+    @media (max-width:768px){
+      input, select, textarea{ font-size:16px; }
+    }
+
+    /* ====== Estilos propios ====== */
     .page-wrap{max-width:1000px;margin:0 auto}
     .card{background:#fff;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
@@ -57,114 +77,119 @@
     .toast{border-radius:10px;padding:.6rem .9rem}
   </style>
 
-  <div class="page-wrap py-6">
-    @if (session('updated') || session('error'))
-      @php
-        $msg = session('updated') ? 'Stock actualizado.' : (session('error') ?: '');
-        $cls = session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-                                : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0';
-      @endphp
-      <div id="alert" class="toast mb-4" style="{{ $cls }}">{{ $msg }}</div>
-      <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2000);</script>
-    @endif
+  <!-- Envoltura de zoom: mantenemos el layout y solo escalamos visualmente en móvil -->
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="page-wrap py-6">
+        @if (session('updated') || session('error'))
+          @php
+            $msg = session('updated') ? 'Stock actualizado.' : (session('error') ?: '');
+            $cls = session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                                    : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0';
+          @endphp
+          <div id="alert" class="toast mb-4" style="{{ $cls }}">{{ $msg }}</div>
+          <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2000);</script>
+        @endif
 
-    <div class="grid md:grid-cols-2 gap-6">
-      {{-- PANEL IZQUIERDO (más aire) --}}
-      <div class="card p-6 md:p-8">
-        <div class="flex items-center justify-between mb-4">
-          <div class="text-sm text-gray-500">Existencia actual</div>
-          <a href="{{ route('productos.index') }}" class="btn btn-ghost">Volver a productos</a>
-        </div>
+        <div class="grid md:grid-cols-2 gap-6">
+          {{-- PANEL IZQUIERDO --}}
+          <div class="card p-6 md:p-8">
+            <div class="flex items-center justify-between mb-4">
+              <div class="text-sm text-gray-500">Existencia actual</div>
+              <a href="{{ route('productos.index') }}" class="btn btn-ghost">Volver a productos</a>
+            </div>
 
-        <div class="stock-badge mb-6">
-          <span class="n">{{ $stock->cantidad }}</span>
-          <span class="u">{{ $producto->unidad_medida ?? 'pieza' }}{{ $stock->cantidad==1?'':'s' }}</span>
-        </div>
+            <div class="stock-badge mb-6">
+              <span class="n">{{ $stock->cantidad }}</span>
+              <span class="u">{{ $producto->unidad_medida ?? 'pieza' }}{{ $stock->cantidad==1?'':'s' }}</span>
+            </div>
 
-        <form id="mov-form" method="POST" action="{{ route('productos.existencia.ajustar', $producto) }}" class="space-y-5">
-          @csrf
+            <form id="mov-form" method="POST" action="{{ route('productos.existencia.ajustar', $producto) }}" class="space-y-5">
+              @csrf
 
-          {{-- Tipo de movimiento --}}
-          <div class="field">
-            <label>Tipo de movimiento</label>
-            <input type="hidden" name="tipo" id="tipo" value="entrada">
-            <div class="seg" id="seg-tipo">
-              <button type="button" data-t="entrada" class="active">Entrada</button>
-              <button type="button" data-t="salida">Salida</button>
-              <button type="button" data-t="ajuste">Ajuste (±)</button>
+              {{-- Tipo de movimiento --}}
+              <div class="field">
+                <label>Tipo de movimiento</label>
+                <input type="hidden" name="tipo" id="tipo" value="entrada">
+                <div class="seg" id="seg-tipo">
+                  <button type="button" data-t="entrada" class="active">Entrada</button>
+                  <button type="button" data-t="salida">Salida</button>
+                  <button type="button" data-t="ajuste">Ajuste (±)</button>
+                </div>
+              </div>
+
+              {{-- Cantidad --}}
+              <div class="field">
+                <label>Cantidad</label>
+                <div class="qty-wrap">
+                  <button type="button" id="btn-dec">−</button>
+                  <input type="number" step="1" name="cantidad" id="cantidad" value="1" inputmode="numeric">
+                  <button type="button" id="btn-inc">+</button>
+                  <span class="suffix">{{ $producto->unidad_medida ?? 'pz' }}</span>
+                </div>
+                @error('cantidad') <div class="err">{{ $message }}</div> @enderror
+              </div>
+
+              {{-- Motivo --}}
+              <div class="field">
+                <label>Motivo (opcional)</label>
+                <input name="motivo" placeholder="Recepción, ajuste inventario, etc.">
+              </div>
+
+              {{-- Referencia --}}
+              <div class="field">
+                <label>Referencia (opcional)</label>
+                <input name="referencia" placeholder="OC-123, etc.">
+              </div>
+
+              <div class="pt-1 flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                  Guardar movimiento
+                </button>
+                <span id="preview" class="text-sm text-gray-500"></span>
+              </div>
+            </form>
+          </div>
+
+          {{-- PANEL DERECHO --}}
+          <div class="card p-6 md:p-8">
+            <div class="text-lg font-semibold mb-3">Últimos movimientos</div>
+            <div class="overflow-x-auto">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th style="width:150px">Fecha</th>
+                    <th style="width:110px" class="text-center">Tipo</th>
+                    <th style="width:100px" class="text-center">Cantidad</th>
+                    <th>Motivo</th>
+                    <th style="width:130px">Ref.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @forelse($movs as $m)
+                    @php
+                      $chipClass = $m->tipo==='entrada' ? 'in' : ($m->tipo==='salida' ? 'out' : 'adj');
+                    @endphp
+                    <tr>
+                      <td class="text-sm text-gray-600">{{ $m->created_at->format('Y-m-d H:i') }}</td>
+                      <td class="text-center">
+                        <span class="chip {{ $chipClass }}">{{ ucfirst($m->tipo) }}</span>
+                      </td>
+                      <td class="text-center text-sm font-semibold">{{ $m->cantidad }}</td>
+                      <td class="text-sm text-gray-700">{{ $m->motivo ?? '—' }}</td>
+                      <td class="text-sm text-gray-700">{{ $m->referencia ?? '—' }}</td>
+                    </tr>
+                  @empty
+                    <tr><td colspan="5" class="text-center text-gray-500 py-6">Sin movimientos.</td></tr>
+                  @endforelse
+                </tbody>
+              </table>
             </div>
           </div>
-
-          {{-- Cantidad --}}
-          <div class="field">
-            <label>Cantidad</label>
-            <div class="qty-wrap">
-              <button type="button" id="btn-dec">−</button>
-              <input type="number" step="1" name="cantidad" id="cantidad" value="1" inputmode="numeric">
-              <button type="button" id="btn-inc">+</button>
-              <span class="suffix">{{ $producto->unidad_medida ?? 'pz' }}</span>
-            </div>
-            @error('cantidad') <div class="err">{{ $message }}</div> @enderror
-          </div>
-
-          {{-- Motivo --}}
-          <div class="field">
-            <label>Motivo (opcional)</label>
-            <input name="motivo" placeholder="Recepción, ajuste inventario, etc.">
-          </div>
-
-          {{-- Referencia --}}
-          <div class="field">
-            <label>Referencia (opcional)</label>
-            <input name="referencia" placeholder="OC-123, etc.">
-          </div>
-
-          <div class="pt-1 flex items-center gap-3">
-            <button type="submit" class="btn btn-primary">
-              Guardar movimiento
-            </button>
-            <span id="preview" class="text-sm text-gray-500"></span>
-          </div>
-        </form>
-      </div>
-
-      {{-- PANEL DERECHO (más aire también) --}}
-      <div class="card p-6 md:p-8">
-        <div class="text-lg font-semibold mb-3">Últimos movimientos</div>
-        <div class="overflow-x-auto">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th style="width:150px">Fecha</th>
-                <th style="width:110px" class="text-center">Tipo</th>
-                <th style="width:100px" class="text-center">Cantidad</th>
-                <th>Motivo</th>
-                <th style="width:130px">Ref.</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($movs as $m)
-                @php
-                  $chipClass = $m->tipo==='entrada' ? 'in' : ($m->tipo==='salida' ? 'out' : 'adj');
-                @endphp
-                <tr>
-                  <td class="text-sm text-gray-600">{{ $m->created_at->format('Y-m-d H:i') }}</td>
-                  <td class="text-center">
-                    <span class="chip {{ $chipClass }}">{{ ucfirst($m->tipo) }}</span>
-                  </td>
-                  <td class="text-center text-sm font-semibold">{{ $m->cantidad }}</td>
-                  <td class="text-sm text-gray-700">{{ $m->motivo ?? '—' }}</td>
-                  <td class="text-sm text-gray-700">{{ $m->referencia ?? '—' }}</td>
-                </tr>
-              @empty
-                <tr><td colspan="5" class="text-center text-gray-500 py-6">Sin movimientos.</td></tr>
-              @endforelse
-            </tbody>
-          </table>
         </div>
-      </div>
-    </div>
-  </div>
+      </div> <!-- /.page-wrap -->
+    </div>   <!-- /.zoom-inner -->
+  </div>     <!-- /.zoom-outer -->
 
   <script>
     // ====== UI: Segmented control ======

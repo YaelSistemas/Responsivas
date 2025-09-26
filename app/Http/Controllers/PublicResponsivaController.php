@@ -81,4 +81,16 @@ class PublicResponsivaController extends Controller
             'firma_url'  => Storage::url($path),
         ]);
     }
+
+    public function pdf(string $token)
+{
+    $responsiva = \App\Models\Responsiva::where('sign_token', $token)->firstOrFail();
+
+    $html = view('responsivas.pdf', compact('responsiva'))->render();
+
+    // Si usas Dompdf
+    $pdf = \PDF::loadHTML($html)->setPaper('A4', 'portrait');
+    return $pdf->stream("responsiva-{$responsiva->folio}.pdf"); // inline
+}
+
 }

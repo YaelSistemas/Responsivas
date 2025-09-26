@@ -4,6 +4,26 @@
   </x-slot>
 
   <style>
+    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
+    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-inner{
+      --zoom: 1;                       /* desktop */
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+    }
+    /* Breakpoints (ajusta si gustas) */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.60; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+
+    /* iOS: evita auto-zoom al enfocar inputs */
+    @media (max-width: 768px){
+      input, select, textarea{ font-size:16px; }
+    }
+
+    /* ====== Estilos propios ====== */
     .page-wrap{max-width:1500px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
@@ -12,6 +32,8 @@
     .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+
+    /* Toolbar: select con caret consistente */
     #prod-toolbar .select-wrap{position:relative;display:inline-block}
     #prod-toolbar select[name="per_page"]{
       -webkit-appearance:none;appearance:none;background-image:none;width:88px;padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:6px;
@@ -19,54 +41,59 @@
     #prod-toolbar .select-wrap .caret{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#6b7280;font-size:12px}
   </style>
 
-  <div class="page-wrap py-6">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-semibold">Productos</h2>
-      @can('productos.create')
-        <a href="{{ route('productos.create') }}" class="btn btn-primary">Nuevo producto</a>
-      @endcan
-    </div>
+  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="page-wrap py-6 page-pad">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Productos</h2>
+          @can('productos.create')
+            <a href="{{ route('productos.create') }}" class="btn btn-primary">Nuevo producto</a>
+          @endcan
+        </div>
 
-    <form id="prod-toolbar" method="GET" action="{{ route('productos.index') }}" class="mb-3">
-      <div class="flex items-center justify-between gap-3">
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <span>Mostrar</span>
-          <div class="select-wrap">
-            <select name="per_page">
-              @foreach([10,25,50,100] as $n)
-                <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
-              @endforeach
-            </select>
-            <span class="caret">▾</span>
+        <form id="prod-toolbar" method="GET" action="{{ route('productos.index') }}" class="mb-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <span>Mostrar</span>
+              <div class="select-wrap">
+                <select name="per_page">
+                  @foreach([10,25,50,100] as $n)
+                    <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                  @endforeach
+                </select>
+                <span class="caret">▾</span>
+              </div>
+            </div>
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <label for="q">Buscar:</label>
+              <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                    class="border rounded px-3 py-1 w-56 focus:outline-none"
+                    placeholder="Nombre, Marca, Modelo o SKU o Serie">
+            </div>
+          </div>
+        </form>
+
+        @if (session('created') || session('updated') || session('deleted') || session('error'))
+          @php
+            $msg = session('created') ? 'Producto creado.'
+                 : (session('updated') ? 'Producto actualizado.'
+                 : (session('deleted') ? 'Producto eliminado.'
+                 : (session('error') ?: '')));
+            $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
+                 : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
+          @endphp
+          <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
+          <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
+        @endif
+
+        <div class="card">
+          <div class="overflow-x-auto" id="prod-wrap">
+            @include('productos.partials.table')
           </div>
         </div>
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <label for="q">Buscar:</label>
-          <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
-                 class="border rounded px-3 py-1 w-56 focus:outline-none"
-                 placeholder="Nombre, Marca, Modelo o SKU o Serie">
-        </div>
-      </div>
-    </form>
-
-    @if (session('created') || session('updated') || session('deleted') || session('error'))
-      @php
-        $msg = session('created') ? 'Producto creado.'
-             : (session('updated') ? 'Producto actualizado.'
-             : (session('deleted') ? 'Producto eliminado.'
-             : (session('error') ?: '')));
-        $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
-             : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
-      @endphp
-      <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-      <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
-    @endif
-
-    <div class="card">
-      <div class="overflow-x-auto" id="prod-wrap">
-        @include('productos.partials.table')
       </div>
     </div>
   </div>

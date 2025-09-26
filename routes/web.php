@@ -25,6 +25,10 @@ Route::get('/', fn () => view('welcome'))->name('home');
 Route::get ('/firmar/{token}', [PublicResponsivaController::class, 'show'])->name('public.sign.show');
 Route::post('/firmar/{token}', [PublicResponsivaController::class, 'store'])->name('public.sign.store');
 
+// PDF público para la vista previa (sin auth)
+Route::get('/firmar/{token}/pdf', [PublicResponsivaController::class, 'pdf'])
+    ->name('public.sign.pdf');
+
 /*
 |--------------------------------------------------------------------------
 | Dashboard (con auth)

@@ -4,6 +4,27 @@
   </x-slot>
 
   <style>
+    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
+    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-inner{
+      --zoom: 1;                       /* valor por defecto en desktop */
+      transform: scale(var(--zoom));
+      transform-origin: top left;
+      /* compensamos el ancho para que visualmente quepa todo sin recortar */
+      width: calc(100% / var(--zoom));
+    }
+    /* Breakpoints (ajusta si quieres) */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+
+    /* iOS: evita auto-zoom al enfocar inputs */
+    @media (max-width: 768px){
+      input, select, textarea{ font-size:16px; }
+    }
+
+    /* ====== Estilos propios de la vista ====== */
     .page-wrap{max-width:1100px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
@@ -28,68 +49,73 @@
     }
   </style>
 
-  <div class="page-wrap py-6">
-    {{-- Header --}}
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-semibold">Unidades de servicio</h2>
+  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
+  <div class="zoom-outer">
+    <div class="zoom-inner">
+      <div class="page-wrap py-6">
+        {{-- Header --}}
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Unidades de servicio</h2>
 
-      {{-- SOLO si tiene permiso para crear --}}
-      @can('unidades.create')
-        <a href="{{ route('unidades.create') }}" class="btn btn-primary">Nueva unidad</a>
-      @endcan
-    </div>
+          {{-- SOLO si tiene permiso para crear --}}
+          @can('unidades.create')
+            <a href="{{ route('unidades.create') }}" class="btn btn-primary">Nueva unidad</a>
+          @endcan
+        </div>
 
-    {{-- Toolbar --}}
-    <form id="unidades-toolbar" method="GET" action="{{ route('unidades.index') }}" class="mb-3">
-      <div class="flex items-center justify-between gap-3">
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <span>Mostrar</span>
-          <div class="select-wrap">
-            <select name="per_page">
-              @foreach([10,25,50,100] as $n)
-                <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
-              @endforeach
-            </select>
-            <span class="caret">▾</span>
+        {{-- Toolbar --}}
+        <form id="unidades-toolbar" method="GET" action="{{ route('unidades.index') }}" class="mb-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <span>Mostrar</span>
+              <div class="select-wrap">
+                <select name="per_page">
+                  @foreach([10,25,50,100] as $n)
+                    <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                  @endforeach
+                </select>
+                <span class="caret">▾</span>
+              </div>
+            </div>
+
+            <div class="text-sm text-gray-700 flex items-center gap-2">
+              <label for="q">Buscar:</label>
+              <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                     class="border rounded px-3 py-1 w-64 focus:outline-none"
+                     placeholder="US, Dir o Responsable">
+            </div>
+          </div>
+        </form>
+
+        {{-- Alerts --}}
+        @if (session('created') || session('updated') || session('deleted') || session('error'))
+          @php
+            $msg = session('created') ? 'Unidad creada.'
+                 : (session('updated') ? 'Unidad actualizada.'
+                 : (session('deleted') ? 'Unidad eliminada.'
+                 : (session('error') ?: '')));
+            $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
+                 : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
+          @endphp
+          <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
+          <script>
+            setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+          </script>
+        @endif
+
+        {{-- Tabla (parcial) --}}
+        <div class="card">
+          <div class="overflow-x-auto" id="unidades-wrap">
+            @include('unidades.partials.table')
           </div>
         </div>
-
-        <div class="text-sm text-gray-700 flex items-center gap-2">
-          <label for="q">Buscar:</label>
-          <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
-                 class="border rounded px-3 py-1 w-64 focus:outline-none"
-                 placeholder="Nombre, dirección o responsable">
-        </div>
-      </div>
-    </form>
-
-    {{-- Alerts --}}
-    @if (session('created') || session('updated') || session('deleted') || session('error'))
-      @php
-        $msg = session('created') ? 'Unidad creada.'
-             : (session('updated') ? 'Unidad actualizada.'
-             : (session('deleted') ? 'Unidad eliminada.'
-             : (session('error') ?: '')));
-        $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
-             : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-             : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
-      @endphp
-      <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-      <script>
-        setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
-      </script>
-    @endif
-
-    {{-- Tabla (parcial) --}}
-    <div class="card">
-      <div class="overflow-x-auto" id="unidades-wrap">
-        @include('unidades.partials.table')
       </div>
     </div>
   </div>
 
-  {{-- AJAX con parcial HTML --}}
+  {{-- AJAX con parcial HTML (búsqueda + paginación + per_page) --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -104,7 +130,7 @@
       const per = perPageSelect ? perPageSelect.value : '';
       if(q)  url.searchParams.set('q', q);
       if(per) url.searchParams.set('per_page', per);
-      url.searchParams.set('partial', '1');
+      url.searchParams.set('partial', '1'); // solo el parcial
       return url.toString();
     }
 
@@ -122,6 +148,7 @@
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
 
+      // Actualiza barra de direcciones (sin el flag partial)
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
@@ -131,18 +158,24 @@
       fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
         .then(r=>r.text())
         .then(html=>{
-          wrap.innerHTML = html.trim();
+          wrap.innerHTML = html.trim();   // el parcial incluye tabla + paginación
           wirePagination();
         })
         .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
     }
 
+    // Buscar con debounce
     if(input){
       input.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=> ajaxLoad(), 300); });
       input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
     }
-    if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
 
+    // Cambiar "per page" por AJAX
+    if(perPageSelect){
+      perPageSelect.addEventListener('change', ()=> ajaxLoad());
+    }
+
+    // Inicializa paginación (enlaces actuales del SSR)
     wirePagination();
   })();
   </script>
