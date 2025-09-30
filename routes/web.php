@@ -29,6 +29,12 @@ Route::post('/firmar/{token}', [PublicResponsivaController::class, 'store'])->na
 Route::get('/firmar/{token}/pdf', [PublicResponsivaController::class, 'pdf'])
     ->name('public.sign.pdf');
 
+/* >>> NUEVO: PDF público por ID con URL firmada (para “Gracias, firmado”) */
+Route::get('/public/responsivas/{responsiva}/pdf', [PublicResponsivaController::class, 'pdfById'])
+    ->name('public.responsivas.pdf')
+    ->middleware('signed');
+/* <<< FIN NUEVO */
+
 /*
 |--------------------------------------------------------------------------
 | Dashboard (con auth)

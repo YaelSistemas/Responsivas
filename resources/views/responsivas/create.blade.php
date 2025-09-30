@@ -97,8 +97,10 @@
 
     $entregoDefaultId  = old('entrego_user_id', $yoEsAdmin ? $yo->id : '');
     $recibiDefaultId   = old('recibi_colaborador_id', old('colaborador_id'));
-    $autorizaDefaultId = old('autoriza_user_id');
-    $motivoDefault     = old('motivo_entrega', 'asignacion');
+    // ← si el controlador envía $autorizaDefaultId (Erasto admin), úsalo; si no, queda vacío
+    $autorizaDefaultId = old('autoriza_user_id', isset($autorizaDefaultId) ? $autorizaDefaultId : '');
+    // ← sin default: obligamos a elegir
+    $motivoDefault     = old('motivo_entrega');
     $hoy               = now()->toDateString();
   @endphp
 
@@ -127,11 +129,13 @@
               <div class="grid2 row">
                 <div>
                   <label>Motivo de entrega</label>
-                  <select name="motivo_entrega">
+                  <select name="motivo_entrega" required>
+                    <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
                     <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
                     <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
                   </select>
                   <div class="hint">No se asume por defecto: elige el motivo.</div>
+                  @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Colaborador</label>
@@ -148,7 +152,7 @@
               <div class="grid2 row">
                 <div>
                   <label>Fecha de solicitud</label>
-                  <input type="date" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}">
+                  <input type="date" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}" required>
                   @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
@@ -183,32 +187,35 @@
               <div class="grid3 row">
                 <div>
                   <label>Entregó (solo admin)</label>
-                  <select name="entrego_user_id" id="entrego_user_id">
-                    <option value="">— Selecciona —</option>
+                  <select name="entrego_user_id" id="entrego_user_id" required>
+                    <option value="" disabled {{ $entregoDefaultId ? '' : 'selected' }}>— Selecciona —</option>
                     @foreach($admins as $u)
                       <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
                     @endforeach
                   </select>
                   <div class="hint">Por defecto: el usuario actual si tiene rol Administrador.</div>
+                  @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Recibí (colaborador)</label>
-                  <select name="recibi_colaborador_id" id="recibi_colaborador_id">
-                    <option value="">— Selecciona —</option>
+                  <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
+                    <option value="" disabled {{ $recibiDefaultId ? '' : 'selected' }}>— Selecciona —</option>
                     @foreach($colaboradores as $c)
                       <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre_completo }}</option>
                     @endforeach
                   </select>
                   <div class="hint">Se sincroniza con “Colaborador”, pero puedes elegir otro.</div>
+                  @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Autorizó (solo admin)</label>
-                  <select name="autoriza_user_id" id="autoriza_user_id">
-                    <option value="">— Selecciona —</option>
+                  <select name="autoriza_user_id" id="autoriza_user_id" required>
+                    <option value="" disabled {{ $autorizaDefaultId ? '' : 'selected' }}>— Selecciona —</option>
                     @foreach($admins as $u)
                       <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
                     @endforeach
                   </select>
+                  @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>
 
@@ -298,7 +305,7 @@
               select.focus();
             });
             btnClr.addEventListener('click', () => {
-              Array.from(select.options).forEach(o => o.selected = false);
+              Array.from(select.options).forEach(o => { o.selected = false; });
               select.focus();
             });
 

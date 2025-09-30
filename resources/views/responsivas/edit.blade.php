@@ -7,19 +7,18 @@
 
   <style>
     /* ====== Zoom responsivo: MISMA VISTA, solo más “pequeña” en móvil ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+      width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (ajusta si quieres) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
-    
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+
     /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width:768px){
       input, select, textarea{ font-size:16px; }
@@ -133,17 +132,21 @@
               <div class="grid2 row">
                 <div>
                   <label>Motivo de entrega</label>
-                  <select name="motivo_entrega">
+                  <select name="motivo_entrega" required>
+                    <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
                     <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
                     <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
                   </select>
+                  @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Colaborador</label>
                   <select name="colaborador_id" id="colaborador_id" required>
                     <option value="" disabled>Selecciona colaborador…</option>
                     @foreach($colaboradores as $c)
-                      <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>{{ $c->nombre }}</option>
+                      <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>
+                        {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                      </option>
                     @endforeach
                   </select>
                   @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
@@ -153,7 +156,7 @@
               <div class="grid2 row">
                 <div>
                   <label>Fecha de solicitud</label>
-                  <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}">
+                  <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
                   @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
@@ -196,36 +199,41 @@
               <div class="grid3 row">
                 <div>
                   <label>Entregó (solo admin)</label>
-                  <select name="entrego_user_id" id="entrego_user_id">
+                  <select name="entrego_user_id" id="entrego_user_id" required>
                     <option value="">— Selecciona —</option>
                     @foreach($admins as $u)
                       <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
                     @endforeach
                   </select>
+                  @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Recibí (colaborador)</label>
-                  <select name="recibi_colaborador_id" id="recibi_colaborador_id">
+                  <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
                     <option value="">— Selecciona —</option>
                     @foreach($colaboradores as $c)
-                      <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>{{ $c->nombre }}</option>
+                      <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>
+                        {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                      </option>
                     @endforeach
                   </select>
                   <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
+                  @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
                   <label>Autorizó (solo admin)</label>
-                  <select name="autoriza_user_id" id="autoriza_user_id">
+                  <select name="autoriza_user_id" id="autoriza_user_id" required>
                     <option value="">— Selecciona —</option>
                     @foreach($admins as $u)
                       <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
                     @endforeach
                   </select>
+                  @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>
 
               <div class="grid2">
-                <a href="{{ route('responsivas.show', $responsiva) }}" class="btn-cancel">Cancelar</a>
+                <a href="{{ route('responsivas.index', $responsiva) }}" class="btn-cancel">Cancelar</a>
                 <button type="submit" class="btn">Actualizar responsiva</button>
               </div>
             </form>
@@ -241,7 +249,7 @@
             const btnAll = document.getElementById('btnSelectVisible');
             const btnClr = document.getElementById('btnClearSel');
 
-            // Sincroniza "Recibí" con "Colaborador"
+            // Sincroniza "Recibí" con "Colaborador" (permite cambiar manualmente después)
             const colSel = document.getElementById('colaborador_id');
             const recibi = document.getElementById('recibi_colaborador_id');
             if (colSel && recibi) {
@@ -257,7 +265,6 @@
             function render(filterText='') {
               const q = (filterText || '').toLowerCase().trim();
               const selected = new Set(Array.from(select.selectedOptions).map(o => String(o.value)));
-              // incluir preseleccionadas (primer render)
               PRESEL.forEach(v => selected.add(String(v)));
 
               select.innerHTML = '';
@@ -312,7 +319,7 @@
               select.focus();
             });
             btnClr.addEventListener('click', () => {
-              Array.from(select.options).forEach(o => o.selected = false);
+              Array.from(select.options).forEach(o => { o.selected = false; });
               select.focus();
             });
 

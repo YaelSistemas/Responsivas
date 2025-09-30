@@ -46,7 +46,7 @@
       <th>Folio</th>
       <th>Fecha solicitud</th>
       <th>Colaborador</th>
-      <th>Área</th>
+      <th>Unidad de servicio</th> {{-- ← cambiada etiqueta --}}
       <th>Motivo</th>
       <th>Equipo</th>
       <th>Entrega por</th>
@@ -80,14 +80,34 @@
                         .' '.($col?->apellido_materno ?? $col?->segundo_apellido ?? ''));
         $colNombre = trim(trim($col?->nombre ?? '').' '.trim($apellidos ?? '')) ?: ($col?->nombre ?? '');
 
-        // Área/Depto/Sede
-        $areaObj = $col?->area ?? $col?->departamento ?? $col?->sede ?? null;
-        if (is_object($areaObj)) {
-          $areaTxt = $areaObj->nombre ?? $areaObj->name ?? $areaObj->descripcion ?? (string)$areaObj;
-        } elseif (is_array($areaObj)) {
-          $areaTxt = implode(' ', array_filter($areaObj));
+        // ===== Unidad de servicio (con fallbacks a Área/Depto/Sede) =====
+        $unidadServicio = $col?->unidad_servicio
+                        ?? $col?->unidadServicio
+                        ?? $col?->unidad
+                        ?? $col?->servicio
+                        ?? '';
+
+        if (is_object($unidadServicio)) {
+          $unidadTxt = $unidadServicio->nombre
+                    ?? $unidadServicio->name
+                    ?? $unidadServicio->descripcion
+                    ?? (string) $unidadServicio;
+        } elseif (is_array($unidadServicio)) {
+          $unidadTxt = implode(' ', array_filter($unidadServicio));
         } else {
-          $areaTxt = (string)($areaObj ?? '');
+          $unidadTxt = (string) $unidadServicio;
+        }
+
+        // Si sigue vacío, usar Área/Departamento/Sede como respaldo
+        if ($unidadTxt === '') {
+          $areaObj = $col?->area ?? $col?->departamento ?? $col?->sede ?? null;
+          if (is_object($areaObj)) {
+            $unidadTxt = $areaObj->nombre ?? $areaObj->name ?? $areaObj->descripcion ?? (string)$areaObj;
+          } elseif (is_array($areaObj)) {
+            $unidadTxt = implode(' ', array_filter($areaObj));
+          } else {
+            $unidadTxt = (string)($areaObj ?? '');
+          }
         }
 
         // Motivo + badge
@@ -113,7 +133,7 @@
         <td title="{{ $r->folio }}">{{ $r->folio }}</td>
         <td title="{{ $fechaSol }}">{{ $fechaSol }}</td>
         <td title="{{ $colNombre }}">{{ $colNombre }}</td>
-        <td title="{{ $areaTxt }}">{{ $areaTxt }}</td>
+        <td title="{{ $unidadTxt }}">{{ $unidadTxt }}</td> {{-- ← ahora imprime la unidad --}}
         <td>
           @if($motivoTxt)
             <span class="badge {{ $motivoClase }}">{{ $motivoTxt }}</span>

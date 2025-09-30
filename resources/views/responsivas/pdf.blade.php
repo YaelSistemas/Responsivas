@@ -28,21 +28,21 @@
   .hero .logo-cell{
     width:28%;
     padding:0;
-    height:120px;            /* alto fijo del bloque del logo */
+    height:120px;
     vertical-align:middle;
     text-align:center;
   }
   .hero .logo-box{
     display:table;
     width:100%;
-    height:120px;            /* NO cambiar este valor */
+    height:120px;
     border:0;
   }
   .hero .logo-box .in{
     display:table-cell;
     vertical-align:middle;
     text-align:center;
-    padding-top:16px;         /* ← Pequeño “bajón” del logo (ajusta 4–12px a gusto) */
+    padding-top:16px;
   }
   .hero .logo-cell img{
     display:inline-block;
@@ -71,25 +71,15 @@
   .fecha-entrega .label{ width:55%; }
   .fecha-entrega .val{ width:45%; }
 
-  /* ===== Firmas (sin bordes; imágenes centradas; líneas iguales) ===== */
+  /* ===== Firmas ===== */
   .tbl.firmas, .tbl.firmas tr, .tbl.firmas td { border:0 !important; }
   .tbl.firmas td{ padding:0 10px; vertical-align:top; }
 
   .sign-title{ text-align:center; text-transform:uppercase; font-weight:700; margin:6px 0 2px; font-size:12px; }
   .sign-sub{ text-align:center; font-size:9px; text-transform:uppercase; margin:0 0 6px; }
 
-  .sign-space{
-    height:54px;
-    line-height:54px;
-    text-align:center;
-  }
-  .firma{
-    display:inline-block;
-    vertical-align:middle;
-    max-height:50px;
-    max-width:220px;
-    margin:0;
-  }
+  .sign-space{ height:54px; line-height:54px; text-align:center; }
+  .firma{ display:inline-block; vertical-align:middle; max-height:50px; max-width:220px; margin:0; }
 
   .sign-line{ border-top:1px solid #111; height:1px; margin:6px auto 2px; width:240px; }
   .sign-name{ text-align:center; font-size:10px; text-transform:uppercase; margin-bottom:2px; }
@@ -97,8 +87,6 @@
 
   .hero, .meta, .equipos, .firmas { page-break-inside: avoid; }
 </style>
-
-
 </head>
 <body>
 @php
@@ -124,7 +112,14 @@
   }
   if ($unidadServicio === '' && $areaDepto !== '') $unidadServicio = $areaDepto;
 
-  $empresaId     = (int) session('empresa_activa', auth()->user()?->empresa_id);
+  /* ====== CAMBIO CLAVE: fallback a la empresa de la responsiva ====== */
+  $empresaId = (int) (
+      session('empresa_activa')
+      ?? auth()->user()?->empresa_id
+      ?? $responsiva->empresa_tenant_id    // ← aquí el fallback cuando no hay login/sesión
+      ?? 0
+  );
+
   $empresaNombre = config('app.name', 'Laravel');
   $logoPath      = public_path('images/logos/default.png');
 
@@ -329,8 +324,6 @@
       el cual se reserva el derecho de retirar cuando así lo considere necesario la empresa.</span>
   </div>
 
-  <br>
-
   <div class="blk"><span>Consta de las siguientes características</span></div>
 
   {{-- TABLA DE EQUIPOS --}}
@@ -397,8 +390,8 @@
   </table>
 
   <br>
-  
-  {{-- FIRMAS (sin bordes; imágenes centradas; líneas iguales) --}}
+
+  {{-- FIRMAS --}}
   <table class="tbl firmas" style="margin-top:10px">
     <tr>
       <td style="width:50%">

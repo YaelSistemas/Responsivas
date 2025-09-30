@@ -53,7 +53,7 @@ class ResponsivaController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         $tenantId = $this->tenantId();
-        $perPage  = (int) $request->query('per_page', 10);
+        $perPage  = (int) $request->query('per_page', 50);
         $q        = trim((string) $request->query('q', ''));
 
         $colSel = ['id', 'nombre'];
@@ -74,6 +74,8 @@ class ResponsivaController extends Controller implements HasMiddleware
         if (method_exists(Colaborador::class, 'area'))         $with[] = 'colaborador.area';
         if (method_exists(Colaborador::class, 'departamento')) $with[] = 'colaborador.departamento';
         if (method_exists(Colaborador::class, 'sede'))         $with[] = 'colaborador.sede';
+        if (method_exists(Colaborador::class, 'unidadServicio'))  $with[] = 'colaborador.unidadServicio';
+        if (method_exists(Colaborador::class, 'unidad_servicio')) $with[] = 'colaborador.unidad_servicio';
 
         $rows = Responsiva::query()
             ->with($with)
@@ -97,7 +99,8 @@ class ResponsivaController extends Controller implements HasMiddleware
                       ->orWhereHas('usuario', fn($u) => $u->where('name', 'like', "%{$q}%"));
                 });
             })
-            ->latest('fecha_entrega')
+            ->orderBy('responsivas.folio', 'desc')   // ← orden alfabético por folio
+            ->orderBy('responsivas.id', 'desc')      // ← opcional
             ->paginate($perPage)
             ->withQueryString();
 
@@ -139,7 +142,13 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
 
-        return view('responsivas.create', compact('colaboradores','series','admins'));
+        // ⬇️ Preselección condicional de “Autorizó”
+        $erasto = User::where('name', 'Ing. Erasto H. Enriquez Zurita')->first();
+        $autorizaDefaultId = ($erasto && method_exists($erasto,'hasRole') && $erasto->hasRole('Administrador'))
+            ? $erasto->id
+            : null;
+
+        return view('responsivas.create', compact('colaboradores','series','admins','autorizaDefaultId'));
     }
 
     /* ===================== STORE ===================== */
@@ -158,14 +167,14 @@ class ResponsivaController extends Controller implements HasMiddleware
         $req->validate([
             'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
             'colaborador_id'        => ['required', $colExists],
-            'recibi_colaborador_id' => ['nullable', $colExists],
-            'entrego_user_id'       => ['nullable', Rule::in($adminIds)],
-            'autoriza_user_id'      => ['nullable', Rule::in($adminIds)],
+            'recibi_colaborador_id' => ['required', $colExists],              // ← obligatorio
+            'entrego_user_id'       => ['required', Rule::in($adminIds)],     // ← obligatorio
+            'autoriza_user_id'      => ['required', Rule::in($adminIds)],     // ← obligatorio
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
             'observaciones'         => ['nullable','string','max:2000'],
-            'fecha_solicitud'       => ['nullable','date'],
-            'fecha_entrega'         => ['nullable','date'],
+            'fecha_solicitud'       => ['required','date'],                   // ← obligatorio
+            'fecha_entrega'         => ['required','date'],                   // ← obligatorio
         ]);
 
         $resp = null;
@@ -174,30 +183,21 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             $folio = $this->nextFolio($tenantId);
 
-            // defaults para firmantes
-            $entregoId = $req->entrego_user_id
-                ?: (auth()->user()?->hasRole('Administrador') ? auth()->id() : $this->defaultAdminId());
-            if (!$entregoId) { $entregoId = auth()->id(); }
-
-            $autorizaFijo = (int) config('app.responsivas_autoriza_user_id', 0);
-            $autorizaId   = $req->autoriza_user_id ?: ($autorizaFijo ?: $this->defaultAdminId());
-
-            // token público
-            $signDays = (int) config('app.responsiva_sign_days', 7);
-
             $resp = Responsiva::create([
                 'empresa_tenant_id'     => $tenantId,
                 'folio'                 => $folio,
                 'colaborador_id'        => $req->colaborador_id,
-                'recibi_colaborador_id' => $req->recibi_colaborador_id ?: $req->colaborador_id,
-                'user_id'               => $entregoId,
-                'autoriza_user_id'      => $autorizaId,
+                'recibi_colaborador_id' => $req->recibi_colaborador_id,  // ← ya no se “rellena”
+                'user_id'               => $req->entrego_user_id,        // ← entregó requerido
+                'autoriza_user_id'      => $req->autoriza_user_id,       // ← autorizó requerido
                 'motivo_entrega'        => $req->motivo_entrega,
                 'fecha_solicitud'       => $req->fecha_solicitud,
-                'fecha_entrega'         => $req->fecha_entrega ?: now()->toDateString(),
+                'fecha_entrega'         => $req->fecha_entrega,
                 'observaciones'         => $req->observaciones,
                 'sign_token'            => Str::random(64),
-                'sign_token_expires_at' => $signDays > 0 ? now()->addDays($signDays) : null,
+                'sign_token_expires_at' => (int) config('app.responsiva_sign_days', 7) > 0
+                                            ? now()->addDays((int) config('app.responsiva_sign_days', 7))
+                                            : null,
             ]);
 
             // ⬇️ Traer series y verificar que su producto esté ACTIVO
@@ -316,12 +316,12 @@ class ResponsivaController extends Controller implements HasMiddleware
         $req->validate([
             'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
             'colaborador_id'        => ['required', $colExists],
-            'recibi_colaborador_id' => ['nullable', $colExists],
+            'recibi_colaborador_id' => ['required', $colExists],
             'entrego_user_id'       => ['required', Rule::in($adminIds)],
-            'autoriza_user_id'      => ['nullable', Rule::in($adminIds)],
+            'autoriza_user_id'      => ['required', Rule::in($adminIds)],
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
-            'fecha_solicitud'       => ['nullable','date'],
+            'fecha_solicitud'       => ['required','date'],
             'fecha_entrega'         => ['required','date'],
             'observaciones'         => ['nullable','string','max:2000'],
         ]);

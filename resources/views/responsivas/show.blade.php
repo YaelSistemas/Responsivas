@@ -284,16 +284,6 @@
             @endcan
           @endif
 
-          @can('responsivas.edit')
-            @if (session('firma_link'))
-              <div style="margin-top:8px">
-                <small>Link de firma:
-                  <a href="{{ session('firma_link') }}" target="_blank" rel="noopener">{{ session('firma_link') }}</a>
-                </small>
-              </div>
-            @endif
-          @endcan
-
           {{-- DERECHA: botón rojo borrar firma --}}
           @can('responsivas.edit')
             @if (!empty($responsiva->firma_colaborador_path) || !empty($responsiva->firma_colaborador_url))
@@ -376,8 +366,6 @@
               el cual se reserva el derecho de retirar cuando así lo considere necesario la empresa.</span>
           </div>
 
-          <br><br>
-
           <div class="blk"><span>Consta de las siguientes características</span></div>
 
           {{-- TABLA DE EQUIPOS --}}
@@ -397,22 +385,16 @@
                 $p = $d->producto;
                 $s = $d->serie;
 
-                // Si guardaste JSON como string, decodifica por si acaso (opcional)
                 $specS = $s->especificaciones;
                 if (is_string($specS)) { $tmp = json_decode($specS, true); if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp; }
                 $specP = $p->especificaciones;
                 if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-                // DESCRIPCIÓN PARA LA TABLA
                 if (($p->tipo ?? null) === 'equipo_pc') {
-                    // Para PC seguimos mostrando el color (override de serie > del producto)
                     $colorSerie = data_get($specS, 'color');
                     $colorProd  = data_get($specP, 'color');
                     $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($p->descripcion ?? ''));
                 } else {
-                    // Para cualquier otro tipo:
-                    // 1) Usa la descripción de la SERIE si existe
-                    // 2) Si no, cae a la descripción del PRODUCTO
                     $descSerie = data_get($specS, 'descripcion');
                     $des = filled($descSerie) ? $descSerie : ($p->descripcion ?? '');
                 }
@@ -507,6 +489,67 @@
     </div>
   </div>
 
+  {{-- ========= MODAL: LINK DE FIRMA ========= --}}
+  @php
+    $firmaLink = session('firma_link');
+    $colEmail = $col->email
+              ?? $col->correo
+              ?? $col->email_personal
+              ?? $col->email_laboral
+              ?? null;
+    $subjectFirma = rawurlencode("Firma de responsiva {$responsiva->folio}");
+    $bodyFirma = rawurlencode(
+      "Hola {$nombreCompleto},\n\n".
+      "Te comparto el enlace para firmar tu responsiva {$responsiva->folio}:\n{$firmaLink}\n\n".
+      "Si tienes dudas, responde este mensaje.\n\nSaludos."
+    );
+  @endphp
+
+  <div id="modalLinkFirma"
+       class="fixed inset-0 {{ $firmaLink ? 'flex' : 'hidden' }} items-center justify-center bg-black/50 p-4"
+       style="z-index:70;"
+       onclick="closeLinkFirma()">
+    <div class="bg-white rounded-lg p-4 w-[560px] max-w-[94vw]" style="border:1px solid #111" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <h3 class="text-lg font-semibold" style="margin:0">Enlace de firma</h3>
+        <div style="margin-left:auto"></div>
+        <button class="btn btn-secondary" type="button" onclick="closeLinkFirma()">Cerrar</button>
+      </div>
+
+      <div style="display:grid;gap:10px">
+        <div>
+          <label class="text-sm text-gray-600">Link</label>
+          <input id="firmaLinkInput" type="text"
+                 value="{{ $firmaLink ?? '' }}"
+                 readonly
+                 style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a id="btnAbrirFirma" class="btn btn-primary"
+             href="{{ $firmaLink ?? '#' }}" target="_blank" rel="noopener"
+             {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
+            Abrir link
+          </a>
+
+          <button type="button" class="btn btn-secondary" onclick="copyFirmaLink()">Copiar link</button>
+
+          {{-- SOLO Outlook/cliente por defecto (mailto) --}}
+          <a class="btn btn-secondary"
+             href="mailto:{{ urlencode($colEmail ?? '') }}?subject={{ $subjectFirma }}&body={{ $bodyFirma }}"
+             {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
+            Enviar por correo (Outlook)
+          </a>
+        </div>
+
+        <small class="text-gray-500">
+          Nota: “Enviar por correo (Outlook)” usa <code>mailto:</code>. En Windows abrirá tu cliente de correo por defecto (Outlook de escritorio si está predeterminado).
+        </small>
+      </div>
+    </div>
+  </div>
+  {{-- ========= /MODAL: LINK DE FIRMA ========= --}}
+
   {{-- ============= MODAL DE FIRMA (FUERA DE .zoom-inner PARA EVITAR transform) ============= --}}
   @can('responsivas.edit')
     @if (empty($responsiva->firma_colaborador_path))
@@ -541,16 +584,47 @@
   @endcan>
 
   <script>
-    // ===== Abrir / cerrar modal =====
+    /* ===== Modal Link de firma ===== */
+    function openLinkFirma(){
+      const m = document.getElementById('modalLinkFirma');
+      if (!m) return;
+      m.classList.remove('hidden'); m.classList.add('flex');
+      document.documentElement.classList.add('overflow-hidden');
+      document.body.classList.add('overflow-hidden');
+      const inp = document.getElementById('firmaLinkInput');
+      if (inp && inp.value) { inp.focus(); inp.select(); }
+    }
+    function closeLinkFirma(){
+      const m = document.getElementById('modalLinkFirma');
+      if (!m) return;
+      m.classList.remove('flex'); m.classList.add('hidden');
+      document.documentElement.classList.remove('overflow-hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+    function copyFirmaLink(){
+      const inp = document.getElementById('firmaLinkInput');
+      if (!inp || !inp.value) return;
+      inp.select(); inp.setSelectionRange(0, 99999);
+      (navigator.clipboard ? navigator.clipboard.writeText(inp.value) : Promise.reject())
+        .then(()=> alert('Link copiado al portapapeles'))
+        .catch(()=>{
+          document.execCommand('copy');
+          alert('Link copiado al portapapeles');
+        });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const inp = document.getElementById('firmaLinkInput');
+      if (inp && inp.value) { inp.focus(); inp.select(); }
+    });
+
+    // ===== Abrir / cerrar modal de firma en sitio =====
     function openFirma(){
       const m = document.getElementById('modalFirmar');
       m.classList.remove('hidden'); m.classList.add('flex');
       document.documentElement.classList.add('overflow-hidden');
       document.body.classList.add('overflow-hidden');
 
-      // Ajustar layout del panel/canvas según ancho del viewport
       applyPanelSize();
-      // Esperar al layout y dimensionar canvas con DPR
       requestAnimationFrame(()=> requestAnimationFrame(resizeCanvas));
     }
     function closeFirma(){
@@ -559,7 +633,7 @@
       document.documentElement.classList.remove('overflow-hidden');
       document.body.classList.remove('overflow-hidden');
     }
-    document.addEventListener('keydown', e => { if(e.key === 'Escape') closeFirma(); });
+    document.addEventListener('keydown', e => { if(e.key === 'Escape') { closeFirma(); closeLinkFirma(); } });
 
     // ===== Panel/canvas responsivo por tamaño de pantalla =====
     function applyPanelSize(){
@@ -579,7 +653,7 @@
       can.style.touchAction = 'none';
     }
 
-    // ===== Canvas firma sin desfase (modal está FUERA de .zoom-inner) =====
+    // ===== Canvas firma (modal fuera de .zoom-inner) =====
     const c   = document.getElementById('canvasFirma');
     const ctx = c.getContext('2d', { willReadFrequently: true });
 
@@ -590,11 +664,9 @@
 
     function resizeCanvas(){
       const DPR  = window.devicePixelRatio || 1;
-      const rect = c.getBoundingClientRect(); // tamaño visual del canvas
-      // Ajustar buffer interno al tamaño CSS * DPR
+      const rect = c.getBoundingClientRect();
       c.width  = Math.max(1, Math.round(rect.width  * DPR));
       c.height = Math.max(1, Math.round(rect.height * DPR));
-      // Dibuja en coordenadas CSS px
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.lineWidth   = 2;
       ctx.lineCap     = 'round';
@@ -607,11 +679,8 @@
       const rect = c.getBoundingClientRect();
       const evX = (ev.clientX ?? (ev.touches && ev.touches[0]?.clientX) ?? 0);
       const evY = (ev.clientY ?? (ev.touches && ev.touches[0]?.clientY) ?? 0);
-      // Coordenadas en px CSS relativas al canvas
       let x = evX - rect.left;
       let y = evY - rect.top;
-
-      // Clampear a bordes visibles (evita “salirse”)
       x = Math.max(0, Math.min(x, rect.width  - 0.001));
       y = Math.max(0, Math.min(y, rect.height - 0.001));
       return [x, y];
