@@ -4,130 +4,176 @@
 
 @section('content')
 <style>
-    .company-table th,
-    .company-table td {
-        text-align: center;
-        vertical-align: middle;
-    }
+  /* ====== Zoom responsivo: MISMA VISTA, SOLO ESCALA EN MÓVIL ====== */
+  .zoom-outer{ overflow-x:hidden; }
+  .zoom-inner{
+    --zoom: 1;
+    transform: scale(var(--zoom));
+    transform-origin: top left;
+    width: calc(100% / var(--zoom));
+  }
+  @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+  @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+  @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+  @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+
+  /* iOS evita auto-zoom en inputs */
+  @media (max-width:768px){ input, select, textarea, button { font-size:16px; } }
+
+  /* ====== Estilos base (como roles) ====== */
+  .page-wrap{max-width:1100px;margin:0 auto}
+  .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+  .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
+  .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
+  .tbl{width:100%;border-collapse:separate;border-spacing:0}
+  .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
+  .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+  .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+
+  /* Toolbar */
+  #empresas-toolbar .select-wrap{position:relative;display:inline-block}
+  #empresas-toolbar select[name="per_page"]{
+    -webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:none;
+    width:88px;padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;
+    color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:6px;
+  }
+  #empresas-toolbar .select-wrap .caret{
+    position:absolute;right:10px;top:50%;transform:translateY(-50%);
+    pointer-events:none;color:#6b7280;font-size:12px;
+  }
 </style>
 
-<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+<div class="zoom-outer">
+  <div class="zoom-inner">
+    <div class="page-wrap py-6">
+      {{-- Header --}}
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Empresas</h2>
+        <a href="{{ route('admin.empresas.create') }}" class="btn btn-primary">Nueva Empresa</a>
+      </div>
 
-    {{-- Título --}}
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center mb-6">
-        {{ __('Empresas') }}
-    </h2>
+      {{-- Toolbar --}}
+      <form id="empresas-toolbar" method="GET" action="{{ route('admin.empresas.index') }}" class="mb-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <span>Mostrar</span>
+            <div class="select-wrap">
+              <select name="per_page">
+                @foreach([10,25,50,100] as $n)
+                  <option value="{{ $n }}" {{ (int)($perPage ?? 10) === $n ? 'selected' : '' }}>{{ $n }}</option>
+                @endforeach
+              </select>
+              <span class="caret">▾</span>
+            </div>
+          </div>
 
-    {{-- Botón crear empresa (solo si existe la ruta) --}}
-    @if (Route::has('admin.empresas.create'))
-        <a href="{{ route('admin.empresas.create') }}"
-           style="display:inline-block; margin-bottom: 1.5rem; background-color: #2563eb; color: white; font-weight: 600;
-                  padding: 0.5rem 1rem; border-radius: 0.375rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-decoration: none;">
-            Nueva Empresa
-        </a>
-    @endif
-
-    {{-- Mensajes de alerta --}}
-    @if (session('created'))
-        <div id="success-alert" class="mt-4 mb-6 p-4 bg-green-100 text-green-800 border border-green-300 rounded text-center">
-            ✅ Empresa creada correctamente.
+          <div class="text-sm text-gray-700 flex items-center gap-2">
+            <label for="q">Buscar:</label>
+            <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
+                   class="border rounded px-3 py-1 w-56 focus:outline-none"
+                   placeholder="Nombre de empresa">
+          </div>
         </div>
-    @endif
+      </form>
 
-    @if (session('deleted'))
-        <div id="deleted-alert" class="mt-4 mb-6 p-4 bg-red-100 text-red-800 border border-red-300 rounded text-center">
-            🗑️ Empresa eliminada correctamente.
-        </div>
-    @endif
+      {{-- Alerts --}}
+      @if (session('created') || session('updated') || session('deleted'))
+        @php
+          $msg = session('created') ? 'Empresa creada.'
+               : (session('updated') ? 'Empresa actualizada.'
+               : (session('deleted') ? 'Empresa eliminada.' : ''));
+          $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+               : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
+               : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0');
+        @endphp
+        <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
+        <script>
+          setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+        </script>
+      @endif
 
-    @if (session('updated'))
-        <div id="updated-alert" class="mt-4 mb-6 p-4 bg-blue-100 text-blue-800 border border-blue-300 rounded text-center">
-            ✏️ Empresa actualizada correctamente.
-        </div>
-    @endif
-
-    <script>
-        setTimeout(() => {
-            document.querySelectorAll('#success-alert, #deleted-alert, #updated-alert')
-                .forEach(alert => {
-                    if (alert) {
-                        alert.classList.add('opacity-0');
-                        setTimeout(() => alert.remove(), 500);
-                    }
-                });
-        }, 3000);
-    </script>
-
-    {{-- Tabla --}}
-    <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg mx-auto w-full max-w-5xl">
-        <table class="table-auto w-full text-sm company-table">
+      {{-- Tabla --}}
+      <div class="card">
+        <div class="overflow-x-auto">
+          <table class="tbl">
             <thead>
-                <tr>
-                    <th class="px-4 py-2">ID</th>
-                    <th class="px-4 py-2">Nombre</th>
-                    <th class="px-4 py-2">RFC</th>
-                    <th class="px-4 py-2">Creada</th>
-                    <th class="px-4 py-2">Acciones</th>
-                </tr>
+              <tr>
+                <th style="width:90px">ID</th>
+                <th>Nombre</th>
+                <th style="width:160px">Creada</th>
+                <th style="width:120px">Acciones</th>
+              </tr>
             </thead>
-            <tbody>
-                @forelse ($empresas as $e)
-                    <tr class="border-b">
-                        <td class="px-4 py-2">{{ $e->id }}</td>
-                        <td class="px-4 py-2">{{ $e->nombre }}</td>
-                        <td class="px-4 py-2">{{ $e->rfc ?? '—' }}</td>
-                        <td class="px-4 py-2">{{ optional($e->created_at)->format('Y-m-d') }}</td>
-                        <td class="px-4 py-2 text-center">
-                            <div class="flex justify-center items-center gap-4">
-
-                                {{-- Ver --}}
-                                @if (Route::has('admin.empresas.show'))
-                                    <a href="{{ route('admin.empresas.show', $e) }}"
-                                       class="text-indigo-600 hover:text-indigo-800 text-lg"
-                                       title="Ver empresa">
-                                        <i class="fa-solid fa-eye"></i>
-                                    </a>
-                                @endif
-
-                                {{-- Editar --}}
-                                @if (Route::has('admin.empresas.edit'))
-                                    <a href="{{ route('admin.empresas.edit', $e) }}"
-                                       class="text-yellow-500 hover:text-yellow-700 text-lg"
-                                       title="Editar empresa">
-                                        <i class="fa-solid fa-pen"></i>
-                                    </a>
-                                @endif
-
-                                {{-- Eliminar --}}
-                                @if (Route::has('admin.empresas.destroy'))
-                                    <form action="{{ route('admin.empresas.destroy', $e) }}"
-                                          method="POST"
-                                          onsubmit="return confirm('¿Estás seguro de eliminar esta empresa?');">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" title="Eliminar empresa" class="text-red-600 hover:text-red-800 text-lg">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
-                                    </form>
-                                @endif
-
-                            </div>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-gray-500">
-                            No hay empresas registradas.
-                        </td>
-                    </tr>
-                @endforelse
+            <tbody id="empresas-tbody">
+              @include('admin.empresas.partials.tbody', ['empresas' => $empresas])
             </tbody>
-        </table>
-    </div>
+          </table>
+        </div>
+      </div>
 
-    {{-- Paginación --}}
-    <div class="mt-4">
-        {{ $empresas->links() }}
+      {{-- Paginación --}}
+      <div id="empresas-pagination" class="mt-4">
+        @include('admin.empresas.partials.pagination', ['empresas' => $empresas])
+      </div>
     </div>
+  </div>
 </div>
+
+{{-- Búsqueda + paginación AJAX (debounce) --}}
+<script>
+(function(){
+  const input = document.getElementById('q');
+  const perPageSelect = document.querySelector('#empresas-toolbar select[name="per_page"]');
+  const tbody = document.getElementById('empresas-tbody');
+  const pager = document.getElementById('empresas-pagination');
+  let t, ctl;
+
+  function buildUrl(pageUrl = null){
+    const base = pageUrl || "{{ route('admin.empresas.index') }}";
+    const url = new URL(base, window.location.origin);
+    const q = (input?.value || '').trim();
+    const per = perPageSelect ? perPageSelect.value : '';
+    if(q)  url.searchParams.set('q', q);
+    if(per) url.searchParams.set('per_page', per);
+    return url.toString();
+  }
+
+  function wirePagination(){
+    pager.querySelectorAll('a').forEach(a=>{
+      a.addEventListener('click', function(ev){
+        ev.preventDefault();
+        ajaxLoad(a.getAttribute('href'));
+      });
+    });
+  }
+
+  function ajaxLoad(pageUrl = null){
+    if(ctl) ctl.abort();
+    ctl = new AbortController();
+
+    const url = buildUrl(pageUrl);
+
+    // Actualiza la barra (sin recargar)
+    if (history.pushState) history.pushState({}, '', url);
+
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
+      .then(r=>r.json())
+      .then(({tbody:tbodyHtml, pagination})=>{
+        tbody.innerHTML = tbodyHtml;
+        pager.innerHTML = pagination;
+        wirePagination();
+      })
+      .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
+  }
+
+  // Debounce búsqueda
+  if(input){
+    input.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=> ajaxLoad(), 300); });
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
+  }
+  if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
+
+  wirePagination();
+})();
+</script>
 @endsection

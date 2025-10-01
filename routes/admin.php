@@ -9,14 +9,18 @@ Route::middleware(['web','auth','role:Administrador'])
     ->prefix('admin')
     ->as('admin.')
     ->group(function () {
-        // 👉 Ruta raíz del panel
+        // Panel
         Route::get('/', fn () => view('admin.dashboard'))->name('dashboard');
 
+        // Usuarios
         Route::resource('users', UserController::class);
         Route::post('/cambiar-empresa', [UserController::class, 'cambiarEmpresa'])
             ->name('cambiarEmpresa');
 
-        Route::get('/empresas', [EmpresaController::class, 'index'])->name('empresas.index');
+        // Empresas (CRUD completo)
+        Route::resource('empresas', EmpresaController::class)
+            ->names('empresas'); // admin.empresas.*
 
+        // Roles
         Route::resource('roles', RoleController::class)->except('show');
     });
