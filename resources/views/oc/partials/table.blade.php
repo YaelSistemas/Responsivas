@@ -1,0 +1,117 @@
+@php
+  use Illuminate\Support\Carbon;
+  use Illuminate\Pagination\AbstractPaginator;
+
+  $ocs = $ocs ?? ($rows ?? $paginator ?? $items ?? collect());
+  $isPaginator = $ocs instanceof AbstractPaginator;
+@endphp
+
+<style>
+  .tbl td.actions a,
+  .tbl td.actions button{
+    display:inline-flex; align-items:center; justify-content:center;
+    gap:.35rem; padding:.25rem .45rem; border-radius:.375rem;
+    text-decoration:none; border:1px solid transparent; background:#f9fafb; color:#1f2937;
+  }
+  .tbl td.actions a:hover,
+  .tbl td.actions button:hover{ background:#eef2ff; color:#1e40af; }
+  .tbl td.actions .danger{ background:#fef2f2; color:#991b1b; }
+  .tbl td.actions .danger:hover{ background:#fee2e2; color:#7f1d1d; }
+
+  .is-disabled{ opacity:.55; cursor:not-allowed; pointer-events:none; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .tbl td.desc{ white-space:normal; overflow:visible; text-overflow:unset; line-height:1.15; }
+</style>
+
+<table class="tbl">
+  <colgroup>
+    <col class="c-no">
+    <col class="c-fecha">
+    <col class="c-soli">
+    <col class="c-prov">
+    <col class="c-conceptos"><!-- nueva -->
+    <col class="c-monto">
+    <col class="c-fact">
+    <col class="c-acc">
+  </colgroup>
+
+  <thead>
+    <tr>
+      <th>No. orden</th>
+      <th>Fecha</th>
+      <th>Solicitante</th>
+      <th>Proveedor</th>
+      <th>Conceptos</th> {{-- <- reemplaza a Descripción --}}
+      <th>Monto</th>
+      <th>Factura</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+
+  <tbody>
+  @forelse ($ocs as $oc)
+    @php
+      $f = $oc->fecha
+        ? ($oc->fecha instanceof \Illuminate\Support\Carbon
+            ? $oc->fecha->format('d-m-Y')
+            : Carbon::parse($oc->fecha)->format('d-m-Y'))
+        : '';
+
+      $sol = $oc->solicitante ?? null;
+      $apellidos = $sol?->apellido
+          ?? $sol?->apellidos
+          ?? trim(($sol?->apellido_paterno ?? $sol?->primer_apellido ?? '')
+                 .' '.($sol?->apellido_materno ?? $sol?->segundo_apellido ?? ''));
+      $solNombre = trim(trim($sol?->nombre ?? '').' '.trim($apellidos ?? ''));
+
+      $prov = $oc->proveedor;
+      $provNombre = $prov?->nombre ?? '—';
+
+      // Junta conceptos de las partidas: "cubo, escoba, ..."
+      $conceptos = collect($oc->detalles ?? [])
+        ->pluck('concepto')
+        ->filter(fn($c) => filled($c))
+        ->map(fn($c) => trim($c))
+        ->unique()
+        ->implode(', ');
+
+      $monto = is_numeric($oc->monto) ? number_format($oc->monto, 2) : ($oc->monto ?? '0.00');
+      $fact  = $oc->factura ?: '—';
+    @endphp
+    <tr>
+      <td title="{{ $oc->numero_orden }}">{{ $oc->numero_orden }}</td>
+      <td title="{{ $f }}">{{ $f }}</td>
+      <td title="{{ $solNombre }}">{{ $solNombre }}</td>
+      <td title="{{ $provNombre }}">{{ $provNombre ?: '—' }}</td>
+      <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td> {{-- conceptos de partidas --}}
+      <td title="{{ $monto }}">${{ $monto }}</td>
+      <td title="{{ $fact }}">{{ $fact }}</td>
+      <td class="actions">
+        <a href="{{ route('oc.show', $oc) }}" title="Ver">
+          <i class="fa-solid fa-eye"></i><span class="sr-only">Ver</span>
+        </a>
+        <a href="{{ route('oc.edit', $oc) }}" title="Editar">
+          <i class="fa-solid fa-pen"></i><span class="sr-only">Editar</span>
+        </a>
+        <form action="{{ route('oc.destroy', $oc) }}" method="POST" style="display:inline"
+              onsubmit="return confirm('¿Eliminar esta orden?')">
+          @csrf @method('DELETE')
+          <button type="submit" class="danger" title="Eliminar">
+            <i class="fa-solid fa-trash"></i><span class="sr-only">Eliminar</span>
+          </button>
+        </form>
+      </td>
+    </tr>
+  @empty
+    <tr>
+      <td colspan="8" class="text-center text-gray-500 py-6">Sin resultados.</td>
+    </tr>
+  @endforelse
+  </tbody>
+</table>
+
+@if ($isPaginator)
+  <div class="p-3">
+    {{ $ocs->withQueryString()->links() }}
+  </div>
+@endif

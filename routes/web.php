@@ -13,6 +13,8 @@ use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProductoSerieController;
 use App\Http\Controllers\ResponsivaController;
 use App\Http\Controllers\PublicResponsivaController;
+use App\Http\Controllers\OrdenCompraController;
+use App\Http\Controllers\ProveedorController;
 
 /*
 |--------------------------------------------------------------------------
@@ -149,4 +151,21 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/responsivas/{responsiva}/firma', [ResponsivaController::class, 'destroyFirma'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firma.destroy');
+
+    /*
+    |--------------------  Ordenes de Compra  --------------------
+    */
+    Route::resource('oc', OrdenCompraController::class)
+        ->only(['index','create','store','show','edit','update','destroy']);
+
+    Route::get('/oc/{oc}/pdf', [OrdenCompraController::class, 'pdf'])
+    // ->middleware('permission:oc.view') // si manejas permisos
+    ->name('oc.pdf');
+    
+        /*
+    |--------------------  Proveedores  --------------------
+    */
+    Route::resource('proveedores', ProveedorController::class)
+        ->only(['index','create','store','edit','update','destroy']);
+
 });

@@ -17,7 +17,7 @@
     .user-chip{ display:inline-flex; gap:.4rem; align-items:center; }
     .user-chip__role{ color:#6b7280; font-weight:500; }
 
-    /* ====== MÓVIL: Drawer (IZQUIERDA) + Backdrop ====== */
+    /* ====== MÓVIL ====== */
     .mobile-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:60; }
     .mobile-drawer{
       position:fixed; top:0; left:0; height:100%; width:22rem; max-width:90vw;
@@ -37,11 +37,9 @@
     .mobile-a{ display:block; padding:.55rem .65rem; border-radius:.5rem; font-size:.92rem; color:#374151; }
     .mobile-a:hover{ background:#f3f4f6; color:#111827; }
     .mobile-a--active{ color:#4f46e5; font-weight:600; }
-
     .btn-icon{ display:inline-flex; align-items:center; justify-content:center; width:2.25rem; height:2.25rem; border-radius:.5rem; }
     .btn-icon:hover{ background:#f3f4f6; }
 
-    /* Transiciones Alpine */
     [x-cloak]{ display:none !important; }
   </style>
 
@@ -60,19 +58,20 @@
       foreach ($exts as $ext) {
         $candidate = "images/logos/{$slug}.{$ext}";
         if (file_exists(public_path($candidate))) {
-          $logoRel = $candidate;
-          break;
+          $logoRel = $candidate; break;
         }
       }
     }
     $logoUrl = $logoRel ? asset($logoRel) : asset('images/logo.png');
 
-    $isRhActive = request()->routeIs('colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*');
-    $isProductosActive = request()->routeIs('productos.*');
+    $isRhActive       = request()->routeIs('colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*');
+    $isProductosActive= request()->routeIs('productos.*');
     $isFormatosActive = request()->routeIs('responsivas.*');
+
+    // COMPRAS: marcar activo si estoy en oc.* o proveedores.*
+    $isComprasActive  = request()->routeIs('oc.*','proveedores.*');
   @endphp
 
-  <!-- Efecto: bloquear scroll del body cuando el drawer móvil está abierto -->
   <div x-effect="document.body.style.overflow = open ? 'hidden' : ''"></div>
 
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -186,6 +185,32 @@
             </div>
           </div>
           @endcan
+
+          {{-- ===== COMPRAS (nuevo) ===== --}}
+          <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
+            <button type="button"
+                    class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
+                           transition duration-150 ease-in-out
+                           {{ $isComprasActive
+                                ? 'border-indigo-500 text-gray-900'
+                                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
+              Compras
+            </button>
+
+            <div x-show="open" x-transition class="menu-panel">
+              <div class="p-2">
+                <a href="{{ route('oc.index') }}"
+                   class="menu-item {{ request()->routeIs('oc.*') ? 'menu-item--active' : '' }}">
+                  Órdenes de compra
+                </a>
+                <a href="{{ route('proveedores.index') }}"
+                   class="menu-item {{ request()->routeIs('oc.*') ? 'menu-item--active' : '' }}">
+                  Proveedores
+                </a>
+              </div>
+            </div>
+          </div>
+          {{-- ===== /COMPRAS ===== --}}
         </div>
       </div>
 
@@ -277,7 +302,7 @@
     </div>
   </div>
 
-  <!-- ======= CONTENIDO DEL MENÚ MÓVIL (drawer desde IZQUIERDA) ======= -->
+  <!-- ======= CONTENIDO DEL MENÚ MÓVIL ======= -->
   <div x-cloak x-show="open" x-transition.opacity class="mobile-backdrop sm:hidden" @click="open=false"></div>
 
   <div x-cloak x-show="open"
@@ -296,7 +321,7 @@
       <button class="btn-icon text-gray-500" @click="open=false" aria-label="Cerrar menú">✕</button>
     </div>
 
-    <div class="mobile-drawer__body" x-data="{ rh:false, formatos:false, empresa:false, perfil:false }">
+    <div class="mobile-drawer__body" x-data="{ rh:false, formatos:false, compras:false, empresa:false, perfil:false }">
       <!-- Dashboard -->
       <a href="{{ route('dashboard') }}"
          class="mobile-a {{ request()->routeIs('dashboard') ? 'mobile-a--active' : '' }}">
@@ -368,16 +393,30 @@
       </div>
       @endcan
 
+      {{-- ===== COMPRAS (móvil) ===== --}}
+      <div class="mt-1">
+        <button class="mobile-link" @click="compras = !compras" :aria-expanded="compras">
+          <span>Compras</span>
+          <svg :class="{'rotate-180': compras}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/></svg>
+        </button>
+        <div x-show="compras" x-transition class="mobile-sub">
+          <a href="{{ route('oc.index') }}"
+             class="mobile-a {{ request()->routeIs('oc.*') ? 'mobile-a--active' : '' }}">
+            Órdenes de compra
+          </a>
+          <span class="mobile-a" title="Próximamente">Proveedores</span>
+        </div>
+      </div>
+      {{-- ===== /COMPRAS ===== --}}
+
       <hr class="my-3 border-gray-200">
 
-      <!-- Panel Admin -->
       @if(Auth::user()->hasRole('Administrador'))
       <a href="{{ route('admin.dashboard') }}" class="mobile-a">
         {{ __('Panel Admin') }}
       </a>
       @endif
 
-      <!-- Empresa (selector) -->
       @if(Auth::user()->hasRole('Administrador'))
         @php
           $empresas = \App\Models\Empresa::all();
@@ -402,7 +441,6 @@
         </div>
       @endif
 
-      <!-- Perfil / Cerrar sesión -->
       <div class="mt-1">
         <button class="mobile-link" @click="perfil = !perfil" :aria-expanded="perfil">
           <span>{{ Auth::user()->name }} <span class="text-gray-500">({{ Auth::user()->roles->first()->display_name ?? 'Usuario' }})</span></span>
