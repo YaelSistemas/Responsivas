@@ -5,9 +5,21 @@ namespace App\Http\Controllers;
 use App\Models\Proveedor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-
-class ProveedorController extends Controller
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
+class ProveedorController extends Controller implements HasMiddleware
 {
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('auth'),
+            new Middleware('permission:proveedores.view',   only: ['index','show']),
+            new Middleware('permission:proveedores.create', only: ['create','store']),
+            new Middleware('permission:proveedores.edit',   only: ['edit','update']),
+            new Middleware('permission:proveedores.delete', only: ['destroy']),
+        ];
+    }
+
     /**
      * Empresa (tenant) actual desde sesión o del usuario.
      */
@@ -89,15 +101,15 @@ class ProveedorController extends Controller
         return redirect()->route('proveedores.index')->with('created', true);
     }
 
-    public function edit(Proveedor $proveedore) // <- route model binding "proveedore" si usas resource
+    public function edit(Proveedor $proveedor)
     {
-        $this->authorizeCompany($proveedore);
-        return view('proveedores.edit', ['proveedor' => $proveedore]);
+        $this->authorizeCompany($proveedor);
+        return view('proveedores.edit', ['proveedor' => $proveedor]);
     }
 
-    public function update(Request $request, Proveedor $proveedore)
+    public function update(Request $request, Proveedor $proveedor)
     {
-        $this->authorizeCompany($proveedore);
+        $this->authorizeCompany($proveedor);
 
         $data = $request->validate([
             'nombre'        => ['required', 'string', 'max:255'],
@@ -109,15 +121,15 @@ class ProveedorController extends Controller
             'estado'        => ['nullable', 'string', 'max:120'],
         ]);
 
-        $proveedore->update($data);
+        $proveedor->update($data);
 
         return redirect()->route('proveedores.index')->with('updated', true);
     }
 
-    public function destroy(Proveedor $proveedore)
+    public function destroy(Proveedor $proveedor)
     {
-        $this->authorizeCompany($proveedore);
-        $proveedore->delete();
+        $this->authorizeCompany($proveedor);
+        $proveedor->delete();
 
         return redirect()->route('proveedores.index')->with('deleted', true);
     }

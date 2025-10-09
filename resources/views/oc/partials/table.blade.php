@@ -21,6 +21,7 @@
   .is-disabled{ opacity:.55; cursor:not-allowed; pointer-events:none; }
   .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
   .tbl td.desc{ white-space:normal; overflow:visible; text-overflow:unset; line-height:1.15; }
+  .muted{ color:#6b7280; }
 </style>
 
 <table class="tbl">
@@ -29,7 +30,7 @@
     <col class="c-fecha">
     <col class="c-soli">
     <col class="c-prov">
-    <col class="c-conceptos"><!-- nueva -->
+    <col class="c-conceptos">
     <col class="c-monto">
     <col class="c-fact">
     <col class="c-acc">
@@ -41,7 +42,7 @@
       <th>Fecha</th>
       <th>Solicitante</th>
       <th>Proveedor</th>
-      <th>Conceptos</th> {{-- <- reemplaza a Descripción --}}
+      <th>Conceptos</th>
       <th>Monto</th>
       <th>Factura</th>
       <th>Acciones</th>
@@ -67,7 +68,6 @@
       $prov = $oc->proveedor;
       $provNombre = $prov?->nombre ?? '—';
 
-      // Junta conceptos de las partidas: "cubo, escoba, ..."
       $conceptos = collect($oc->detalles ?? [])
         ->pluck('concepto')
         ->filter(fn($c) => filled($c))
@@ -77,29 +77,45 @@
 
       $monto = is_numeric($oc->monto) ? number_format($oc->monto, 2) : ($oc->monto ?? '0.00');
       $fact  = $oc->factura ?: '—';
+
+      $canView   = auth()->user()->can('oc.view');
+      $canEdit   = auth()->user()->can('oc.edit');
+      $canDelete = auth()->user()->can('oc.delete');
     @endphp
     <tr>
       <td title="{{ $oc->numero_orden }}">{{ $oc->numero_orden }}</td>
       <td title="{{ $f }}">{{ $f }}</td>
       <td title="{{ $solNombre }}">{{ $solNombre }}</td>
       <td title="{{ $provNombre }}">{{ $provNombre ?: '—' }}</td>
-      <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td> {{-- conceptos de partidas --}}
+      <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td>
       <td title="{{ $monto }}">${{ $monto }}</td>
       <td title="{{ $fact }}">{{ $fact }}</td>
       <td class="actions">
-        <a href="{{ route('oc.show', $oc) }}" title="Ver">
-          <i class="fa-solid fa-eye"></i><span class="sr-only">Ver</span>
-        </a>
-        <a href="{{ route('oc.edit', $oc) }}" title="Editar">
-          <i class="fa-solid fa-pen"></i><span class="sr-only">Editar</span>
-        </a>
-        <form action="{{ route('oc.destroy', $oc) }}" method="POST" style="display:inline"
-              onsubmit="return confirm('¿Eliminar esta orden?')">
-          @csrf @method('DELETE')
-          <button type="submit" class="danger" title="Eliminar">
-            <i class="fa-solid fa-trash"></i><span class="sr-only">Eliminar</span>
-          </button>
-        </form>
+        @can('oc.view')
+          <a href="{{ route('oc.show', $oc) }}" title="Ver">
+            <i class="fa-solid fa-eye"></i><span class="sr-only">Ver</span>
+          </a>
+        @endcan
+
+        @can('oc.edit')
+          <a href="{{ route('oc.edit', $oc) }}" title="Editar">
+            <i class="fa-solid fa-pen"></i><span class="sr-only">Editar</span>
+          </a>
+        @endcan
+
+        @can('oc.delete')
+          <form action="{{ route('oc.destroy', $oc) }}" method="POST" style="display:inline"
+                onsubmit="return confirm('¿Eliminar esta orden?')">
+            @csrf @method('DELETE')
+            <button type="submit" class="danger" title="Eliminar">
+              <i class="fa-solid fa-trash"></i><span class="sr-only">Eliminar</span>
+            </button>
+          </form>
+        @endcan
+
+        @if (!($canView || $canEdit || $canDelete))
+          <span class="muted">—</span>
+        @endif
       </td>
     </tr>
   @empty

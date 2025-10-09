@@ -222,6 +222,47 @@
             </div>
           </div>
 
+          {{-- === Compras (OC + Proveedores, 2 columnas) === --}}
+          <div class="section">
+            <div class="section-h">
+              <div class="section-title">Compras</div>
+              <label class="ml-auto inline-flex items-center gap-2 text-sm">
+                <input class="check-section" data-target=".sec-compras" type="checkbox">
+                <span>Marcar sección</span>
+              </label>
+            </div>
+
+            <div class="col-grid sec-compras">
+              {{-- Izquierda: Órdenes de compra --}}
+              <div class="card">
+                <div class="card-title">Órdenes de compra</div>
+                <div class="perm-list">
+                  @foreach(($groups['oc'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                             value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+
+              {{-- Derecha: Proveedores --}}
+              <div class="card">
+                <div class="card-title">Proveedores</div>
+                <div class="perm-list">
+                  @foreach(($groups['proveedores'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                             value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+            </div>
+          </div>
+
           @error('permissions')   <div class="text-red-600 text-sm mt-2">{{ $message }}</div> @enderror
           @error('permissions.*') <div class="text-red-600 text-sm mt-2">{{ $message }}</div> @enderror
         </div>

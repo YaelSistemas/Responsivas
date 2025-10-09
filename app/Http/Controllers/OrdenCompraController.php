@@ -14,8 +14,23 @@ use Illuminate\Validation\Rule;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Spatie\Browsershot\Browsershot;
 use Illuminate\Support\Str;
-class OrdenCompraController extends Controller
+use Illuminate\Routing\Controllers\HasMiddleware;   // ← añadido
+use Illuminate\Routing\Controllers\Middleware;      // ← añadido
+
+class OrdenCompraController extends Controller implements HasMiddleware   // ← añadido
 {
+    // ← añadido: definición de middleware por acción
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('auth'),
+            new Middleware('permission:oc.view',   only: ['index','show','pdfOpen','pdfDownload']),
+            new Middleware('permission:oc.create', only: ['create','store']),
+            new Middleware('permission:oc.edit',   only: ['edit','update']),
+            new Middleware('permission:oc.delete', only: ['destroy']),
+        ];
+    }
+
     /** Devuelve el tenant actual (empresa activa en sesión o la del usuario) */
     protected function tenantId(): int
     {
@@ -23,76 +38,76 @@ class OrdenCompraController extends Controller
     }
 
     public function index(Request $request)
-{
-    $tenantId = $this->tenantId();
-    $q        = trim($request->query('q', ''));
-    $perPage  = (int) $request->query('per_page', 50);
-    if ($perPage <= 0)  $perPage = 10;
-    if ($perPage > 100) $perPage = 100;
+    {
+        $tenantId = $this->tenantId();
+        $q        = trim($request->query('q', ''));
+        $perPage  = (int) $request->query('per_page', 50);
+        if ($perPage <= 0)  $perPage = 10;
+        if ($perPage > 100) $perPage = 100;
 
-    $tableOC   = (new OrdenCompra)->getTable();      // p.ej. 'ordenes_compra'
-    $tableCol  = (new Colaborador)->getTable();      // p.ej. 'colaboradores'
+        $tableOC   = (new OrdenCompra)->getTable();      // p.ej. 'ordenes_compra'
+        $tableCol  = (new Colaborador)->getTable();      // p.ej. 'colaboradores'
 
-    $query = OrdenCompra::with([
-        'solicitante',
-        'proveedor',
-        'detalles:id,orden_compra_id,concepto',
-    ])->where('empresa_tenant_id', $tenantId);
+        $query = OrdenCompra::with([
+            'solicitante',
+            'proveedor',
+            'detalles:id,orden_compra_id,concepto',
+        ])->where('empresa_tenant_id', $tenantId);
 
-    if ($q !== '') {
-        $like = "%{$q}%";
+        if ($q !== '') {
+            $like = "%{$q}%";
 
-        $query->where(function ($qq) use ($like, $tableOC, $tableCol) {
-            $qq->where('numero_orden', 'like', $like)
-               ->orWhere('factura', 'like', $like);
+            $query->where(function ($qq) use ($like, $tableOC, $tableCol) {
+                $qq->where('numero_orden', 'like', $like)
+                   ->orWhere('factura', 'like', $like);
 
-            if (Schema::hasColumn($tableOC, 'descripcion')) {
-                $qq->orWhere('descripcion', 'like', $like);
-            }
-            if (Schema::hasColumn($tableOC, 'proveedor')) {
-                $qq->orWhere('proveedor', 'like', $like);
-            }
+                if (Schema::hasColumn($tableOC, 'descripcion')) {
+                    $qq->orWhere('descripcion', 'like', $like);
+                }
+                if (Schema::hasColumn($tableOC, 'proveedor')) {
+                    $qq->orWhere('proveedor', 'like', $like);
+                }
 
-            $qq->orWhereHas('proveedor', function ($p) use ($like) {
-                $p->where('nombre', 'like', $like)
-                  ->orWhere('rfc', 'like', $like);
-            });
+                $qq->orWhereHas('proveedor', function ($p) use ($like) {
+                    $p->where('nombre', 'like', $like)
+                      ->orWhere('rfc', 'like', $like);
+                });
 
-            // 🔧 AQUÍ ESTABA EL PROBLEMA
-            $qq->orWhereHas('solicitante', function ($s) use ($like, $tableCol) {
-                $s->where(function ($w) use ($like, $tableCol) {
-                    $w->where('nombre', 'like', $like);
+                // 🔧 AQUÍ ESTABA EL PROBLEMA
+                $qq->orWhereHas('solicitante', function ($s) use ($like, $tableCol) {
+                    $s->where(function ($w) use ($like, $tableCol) {
+                        $w->where('nombre', 'like', $like);
 
-                    foreach ([
-                        'apellido', 'apellidos',
-                        'apellido_paterno', 'apellido_materno',
-                        'primer_apellido', 'segundo_apellido',
-                    ] as $col) {
-                        if (Schema::hasColumn($tableCol, $col)) {
-                            $w->orWhere($col, 'like', $like);
+                        foreach ([
+                            'apellido', 'apellidos',
+                            'apellido_paterno', 'apellido_materno',
+                            'primer_apellido', 'segundo_apellido',
+                        ] as $col) {
+                            if (Schema::hasColumn($tableCol, $col)) {
+                                $w->orWhere($col, 'like', $like);
+                            }
                         }
-                    }
+                    });
+                });
+
+                $qq->orWhereHas('detalles', function ($d) use ($like) {
+                    $d->where('concepto', 'like', $like);
                 });
             });
+        }
 
-            $qq->orWhereHas('detalles', function ($d) use ($like) {
-                $d->where('concepto', 'like', $like);
-            });
-        });
+        $ocs = $query->orderByDesc('fecha')->paginate($perPage);
+
+        if (request()->ajax() && request()->boolean('partial')) {
+            return response()->view('oc.partials.table', ['ocs' => $ocs], 200);
+        }
+
+        return view('oc.index', [
+            'ocs'     => $ocs,
+            'q'       => $q,
+            'perPage' => $perPage,
+        ]);
     }
-
-    $ocs = $query->orderByDesc('fecha')->paginate($perPage);
-
-    if (request()->ajax() && request()->boolean('partial')) {
-        return response()->view('oc.partials.table', ['ocs' => $ocs], 200);
-    }
-
-    return view('oc.index', [
-        'ocs'     => $ocs,
-        'q'       => $q,
-        'perPage' => $perPage,
-    ]);
-}
 
 
     public function create()
@@ -406,78 +421,76 @@ class OrdenCompraController extends Controller
     }
 
     public function pdfOpen(\App\Models\OrdenCompra $oc)
-{
-    // 1) Renderizar SOLO la hoja (parcial) con recursos enlined
-    $html = view('oc.pdf_sheet', compact('oc'))->render();
+    {
+        // 1) Renderizar SOLO la hoja (parcial) con recursos enlined
+        $html = view('oc.pdf_sheet', compact('oc'))->render();
 
-    // 2) Paths a Chrome/Edge (ajusta si usas Edge)
-    $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
-    if (!is_file($chromePath)) {
-        // fallback a Edge si no hay Chrome
-        $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
-        if (is_file($edge)) $chromePath = $edge;
+        // 2) Paths a Chrome/Edge (ajusta si usas Edge)
+        $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
+        if (!is_file($chromePath)) {
+            // fallback a Edge si no hay Chrome
+            $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
+            if (is_file($edge)) $chromePath = $edge;
+        }
+
+        // 3) Render con opciones robustas
+        $pdf = Browsershot::html($html)
+            ->setChromePath($chromePath)
+            ->noSandbox()                       // importante en Windows
+            ->showBackground()                  // respeta fondos/bordes
+            ->emulateMedia('screen')
+            ->format('A4')
+            ->margins(10, 10, 10, 10)          // mm
+            ->timeout(120000)                   // 120s por si está lento la 1ª vez
+            ->waitUntil('load')                 // evita networkidle
+            ->setOption('args', [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-extensions',
+            ])
+            ->pdf();
+
+        $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+
+        return response($pdf)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="'.$filename.'"');
     }
 
-    // 3) Render con opciones robustas
-    $pdf = Browsershot::html($html)
-        ->setChromePath($chromePath)
-        ->noSandbox()                       // importante en Windows
-        ->showBackground()                  // respeta fondos/bordes
-        ->emulateMedia('screen')
-        ->format('A4')
-        ->margins(10, 10, 10, 10)          // mm
-        ->timeout(120000)                   // 120s por si está lento la 1ª vez
-        ->waitUntil('load')                 // evita networkidle
-        ->setOption('args', [
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-extensions',
-        ])
-        ->pdf();
+    public function pdfDownload(\App\Models\OrdenCompra $oc)
+    {
+        $html = view('oc.pdf_sheet', compact('oc'))->render();
 
-    $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+        $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
+        if (!is_file($chromePath)) {
+            $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
+            if (is_file($edge)) $chromePath = $edge;
+        }
 
-    return response($pdf)
-        ->header('Content-Type', 'application/pdf')
-        ->header('Content-Disposition', 'inline; filename="'.$filename.'"');
-}
+        $pdf = Browsershot::html($html)
+            ->setChromePath($chromePath)
+            ->noSandbox()
+            ->showBackground()
+            ->emulateMedia('screen')
+            ->format('A4')
+            ->margins(10,10,10,10)
+            ->timeout(120000)
+            ->waitUntil('load')
+            ->setOption('args', [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-extensions',
+            ])
+            ->pdf();
 
-public function pdfDownload(\App\Models\OrdenCompra $oc)
-{
-    $html = view('oc.pdf_sheet', compact('oc'))->render();
+        $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
 
-    $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
-    if (!is_file($chromePath)) {
-        $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
-        if (is_file($edge)) $chromePath = $edge;
+        return response($pdf)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
     }
-
-    $pdf = Browsershot::html($html)
-        ->setChromePath($chromePath)
-        ->noSandbox()
-        ->showBackground()
-        ->emulateMedia('screen')
-        ->format('A4')
-        ->margins(10,10,10,10)
-        ->timeout(120000)
-        ->waitUntil('load')
-        ->setOption('args', [
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-extensions',
-        ])
-        ->pdf();
-
-    $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
-
-    return response($pdf)
-        ->header('Content-Type', 'application/pdf')
-        ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
-}
-
-
 }

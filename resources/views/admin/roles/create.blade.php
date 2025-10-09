@@ -4,21 +4,16 @@
 
 @section('content')
 <style>
-  /* ====== Zoom responsivo (igual que antes) ====== */
   .zoom-outer{ overflow-x:hidden; }
-  .zoom-inner{
-    --zoom:.92; transform:scale(var(--zoom)); transform-origin:top left; width:calc(100%/var(--zoom));
-  }
+  .zoom-inner{ --zoom:.92; transform:scale(var(--zoom)); transform-origin:top left; width:calc(100%/var(--zoom)); }
   @media (max-width:1024px){ .zoom-inner{ --zoom:.95 } .page-wrap{max-width:94vw;padding:0 4vw} }
   @media (max-width:768px){  .zoom-inner{ --zoom:.92 } .page-wrap{max-width:94vw;padding:0 4vw} }
   @media (max-width:640px){  .zoom-inner{ --zoom:.85 } .page-wrap{max-width:94vw;padding:0 4vw} }
   @media (max-width:400px){  .zoom-inner{ --zoom:.80 } .page-wrap{max-width:94vw;padding:0 4vw} }
   @media (max-width:768px){ input,select,textarea,button{ font-size:16px } }
 
-  /* ====== NUEVO: limitar ancho útil en desktop ====== */
   .page-wrap{ max-width:980px; margin:0 auto; }
 
-  /* ====== Tarjetas/secciones ====== */
   .btn-cancelar{
     background:#dc2626;color:#fff;padding:8px 16px;border:none;border-radius:6px;
     font-weight:600;text-decoration:none;text-align:center;transition:background .3s;
@@ -35,23 +30,15 @@
   .section + .section{margin-top:14px}
   .section-h{display:flex;align-items:center;gap:10px;margin-bottom:10px}
   .section-title{font-weight:700}
+  .divider{height:1px;background:#e5e7eb;margin:10px 0}
 
-  /* ====== NUEVO: 2 columnas reales en tablets/phones, 1 sola sólo en <480px ====== */
-  .col-grid{
-    display:grid;
-    grid-template-columns:repeat(2, minmax(0,1fr));
-    gap:16px;
-  }
-  @media (max-width:480px){
-    .col-grid{ grid-template-columns:1fr; }
-  }
+  .col-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+  @media (max-width:480px){ .col-grid{ grid-template-columns:1fr } }
 
   .card{background:#fafafa;border:1px dashed #e5e7eb;border-radius:10px;padding:10px}
   .card-title{font-weight:600;margin-bottom:6px}
   .perm-list label{display:inline-flex;align-items:center;gap:.5rem;margin:.2rem 0}
-  .divider{height:1px;background:#e5e7eb;margin:10px 0}
 </style>
-
 
 <div class="zoom-outer">
   <div class="zoom-inner">
@@ -105,14 +92,14 @@
             </div>
 
             <div class="col-grid sec-rh">
-              {{-- Columna izquierda: colaboradores, unidades, subsidiarias --}}
+              {{-- Izquierda: colaboradores, unidades, subsidiarias --}}
               <div class="card">
                 <div class="card-title">Colaboradores</div>
                 <div class="perm-list">
                   @foreach($groups['colaboradores'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -123,8 +110,8 @@
                 <div class="perm-list">
                   @foreach($groups['unidades'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -135,22 +122,22 @@
                 <div class="perm-list">
                   @foreach($groups['subsidiarias'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
                 </div>
               </div>
 
-              {{-- Columna derecha: áreas, puestos --}}
+              {{-- Derecha: áreas, puestos --}}
               <div class="card">
                 <div class="card-title">Áreas</div>
                 <div class="perm-list">
                   @foreach($groups['areas'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -161,8 +148,8 @@
                 <div class="perm-list">
                   @foreach($groups['puestos'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -187,8 +174,8 @@
                 <div class="perm-list">
                   @foreach($groups['productos'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -213,8 +200,49 @@
                 <div class="perm-list">
                   @foreach($groups['responsivas'] ?? [] as $p)
                     <label>
-                      <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {{-- === Compras (OC + Proveedores, 2 columnas) === --}}
+          <div class="section">
+            <div class="section-h">
+              <div class="section-title">Compras</div>
+              <label class="ml-auto inline-flex items-center gap-2 text-sm">
+                <input class="check-section" data-target=".sec-compras" type="checkbox">
+                <span>Marcar sección</span>
+              </label>
+            </div>
+
+            <div class="col-grid sec-compras">
+              {{-- Izquierda: Órdenes de compra --}}
+              <div class="card">
+                <div class="card-title">Órdenes de compra</div>
+                <div class="perm-list">
+                  @foreach($groups['oc'] ?? [] as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+
+              {{-- Derecha: Proveedores --}}
+              <div class="card">
+                <div class="card-title">Proveedores</div>
+                <div class="perm-list">
+                  @foreach($groups['proveedores'] ?? [] as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]" value="{{ $p['name'] }}"
+                        {{ in_array($p['name'], old('permissions', [])) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach
@@ -249,7 +277,7 @@
       const targetSel = this.getAttribute('data-target');
       if(!targetSel) return;
       document.querySelectorAll(targetSel + ' input.perm').forEach(cb => cb.checked = this.checked);
-      // si todos terminan marcados, marca el global también
+
       const all = [...document.querySelectorAll('input.perm')];
       const allChecked = all.length && all.every(x => x.checked);
       const anyChecked = all.some(x => x.checked);
@@ -261,7 +289,7 @@
     });
   });
 
-  // Estado inicial del “Marcar todos” (indeterminate si hay mezcla)
+  // Estado inicial del “Marcar todos”
   (function syncGlobal(){
     const all = [...document.querySelectorAll('input.perm')];
     if(!all.length) return;

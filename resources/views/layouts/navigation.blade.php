@@ -70,6 +70,11 @@
 
     // COMPRAS: marcar activo si estoy en oc.* o proveedores.*
     $isComprasActive  = request()->routeIs('oc.*','proveedores.*');
+
+    // ===== permisos Compras (nuevo) =====
+    $canOC       = auth()->user()->can('oc.view');
+    $canProv     = auth()->user()->can('proveedores.view');
+    $canCompras  = $canOC || $canProv; // oculta todo el menú si no tiene ninguno
   @endphp
 
   <div x-effect="document.body.style.overflow = open ? 'hidden' : ''"></div>
@@ -186,30 +191,36 @@
           </div>
           @endcan
 
-          {{-- ===== COMPRAS (nuevo) ===== --}}
-          <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
-            <button type="button"
-                    class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
-                           transition duration-150 ease-in-out
-                           {{ $isComprasActive
-                                ? 'border-indigo-500 text-gray-900'
-                                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
-              Compras
-            </button>
+          {{-- ===== COMPRAS (desktop) ===== --}}
+          @if($canCompras)
+            <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
+              <button type="button"
+                      class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
+                             transition duration-150 ease-in-out
+                             {{ $isComprasActive
+                                  ? 'border-indigo-500 text-gray-900'
+                                  : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
+                Compras
+              </button>
 
-            <div x-show="open" x-transition class="menu-panel">
-              <div class="p-2">
-                <a href="{{ route('oc.index') }}"
-                   class="menu-item {{ request()->routeIs('oc.*') ? 'menu-item--active' : '' }}">
-                  Órdenes de compra
-                </a>
-                <a href="{{ route('proveedores.index') }}"
-                   class="menu-item {{ request()->routeIs('oc.*') ? 'menu-item--active' : '' }}">
-                  Proveedores
-                </a>
+              <div x-show="open" x-transition class="menu-panel">
+                <div class="p-2">
+                  @can('oc.view')
+                    <a href="{{ route('oc.index') }}"
+                       class="menu-item {{ request()->routeIs('oc.*') ? 'menu-item--active' : '' }}">
+                      Órdenes de compra
+                    </a>
+                  @endcan
+                  @can('proveedores.view')
+                    <a href="{{ route('proveedores.index') }}"
+                       class="menu-item {{ request()->routeIs('proveedores.*') ? 'menu-item--active' : '' }}">
+                      Proveedores
+                    </a>
+                  @endcan
+                </div>
               </div>
             </div>
-          </div>
+          @endif
           {{-- ===== /COMPRAS ===== --}}
         </div>
       </div>
@@ -394,19 +405,28 @@
       @endcan
 
       {{-- ===== COMPRAS (móvil) ===== --}}
-      <div class="mt-1">
-        <button class="mobile-link" @click="compras = !compras" :aria-expanded="compras">
-          <span>Compras</span>
-          <svg :class="{'rotate-180': compras}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/></svg>
-        </button>
-        <div x-show="compras" x-transition class="mobile-sub">
-          <a href="{{ route('oc.index') }}"
-             class="mobile-a {{ request()->routeIs('oc.*') ? 'mobile-a--active' : '' }}">
-            Órdenes de compra
-          </a>
-          <span class="mobile-a" title="Próximamente">Proveedores</span>
+      @if($canCompras)
+        <div class="mt-1">
+          <button class="mobile-link" @click="compras = !compras" :aria-expanded="compras">
+            <span>Compras</span>
+            <svg :class="{'rotate-180': compras}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/></svg>
+          </button>
+          <div x-show="compras" x-transition class="mobile-sub">
+            @can('oc.view')
+              <a href="{{ route('oc.index') }}"
+                 class="mobile-a {{ request()->routeIs('oc.*') ? 'mobile-a--active' : '' }}">
+                Órdenes de compra
+              </a>
+            @endcan
+            @can('proveedores.view')
+              <a href="{{ route('proveedores.index') }}"
+                 class="mobile-a {{ request()->routeIs('proveedores.*') ? 'mobile-a--active' : '' }}">
+                Proveedores
+              </a>
+            @endcan
+          </div>
         </div>
-      </div>
+      @endif
       {{-- ===== /COMPRAS ===== --}}
 
       <hr class="my-3 border-gray-200">

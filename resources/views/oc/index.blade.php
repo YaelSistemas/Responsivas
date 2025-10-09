@@ -72,7 +72,9 @@
         {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-semibold">Órdenes de compra</h2>
-            <a href="{{ route('oc.create') }}" class="btn btn-primary">+ Nueva</a>
+            @can('oc.create')
+              <a href="{{ route('oc.create') }}" class="btn btn-primary">+ Nueva</a>
+            @endcan
         </div>
 
         {{-- Toolbar --}}

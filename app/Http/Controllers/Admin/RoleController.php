@@ -57,6 +57,18 @@ class RoleController extends Controller
             'edit'   => 'Editar responsivas',
             'delete' => 'Eliminar responsivas',
         ],
+        'oc' => [
+            'view'   => 'Ver Orden de Compra',
+            'create' => 'Crear Orden de Compra',
+            'edit'   => 'Editar Orden de Compra',
+            'delete' => 'Eliminar Orden de Compra',
+        ],
+        'proveedores' => [
+        'view'   => 'Ver proveedores',
+        'create' => 'Crear proveedores',
+        'edit'   => 'Editar proveedores',
+        'delete' => 'Eliminar proveedores',
+        ],
     ];
 
     public function index(Request $request)

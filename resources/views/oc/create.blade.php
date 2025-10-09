@@ -68,6 +68,13 @@
 
     .w-18{ width:120px; }
     .inline{ display:flex; align-items:flex-end; gap:12px; }
+
+    /* Mensaje moneda única */
+    .currency-alert{
+      display:none; margin-top:8px; padding:8px 10px; border-radius:8px;
+      background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px;
+    }
+    .currency-alert.show{ display:block; }
   </style>
 
   @php
@@ -187,12 +194,13 @@
                   @endforeach
                 </tbody>
               </table>
+              <div id="currencyAlert" class="currency-alert">Solo se puede seleccionar <b>una moneda</b> por OC. Se mantendrá la moneda de la primera partida.</div>
               <div style="margin-top:10px">
                 <button type="button" class="btn-gray" id="addRow">+ Agregar partida</button>
               </div>
             </div>
 
-            {{-- === Totales: Subtotal + IVA% (con % adentro), luego IVA importe y Total === --}}
+            {{-- === Totales: Subtotal + IVA% === --}}
             <div class="grid3 row">
               <div>
                 <div class="inline" style="gap:16px">
@@ -239,6 +247,49 @@
       const elSubtotal = document.getElementById('subtotal');
       const elIva      = document.getElementById('iva');
       const elTotal    = document.getElementById('total');
+      const alertBox   = document.getElementById('currencyAlert');
+
+      /** ========= MONEDA ÚNICA POR OC ========= **/
+      function getMasterSelect(){
+        return tbody.querySelector('.item-row .i-moneda'); // primer select
+      }
+      function getBaseCurrency(){
+        const ms = getMasterSelect();
+        return ms ? ms.value : null;
+      }
+      function showCurrencyAlert(){
+        if(!alertBox) return;
+        alertBox.classList.add('show');
+        // ocultar después de 3s
+        clearTimeout(showCurrencyAlert._t);
+        showCurrencyAlert._t = setTimeout(()=>alertBox.classList.remove('show'), 3000);
+      }
+      function enforceCurrencyOnAll(base, exceptEl=null){
+        tbody.querySelectorAll('.i-moneda').forEach(sel => {
+          if(sel !== exceptEl && sel.value !== base){
+            sel.value = base;
+          }
+        });
+      }
+      function onCurrencyChange(e){
+        const sel = e.target;
+        const master = getMasterSelect();
+        if(!master){ return; }
+
+        if(sel === master){
+          // Cambió la 1ª partida: propagar a todas
+          enforceCurrencyOnAll(master.value, master);
+        }else{
+          // Cualquier otra: si no coincide, revertir y avisar
+          const base = getBaseCurrency();
+          if(base && sel.value !== base){
+            showCurrencyAlert();
+            sel.value = base;
+          }
+        }
+        recalc(); // por si cambia símbolo/interpretación después en backend
+      }
+      /** ========= FIN MONEDA ÚNICA ========= **/
 
       function recalc(){
         let subtotal = 0;
@@ -252,13 +303,14 @@
         });
         const iva = subtotal * (parseFloat(ivaPct.value || '0')/100);
         const total = subtotal + iva;
-
         elSubtotal.value = subtotal.toFixed(2);
         elIva.value      = iva.toFixed(2);
         elTotal.value    = total.toFixed(2);
       }
 
-      function rowTemplate(idx){
+      function rowTemplate(idx, baseMoneda){
+        const mMXN = (!baseMoneda || baseMoneda === 'MXN') ? 'selected' : '';
+        const mUSD = (baseMoneda === 'USD') ? 'selected' : '';
         return `
         <tr class="item-row">
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][cantidad]" class="i-cantidad right"></td>
@@ -266,8 +318,8 @@
           <td><input type="text" name="items[${idx}][concepto]"></td>
           <td>
             <select name="items[${idx}][moneda]" class="i-moneda">
-              <option value="MXN" selected>MXN</option>
-              <option value="USD">USD</option>
+              <option value="MXN" ${mMXN}>MXN</option>
+              <option value="USD" ${mUSD}>USD</option>
             </select>
           </td>
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
@@ -276,13 +328,17 @@
         </tr>`;
       }
 
-      function bindRowEvents(){
-        tbody.querySelectorAll('.i-cantidad,.i-precio').forEach(inp=>{
+      function bindRowEvents(scope=document){
+        scope.querySelectorAll('.i-cantidad,.i-precio').forEach(inp=>{
           inp.removeEventListener('input', recalc);
           inp.addEventListener('input', recalc);
         });
-        tbody.querySelectorAll('.del-row').forEach(btn=>{
-          btn.onclick = (e)=>{ e.preventDefault(); btn.closest('tr').remove(); recalc(); renumberNames(); };
+        scope.querySelectorAll('.del-row').forEach(btn=>{
+          btn.onclick = (e)=>{ e.preventDefault(); const row = btn.closest('tr'); row.remove(); recalc(); renumberNames(); };
+        });
+        scope.querySelectorAll('.i-moneda').forEach(sel=>{
+          sel.removeEventListener('change', onCurrencyChange);
+          sel.addEventListener('change', onCurrencyChange);
         });
       }
 
@@ -295,13 +351,31 @@
       }
 
       addBtn?.addEventListener('click', ()=>{
-        const idx = tbody.querySelectorAll('tr').length;
-        tbody.insertAdjacentHTML('beforeend', rowTemplate(idx));
-        bindRowEvents(); recalc();
+        const idx = tbody.querySelectorAll('tr.item-row').length;
+        const base = getBaseCurrency(); // usa moneda maestra actual
+        tbody.insertAdjacentHTML('beforeend', rowTemplate(idx, base));
+        const newRow = tbody.lastElementChild;
+        bindRowEvents(newRow);
+
+        // Asegurar que respete base (por si no había master aún)
+        const master = getMasterSelect();
+        if(master && base){
+          enforceCurrencyOnAll(base);
+        }
+        recalc();
       });
 
+      // Bind inicial
+      bindRowEvents();
+      // Si ya hay filas cargadas (old()), fija y propaga base desde la primera
+      const baseInit = getBaseCurrency();
+      if(baseInit){
+        enforceCurrencyOnAll(baseInit, getMasterSelect());
+      }
+      recalc();
+
+      // Recalcular IVA al cambiar porcentaje
       ivaPct?.addEventListener('input', recalc);
-      bindRowEvents(); recalc();
     })();
   </script>
 </x-app-layout>

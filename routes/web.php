@@ -31,11 +31,11 @@ Route::post('/firmar/{token}', [PublicResponsivaController::class, 'store'])->na
 Route::get('/firmar/{token}/pdf', [PublicResponsivaController::class, 'pdf'])
     ->name('public.sign.pdf');
 
-/* >>> NUEVO: PDF público por ID con URL firmada (para “Gracias, firmado”) */
+/* >>> PDF público por ID con URL firmada (para “Gracias, firmado”) */
 Route::get('/public/responsivas/{responsiva}/pdf', [PublicResponsivaController::class, 'pdfById'])
     ->name('public.responsivas.pdf')
     ->middleware('signed');
-/* <<< FIN NUEVO */
+/* <<< FIN */
 
 /*
 |--------------------------------------------------------------------------
@@ -153,26 +153,59 @@ Route::middleware(['auth'])->group(function () {
         ->name('responsivas.firma.destroy');
 
     /*
-    |--------------------  Ordenes de Compra  --------------------
+    |--------------------  Órdenes de Compra (con permisos)  --------------------
     */
-    Route::resource('oc', OrdenCompraController::class)
-    ->only(['index','create','store','show','edit','update','destroy']);
+    // Crear
+    Route::middleware(['auth','permission:oc.create'])->group(function () {
+        Route::get('/oc/create', [OrdenCompraController::class, 'create'])->name('oc.create');
+        Route::post('/oc',       [OrdenCompraController::class, 'store'])->name('oc.store');
+    });
 
-// Ver en visor del navegador
-Route::get('/oc/{oc}/pdf', [OrdenCompraController::class, 'pdfOpen'])
-    // ->middleware('permission:oc.view')
-    ->name('oc.pdf.open');
+    // Ver / PDFs
+    Route::middleware(['auth','permission:oc.view'])->group(function () {
+        Route::get('/oc',                      [OrdenCompraController::class, 'index'])->name('oc.index');
+        Route::get('/oc/{oc}',                 [OrdenCompraController::class, 'show'])->whereNumber('oc')->name('oc.show');
 
-// Forzar descarga
-Route::get('/oc/{oc}/pdf/download', [OrdenCompraController::class, 'pdfDownload'])
-    // ->middleware('permission:oc.view')
-    ->name('oc.pdf.download');
-    
-    
-        /*
-    |--------------------  Proveedores  --------------------
+        Route::get('/oc/{oc}/pdf',             [OrdenCompraController::class, 'pdfOpen'])->whereNumber('oc')->name('oc.pdf.open');
+        Route::get('/oc/{oc}/pdf/download',    [OrdenCompraController::class, 'pdfDownload'])->whereNumber('oc')->name('oc.pdf.download');
+    });
+
+    // Editar / Actualizar
+    Route::middleware(['auth','permission:oc.edit'])->group(function () {
+        Route::get('/oc/{oc}/edit', [OrdenCompraController::class, 'edit'])->whereNumber('oc')->name('oc.edit');
+        Route::put('/oc/{oc}',      [OrdenCompraController::class, 'update'])->whereNumber('oc')->name('oc.update');
+    });
+
+    // Eliminar
+    Route::delete('/oc/{oc}', [OrdenCompraController::class, 'destroy'])
+        ->middleware(['auth','permission:oc.delete'])
+        ->whereNumber('oc')
+        ->name('oc.destroy');
+
+    /*
+    |--------------------  Proveedores (con permisos)  --------------------
     */
-    Route::resource('proveedores', ProveedorController::class)
-        ->only(['index','create','store','edit','update','destroy']);
+    // Crear 
+    Route::middleware(['auth','permission:proveedores.create'])->group(function () {
+        Route::get ('/proveedores/create', [ProveedorController::class, 'create'])->name('proveedores.create');
+        Route::post('/proveedores',        [ProveedorController::class, 'store'])->name('proveedores.store');
+    });
 
+    // Ver / listar / show
+    Route::middleware(['auth','permission:proveedores.view'])->group(function () {
+        Route::get('/proveedores',             [ProveedorController::class, 'index'])->name('proveedores.index');
+        Route::get('/proveedores/{proveedor}', [ProveedorController::class, 'show'])->whereNumber('proveedor')->name('proveedores.show');
+    });
+
+    // Editar / Actualizar
+    Route::middleware(['auth','permission:proveedores.edit'])->group(function () {
+        Route::get('/proveedores/{proveedor}/edit', [ProveedorController::class, 'edit'])->whereNumber('proveedor')->name('proveedores.edit');
+        Route::put('/proveedores/{proveedor}',      [ProveedorController::class, 'update'])->whereNumber('proveedor')->name('proveedores.update');
+    });
+
+    // Eliminar
+    Route::delete('/proveedores/{proveedor}', [ProveedorController::class, 'destroy'])
+        ->middleware(['auth','permission:proveedores.delete'])
+        ->whereNumber('proveedor')
+        ->name('proveedores.destroy');
 });

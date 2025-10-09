@@ -74,16 +74,20 @@
       <td title="{{ $p->rfc }}">{{ $p->rfc ?: '—' }}</td>
       <td class="addr">{!! $addrHtml !!}</td>
       <td class="actions">
-        <a href="{{ route('proveedores.edit', $p) }}" title="Editar">
-          <i class="fa-solid fa-pen"></i><span class="sr-only">Editar</span>
-        </a>
-        <form action="{{ route('proveedores.destroy', $p) }}" method="POST" style="display:inline"
-              onsubmit="return confirm('¿Eliminar este proveedor?')">
-          @csrf @method('DELETE')
-          <button type="submit" class="danger" title="Eliminar">
-            <i class="fa-solid fa-trash"></i><span class="sr-only">Eliminar</span>
-          </button>
-        </form>
+        @can('proveedores.edit')
+          <a href="{{ route('proveedores.edit', $p) }}" title="Editar">
+            <i class="fa-solid fa-pen"></i><span class="sr-only">Editar</span>
+          </a>
+        @endcan
+        @can('proveedores.delete')
+          <form action="{{ route('proveedores.destroy', $p) }}" method="POST" style="display:inline"
+                onsubmit="return confirm('¿Eliminar este proveedor?')">
+            @csrf @method('DELETE')
+            <button type="submit" class="danger" title="Eliminar">
+              <i class="fa-solid fa-trash"></i><span class="sr-only">Eliminar</span>
+            </button>
+          </form>
+        @endcan
       </td>
     </tr>
   @empty

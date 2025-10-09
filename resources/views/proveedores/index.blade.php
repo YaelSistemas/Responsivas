@@ -58,7 +58,9 @@
         {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold">Proveedores</h2>
-          <a href="{{ route('proveedores.create') }}" class="btn btn-primary">+ Nuevo</a>
+          @can('proveedores.create')
+            <a href="{{ route('proveedores.create') }}" class="btn btn-primary">+ Nuevo</a>
+          @endcan
         </div>
 
         {{-- Toolbar --}}
