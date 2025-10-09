@@ -156,11 +156,18 @@ Route::middleware(['auth'])->group(function () {
     |--------------------  Ordenes de Compra  --------------------
     */
     Route::resource('oc', OrdenCompraController::class)
-        ->only(['index','create','store','show','edit','update','destroy']);
+    ->only(['index','create','store','show','edit','update','destroy']);
 
-    Route::get('/oc/{oc}/pdf', [OrdenCompraController::class, 'pdf'])
-    // ->middleware('permission:oc.view') // si manejas permisos
-    ->name('oc.pdf');
+// Ver en visor del navegador
+Route::get('/oc/{oc}/pdf', [OrdenCompraController::class, 'pdfOpen'])
+    // ->middleware('permission:oc.view')
+    ->name('oc.pdf.open');
+
+// Forzar descarga
+Route::get('/oc/{oc}/pdf/download', [OrdenCompraController::class, 'pdfDownload'])
+    // ->middleware('permission:oc.view')
+    ->name('oc.pdf.download');
+    
     
         /*
     |--------------------  Proveedores  --------------------

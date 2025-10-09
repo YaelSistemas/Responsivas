@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Barryvdh\DomPDF\Facade\Pdf;
-
+use Spatie\Browsershot\Browsershot;
+use Illuminate\Support\Str;
 class OrdenCompraController extends Controller
 {
     /** Devuelve el tenant actual (empresa activa en sesión o la del usuario) */
@@ -404,14 +405,79 @@ class OrdenCompraController extends Controller
         return sprintf('%s-%04d', $prefix, $next);
     }
 
-    public function pdf(OrdenCompra $oc)
-    {
-        // Carga relaciones si las necesitas para la vista
-        $oc->load(['detalles']); // ajusta a tus relaciones reales
+    public function pdfOpen(\App\Models\OrdenCompra $oc)
+{
+    // 1) Renderizar SOLO la hoja (parcial) con recursos enlined
+    $html = view('oc.pdf_sheet', compact('oc'))->render();
 
-        return Pdf::loadView('oc.pdf', compact('oc'))
-            ->setPaper('a4', 'portrait')
-            ->setOptions(['isRemoteEnabled' => true])
-            ->stream("OC-{$oc->numero_orden}.pdf");
+    // 2) Paths a Chrome/Edge (ajusta si usas Edge)
+    $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
+    if (!is_file($chromePath)) {
+        // fallback a Edge si no hay Chrome
+        $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
+        if (is_file($edge)) $chromePath = $edge;
     }
+
+    // 3) Render con opciones robustas
+    $pdf = Browsershot::html($html)
+        ->setChromePath($chromePath)
+        ->noSandbox()                       // importante en Windows
+        ->showBackground()                  // respeta fondos/bordes
+        ->emulateMedia('screen')
+        ->format('A4')
+        ->margins(10, 10, 10, 10)          // mm
+        ->timeout(120000)                   // 120s por si está lento la 1ª vez
+        ->waitUntil('load')                 // evita networkidle
+        ->setOption('args', [
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+        ])
+        ->pdf();
+
+    $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+
+    return response($pdf)
+        ->header('Content-Type', 'application/pdf')
+        ->header('Content-Disposition', 'inline; filename="'.$filename.'"');
+}
+
+public function pdfDownload(\App\Models\OrdenCompra $oc)
+{
+    $html = view('oc.pdf_sheet', compact('oc'))->render();
+
+    $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
+    if (!is_file($chromePath)) {
+        $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
+        if (is_file($edge)) $chromePath = $edge;
+    }
+
+    $pdf = Browsershot::html($html)
+        ->setChromePath($chromePath)
+        ->noSandbox()
+        ->showBackground()
+        ->emulateMedia('screen')
+        ->format('A4')
+        ->margins(10,10,10,10)
+        ->timeout(120000)
+        ->waitUntil('load')
+        ->setOption('args', [
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-extensions',
+        ])
+        ->pdf();
+
+    $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+
+    return response($pdf)
+        ->header('Content-Type', 'application/pdf')
+        ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
+}
+
+
 }

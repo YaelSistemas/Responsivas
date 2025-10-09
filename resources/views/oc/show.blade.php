@@ -89,6 +89,13 @@
     .tbl th, .tbl td { border:1px solid #111; padding:6px 8px; font-size:12px; line-height:1.15; vertical-align:middle; }
     .tbl td.order-no { font-weight:700 !important; color:#c62828; font-size:14px; letter-spacing: .2px; }
 
+    /* Helpers de alineación / mayúsculas */
+    .center { text-align:center; }
+    .right  { text-align:right; }
+    .upper  { text-transform: uppercase; }
+    .no-upper { text-transform: none !important; }
+    .upper-force { text-transform: uppercase !important; }
+
     /* ===== Encabezado ===== */
     .hero { table-layout: fixed; --row-h: 36px; }
     .hero tr { height: var(--row-h); }
@@ -104,7 +111,7 @@
     /* ===== PROVEEDOR / ORDEN ===== */
     .meta-grid { margin-top:8px; }
     .meta-grid th{ font-weight:700; text-transform:uppercase; background:none; text-align:left; }
-    .center { text-align:center; }
+    .meta-grid th.center { text-align: center !important; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
 
     /* 1ª columna (proveedor) */
@@ -122,7 +129,6 @@
 
     /* ===== Tabla de partidas ===== */
     .items { margin-top:12px; }
-    .items .center { text-align:center; }
     .items tr.data   { height: 26px; }
     .items tr.spacer { height: 12px; }
     .items tr.spacer td { padding-top: 0; padding-bottom: 0; line-height: 1; }
@@ -180,8 +186,8 @@
       background-image: url('{{ $footerImg }}');
       background-repeat: no-repeat;
       background-position: center center;
-      background-size: contain;     /* Muestra la imagen completa */
-      height: 120px;                /* Ajusta si quieres más alto/bajo */
+      background-size: contain;
+      height: 120px;
       border-left: 1px solid #111 !important;
       border-right: 1px solid #111 !important;
       border-top: 0 !important;
@@ -189,7 +195,7 @@
       padding:0 !important;
     }
 
-    /* ====== Print: quitar el zoom para PDF nítido ====== */
+    /* ====== Print ====== */
     @media print {
       .zoom-inner{ transform:none !important; width:auto !important; }
       body * { visibility: hidden !important; }
@@ -206,7 +212,6 @@
       br{ display:none !important; }
       .hero, .meta-grid, .items { page-break-inside: avoid; }
       html, body{ margin:0 !important; padding:0 !important; }
-
       .footer-img-td{ height:100px; background-size: contain; }
     }
   </style>
@@ -215,9 +220,8 @@
   <div class="actions">
     <a href="{{ url('/oc') }}" class="btn btn-secondary">← Órdenes de compra</a>
 
-    {{-- PDF: deshabilitado por ahora --}}
-    <a href="{{ route('oc.pdf', $oc) }}" class="btn btn-primary" target="_blank" rel="noopener">
-      Descargar PDF
+    <a href="{{ route('oc.pdf.open', $oc) }}" class="btn btn-primary" target="_blank" rel="noopener">
+      Ver / Descargar PDF
     </a>
   </div>
 
@@ -247,7 +251,7 @@
             <tr><td class="rightcell"><b>CODIFICACIÓN:</b> SGC-PO-CO-01-FO-01</td></tr>
             <tr>
               <td class="title-row title-sub">SISTEMA DE GESTION DE CALIDAD</td>
-              <td class="rightcell"><b>FECHA DE EMISIÓN:</b><br>{{ $fechaFmt }}</td>
+              <td class="rightcell"><b>20-jun-2025</b></td>
             </tr>
             <tr>
               <td class="title-row title-sub">ORDEN DE COMPRA</td>
@@ -256,7 +260,8 @@
           </table>
 
           {{-- ========= PROVEEDOR / ORDEN ========= --}}
-          <table class="tbl meta-grid">
+          <!-- Proveedor en MAYÚSCULAS y "ORDEN DE COMPRA" centrado -->
+          <table class="tbl meta-grid upper">
             <colgroup>
               <col style="width:8%">
               <col style="width:72%">
@@ -265,7 +270,7 @@
 
             <tr>
               <th colspan="2">PROVEEDOR</th>
-              <th>ORDEN DE COMPRA</th>
+              <th class="center">ORDEN DE COMPRA</th>
             </tr>
 
             <tr>
@@ -282,8 +287,8 @@
             <tr>
               <td class="prov-f4">&nbsp;</td>
               <td class="prov-c2-r4">
-                {{ $oc->proveedor['colonia'] ?? '' }}
-                @if(!empty($oc->proveedor['colonia']) && !empty($oc->proveedor['codigo_postal'])) - @endif
+                {{ $oc->proveedor['colonia'] ?? '' }},
+                @if(!empty($oc->proveedor['colonia']) && !empty($oc->proveedor['codigo_postal'])) @endif
                 {{ $oc->proveedor['codigo_postal'] ?? '' }}
               </td>
               <th>FECHA</th>
@@ -292,8 +297,8 @@
             <tr>
               <td class="prov-f5">&nbsp;</td>
               <td class="prov-c2-r5">
-                {{ $oc->proveedor['ciudad'] ?? '' }}
-                @if(!empty($oc->proveedor['ciudad']) && !empty($oc->proveedor['estado'])) , @endif
+                {{ $oc->proveedor['ciudad'] ?? '' }},
+                @if(!empty($oc->proveedor['ciudad']) && !empty($oc->proveedor['estado'])) @endif
                 {{ $oc->proveedor['estado'] ?? '' }}
               </td>
               <td class="mono">{{ $fechaFmt }}</td>
@@ -329,13 +334,14 @@
             $blocksToDraw = max($baseBlocks, $totalItems);
           @endphp
 
-          <table class="tbl items">
+          <!-- Partidas en MAYÚSCULAS -->
+          <table class="tbl items upper">
             <colgroup>
               <col style="width:10%">  {{-- Cantidad --}}
               <col style="width:10%">  {{-- Unidad --}}
-              <col style="width:50%">  {{-- Concepto --}}
-              <col style="width:15%">  {{-- Precio --}}
-              <col style="width:15%">  {{-- Importe --}}
+              <col style="width:48%">  {{-- Concepto --}}
+              <col style="width:12%">  {{-- Precio --}}
+              <col style="width:20%">  {{-- Importe --}}
             </colgroup>
 
             <tr>
@@ -397,65 +403,61 @@
 
             <tr class="summary">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-              <td class="center"><b>SUBTOTAL</b></td>
+              <td class="right"><b>SUBTOTAL</b></td>
               <td class="money-total">
                 <div class="mwrap"><span class="sym"><b>{{ $sSym }}</b></span><span class="val"><b>{{ $sVal }}</b></span></div>
               </td>
             </tr>
             <tr class="summary">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-              <td class="center"><b>IVA</b></td>
+              <td class="right"><b>IVA</b></td>
               <td class="money-total">
                 <div class="mwrap"><span class="sym"><b>{{ $vSym }}</b></span><span class="val"><b>{{ $vVal }}</b></span></div>
               </td>
             </tr>
             <tr class="summary last">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-              <td class="center"><b>TOTAL ({{ $moneda }})</b></td>
+              <td class="right"><b>TOTAL ({{ $moneda }})</b></td>
               <td class="money-total">
                 <div class="mwrap"><span class="sym"><b>{{ $tSym }}</b></span><span class="val"><b>{{ $tVal }}</b></span></div>
               </td>
             </tr>
 
-            {{-- ===== 8 filas extra ===== --}}
-            <tr class="extra e1">
+            {{-- ===== 8 filas extra =====
+                 NOTA: agregamos .no-upper para que estas filas NO hereden mayúsculas.
+                 Solo el nombre del usuario lleva .upper-force. --}}
+            <tr class="extra e1 no-upper">
               <td colspan="2" class="center xxsmall"><b>DEPTO. DE COMPRAS</b></td>
               <td colspan="3" class="xxsmall"><b>OBSERVACIONES:</b></td>
             </tr>
-            <tr class="extra e2">
+            <tr class="extra e2 no-upper">
               <td colspan="2">&nbsp;</td>
               <td colspan="3" class="bigger3">Favor de poner # de O.C. a la factura y enviar la factura a</td>
             </tr>
-            <tr class="extra e3">
+            <tr class="extra e3 no-upper">
               <td colspan="2">&nbsp;</td>
               <td colspan="3" class="bigger3">almacen@reprosisa.com.mx</td>
             </tr>
-            <tr class="extra e4">
-              <td colspan="2" class="center">{{ $nombreFirma }}</td>
+            <tr class="extra e4 no-upper">
+              <td colspan="2" class="center upper-force">{{ $nombreFirma }}</td>
               <td colspan="3">&nbsp;</td>
             </tr>
-            <tr class="extra e5">
+            <tr class="extra e5 no-upper">
               <td colspan="2" class="center"><b>FIRMA</b></td>
               <td colspan="3">&nbsp;</td>
             </tr>
 
             {{-- Fila 6: texto en col 3 y bloque de imagen ocupando col 4-5 y filas 6-8 --}}
-            <tr class="extra e6">
+            <tr class="extra e6 no-upper">
               <td colspan="2">&nbsp;</td>
               <td class="xxxsmall">LAS FACTURAS DEBERAN MOSTRAR EL NUMERO DE ESTE ORDEN PARA SER PAGADAS</td>
-
-              {{-- imagen: ocupa col 4 y 5 + filas 6,7,8 --}}
               <td colspan="2" rowspan="3" class="footer-img-td"></td>
             </tr>
-
-            {{-- Fila 7: ya no hay col 4-5 porque las toma el rowspan --}}
-            <tr class="extra e7">
+            <tr class="extra e7 no-upper">
               <td colspan="2">&nbsp;</td>
               <td>&nbsp;</td>
             </tr>
-
-            {{-- Fila 8: idem --}}
-            <tr class="extra e8">
+            <tr class="extra e8 no-upper">
               <td colspan="2">&nbsp;</td>
               <td>&nbsp;</td>
             </tr>
