@@ -33,7 +33,6 @@
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
 
-    /* ====== Tabla partidas ====== */
     .items-table{width:100%; border-collapse:collapse}
     .items-table th,.items-table td{border:1px solid #e5e7eb; padding:8px}
     .items-table th{background:#f9fafb; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280}
@@ -41,37 +40,25 @@
     .right{text-align:right}
     .nowrap{white-space:nowrap}
 
-    /* Columna MONEDA más ancha */
     .items-table td:nth-child(4){ min-width:110px; }
-
-    /* Select MONEDA con flecha custom y padding extra */
     .items-table select.i-moneda{
       -webkit-appearance:none; -moz-appearance:none; appearance:none;
       padding-right: 2.6rem;
       background-image:url("data:image/svg+xml;utf8,<svg fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path d='M19 9l-7 7-7-7'/></svg>");
-      background-repeat:no-repeat;
-      background-position:right .45rem center;
-      background-size:12px 12px;
-      background-color:#fff;
-      line-height:1.25;
+      background-repeat:no-repeat; background-position:right .45rem center; background-size:12px 12px; background-color:#fff; line-height:1.25;
     }
     .items-table select.i-moneda::-ms-expand{ display:none; }
 
-    /* IVA % con sufijo dentro del input */
     .suffix-wrap{ position:relative; display:inline-block; width:100%; }
     .suffix-wrap input{ width:100%; padding-right:2rem; box-sizing:border-box; }
-    .suffix-wrap .suffix{
-      position:absolute; right:.5rem; top:50%; transform:translateY(-50%);
-      color:#6b7280; pointer-events:none; font-weight:600;
-    }
+    .suffix-wrap .suffix{ position:absolute; right:.5rem; top:50%; transform:translateY(-50%); color:#6b7280; pointer-events:none; font-weight:600; }
 
     .w-18{ width:120px; }
     .inline{ display:flex; align-items:flex-end; gap:12px; }
 
-    /* Mensaje moneda única */
     .currency-alert{
       display:none; margin-top:8px; padding:8px 10px; border-radius:8px;
-       background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px;
+      background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px;
     }
     .currency-alert.show{ display:block; }
   </style>
@@ -80,7 +67,10 @@
     $fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDateString());
     $defaultIva   = old('iva_porcentaje', 16);
 
-    // Prefill desde $oc->detalles
+    // Permisos: Admin o permiso específico pueden editar el folio
+    $isAdminCanEditFolio = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
+
+    // Prefill detalles
     $prefill = old('items');
     if (!$prefill) {
       $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
@@ -99,7 +89,6 @@
       $prefill = [['cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>'']];
     }
 
-    // Helpers para mostrar cantidad/precio
     $hasNonZeroDecimals = function($val): bool {
       if ($val === null || $val === '') return false;
       $p = explode('.', (string)$val, 2);
@@ -118,7 +107,6 @@
         : (string)intval((float)$val);
     };
 
-    // Totales iniciales
     $phpSubtotal = 0.0;
     foreach ($prefill as $r) {
       $phpSubtotal += (float)($r['cantidad'] ?? 0) * (float)($r['precio'] ?? 0);
@@ -151,10 +139,25 @@
             <div class="grid2 row">
               <div>
                 <label>No. de orden</label>
-                <input type="text" name="numero_orden" value="{{ old('numero_orden', $oc->numero_orden) }}" required>
-                <div class="hint">Formato sugerido: IN-0007</div>
+                <input
+                  type="text"
+                  name="numero_orden"
+                  value="{{ old('numero_orden', $oc->numero_orden) }}"
+                  @unless($isAdminCanEditFolio) readonly @endunless
+                  required
+                >
+                <div class="hint">
+                  @if($isAdminCanEditFolio)
+                    Puedes ajustar este folio. Si lo colocas <b>mayor o igual</b> que el próximo consecutivo,
+                    el sistema moverá el contador para que la siguiente OC use el siguiente número.
+                    Si lo colocas <b>menor</b>, el contador no se mueve.
+                  @else
+                    Solo administradores pueden modificar el folio.
+                  @endif
+                </div>
                 @error('numero_orden') <div class="err">{{ $message }}</div> @enderror
               </div>
+
               <div>
                 <label>Fecha</label>
                 <input type="date" name="fecha" value="{{ $fechaDefault }}" required>
@@ -259,7 +262,7 @@
               </div>
             </div>
 
-            {{-- === Totales: Subtotal + IVA% (con %), luego IVA y Total === --}}
+            {{-- Totales --}}
             <div class="grid3 row">
               <div>
                 <div class="inline" style="gap:16px">
@@ -308,7 +311,6 @@
       const elTotal = document.getElementById('total');
       const alertBox= document.getElementById('currencyAlert');
 
-      /* ======= MONEDA ÚNICA POR OC ======= */
       function getMasterSelect(){ return tbody.querySelector('.item-row .i-moneda'); }
       function getBaseCurrency(){ const ms = getMasterSelect(); return ms ? ms.value : null; }
       function showCurrencyAlert(){
@@ -328,10 +330,8 @@
         if(!master) return;
 
         if(sel === master){
-          // Cambió la 1ª partida => propagar
           enforceCurrencyOnAll(master.value, master);
         }else{
-          // Otra fila => si difiere, revertir y avisar
           const base = getBaseCurrency();
           if(base && sel.value !== base){
             showCurrencyAlert();
@@ -340,7 +340,6 @@
         }
         recalc();
       }
-      /* ======= FIN MONEDA ÚNICA ======= */
 
       function recalc(){
         let subtotal = 0;
@@ -408,20 +407,15 @@
         tbody.insertAdjacentHTML('beforeend', rowTemplate(idx, base));
         const newRow = tbody.lastElementChild;
         bindRowEvents(newRow);
-        // asegurar coherencia si ya había base
         const master = getMasterSelect();
         if(master && base){ enforceCurrencyOnAll(base); }
         recalc();
       });
 
-      // Bind inicial
       bindRowEvents();
-      // Propagar moneda base desde la primera fila al cargar (por si old() mezcló)
       const baseInit = getBaseCurrency();
       if(baseInit){ enforceCurrencyOnAll(baseInit, getMasterSelect()); }
       recalc();
-
-      // Recalcular al cambiar IVA %
       ivaPct?.addEventListener('input', recalc);
     })();
   </script>

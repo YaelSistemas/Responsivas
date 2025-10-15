@@ -31,6 +31,7 @@
     <col class="c-soli">
     <col class="c-prov">
     <col class="c-conceptos">
+    <col class="col.c-desc">
     <col class="c-monto">
     <col class="c-fact">
     <col class="c-acc">
@@ -43,6 +44,7 @@
       <th>Solicitante</th>
       <th>Proveedor</th>
       <th>Conceptos</th>
+      <th>Descripción</th>
       <th>Monto</th>
       <th>Factura</th>
       <th>Acciones</th>
@@ -77,6 +79,7 @@
 
       $monto = is_numeric($oc->monto) ? number_format($oc->monto, 2) : ($oc->monto ?? '0.00');
       $fact  = $oc->factura ?: '—';
+      $desc  = filled($oc->descripcion) ? trim($oc->descripcion) : '—';
 
       $canView   = auth()->user()->can('oc.view');
       $canEdit   = auth()->user()->can('oc.edit');
@@ -88,6 +91,7 @@
       <td title="{{ $solNombre }}">{{ $solNombre }}</td>
       <td title="{{ $provNombre }}">{{ $provNombre ?: '—' }}</td>
       <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td>
+      <td class="desc" title="{{ $desc }}">{{ $desc }}</td>
       <td title="{{ $monto }}">${{ $monto }}</td>
       <td title="{{ $fact }}">{{ $fact }}</td>
       <td class="actions">

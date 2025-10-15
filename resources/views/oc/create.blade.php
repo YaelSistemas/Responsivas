@@ -32,7 +32,6 @@
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
 
-    /* ====== Tabla partidas ====== */
     .items-table{width:100%; border-collapse:collapse}
     .items-table th,.items-table td{border:1px solid #e5e7eb; padding:8px}
     .items-table th{background:#f9fafb; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280}
@@ -40,51 +39,39 @@
     .right{text-align:right}
     .nowrap{white-space:nowrap}
 
-    /* Columna MONEDA un poco más ancha para que no tape la flecha */
     .items-table td:nth-child(4){ min-width: 110px; }
-
-    /* Select MONEDA con flecha custom y espacio para que no tape el texto */
     .items-table select.i-moneda{
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      appearance: none;
+      -webkit-appearance: none; -moz-appearance: none; appearance: none;
       padding-right: 2.6rem;
       background-image: url("data:image/svg+xml;utf8,<svg fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path d='M19 9l-7 7-7-7'/></svg>");
-      background-repeat: no-repeat;
-      background-position: right .45rem center;
-      background-size: 12px 12px;
-      background-color: #fff;
-      line-height: 1.25;
+      background-repeat: no-repeat; background-position: right .45rem center; background-size: 12px 12px; background-color:#fff; line-height:1.25;
     }
     .items-table select.i-moneda::-ms-expand{ display:none; }
 
-    /* IVA % con sufijo dentro del input */
     .suffix-wrap{ position:relative; display:inline-block; width:100%; }
     .suffix-wrap input{ width:100%; padding-right:2rem; box-sizing:border-box; }
-    .suffix-wrap .suffix{
-      position:absolute; right:.5rem; top:50%; transform:translateY(-50%);
-      color:#6b7280; pointer-events:none; font-weight:600;
-    }
+    .suffix-wrap .suffix{ position:absolute; right:.5rem; top:50%; transform:translateY(-50%); color:#6b7280; pointer-events:none; font-weight:600; }
 
     .w-18{ width:120px; }
     .inline{ display:flex; align-items:flex-end; gap:12px; }
 
-    /* Mensaje moneda única */
-    .currency-alert{
-      display:none; margin-top:8px; padding:8px 10px; border-radius:8px;
-      background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px;
-    }
+    .currency-alert{ display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px; }
     .currency-alert.show{ display:block; }
   </style>
 
   @php
-    $hoy = now()->toDateString();
     $proveedores = $proveedores ?? collect();
     $defaultIva = old('iva_porcentaje', 16);
-    // Usa 'precio' (coincide con la validación backend: items.*.precio)
     $oldItems = old('items', [
       ['cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>'']
     ]);
+
+    // Solo admin puede editar No. de orden
+    $isAdmin = Auth::user()->hasRole('Administrador');
+
+    // Viene del controlador leyendo oc_counters.last_seq + 1
+    $numeroSugerido = $numeroSugerido ?? '';
+    $numeroInicial  = old('numero_orden', $numeroSugerido);
   @endphp
 
   <div class="zoom-outer">
@@ -109,13 +96,29 @@
             <div class="grid2 row">
               <div>
                 <label>No. de orden</label>
-                <input type="text" name="numero_orden" value="{{ old('numero_orden', $numeroSugerido ?? '') }}" readonly>
-                <div class="hint">Se genera automáticamente según tus iniciales y consecutivo.</div>
+
+                <input
+                  type="text"
+                  name="numero_orden"
+                  value="{{ $numeroInicial }}"
+                  @unless($isAdmin) readonly @endunless
+                >
+
+                @if($isAdmin)
+                  <div class="hint">
+                    Consecutivo sugerido: <code>{{ $numeroSugerido }}</code>.
+                    <button type="button" id="resetNoOrden" class="btn-gray" style="margin-left:.4rem;padding:.2rem .5rem">Usar sugerido</button>
+                  </div>
+                @else
+                  <div class="hint">El folio se asignará al guardar y puede cambiar si alguien guarda antes.</div>
+                @endif
+
                 @error('numero_orden') <div class="err">{{ $message }}</div> @enderror
               </div>
+
               <div>
                 <label>Fecha</label>
-                <input type="date" name="fecha" value="{{ old('fecha', $hoy) }}" required>
+                <input type="date" name="fecha" value="{{ old('fecha') }}" required>
                 @error('fecha') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>
@@ -180,13 +183,12 @@
                     <td><input type="text" name="items[{{ $idx }}][unidad]" value="{{ $it['unidad'] }}"></td>
                     <td><input type="text" name="items[{{ $idx }}][concepto]" value="{{ $it['concepto'] }}"></td>
                     <td>
+                      @php $mon = $it['moneda'] ?? 'MXN'; @endphp
                       <select name="items[{{ $idx }}][moneda]" class="i-moneda">
-                        @php $mon = $it['moneda'] ?? 'MXN'; @endphp
                         <option value="MXN" @selected($mon==='MXN')>MXN</option>
                         <option value="USD" @selected($mon==='USD')>USD</option>
                       </select>
                     </td>
-                    {{-- precio (coincide con validación) --}}
                     <td><input type="number" step="0.0001" min="0" name="items[{{ $idx }}][precio]" class="i-precio right" value="{{ $it['precio'] ?? $it['precio_unitario'] ?? '' }}"></td>
                     <td><input type="number" step="0.0001" min="0" name="items[{{ $idx }}][importe]" class="i-importe right" value="{{ $it['importe'] }}" readonly></td>
                     <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
@@ -241,6 +243,12 @@
 
   <script>
     (function(){
+      // Botón "Usar sugerido" (solo aparece para admin)
+      document.getElementById('resetNoOrden')?.addEventListener('click', function(){
+        const inp = document.querySelector('input[name="numero_orden"]');
+        if(inp){ inp.value = @json($numeroSugerido); }
+      });
+
       const tbody  = document.getElementById('itemsTbody');
       const addBtn = document.getElementById('addRow');
       const ivaPct = document.getElementById('ivaPct');
@@ -249,53 +257,36 @@
       const elTotal    = document.getElementById('total');
       const alertBox   = document.getElementById('currencyAlert');
 
-      /** ========= MONEDA ÚNICA POR OC ========= **/
-      function getMasterSelect(){
-        return tbody.querySelector('.item-row .i-moneda'); // primer select
-      }
-      function getBaseCurrency(){
-        const ms = getMasterSelect();
-        return ms ? ms.value : null;
-      }
+      function getMasterSelect(){ return tbody.querySelector('.item-row .i-moneda'); }
+      function getBaseCurrency(){ const ms = getMasterSelect(); return ms ? ms.value : null; }
       function showCurrencyAlert(){
         if(!alertBox) return;
         alertBox.classList.add('show');
-        // ocultar después de 3s
         clearTimeout(showCurrencyAlert._t);
         showCurrencyAlert._t = setTimeout(()=>alertBox.classList.remove('show'), 3000);
       }
       function enforceCurrencyOnAll(base, exceptEl=null){
         tbody.querySelectorAll('.i-moneda').forEach(sel => {
-          if(sel !== exceptEl && sel.value !== base){
-            sel.value = base;
-          }
+          if(sel !== exceptEl && sel.value !== base){ sel.value = base; }
         });
       }
       function onCurrencyChange(e){
-        const sel = e.target;
-        const master = getMasterSelect();
-        if(!master){ return; }
-
+        const sel = e.target, master = getMasterSelect();
+        if(!master) return;
         if(sel === master){
-          // Cambió la 1ª partida: propagar a todas
           enforceCurrencyOnAll(master.value, master);
         }else{
-          // Cualquier otra: si no coincide, revertir y avisar
           const base = getBaseCurrency();
-          if(base && sel.value !== base){
-            showCurrencyAlert();
-            sel.value = base;
-          }
+          if(base && sel.value !== base){ showCurrencyAlert(); sel.value = base; }
         }
-        recalc(); // por si cambia símbolo/interpretación después en backend
+        recalc();
       }
-      /** ========= FIN MONEDA ÚNICA ========= **/
 
       function recalc(){
         let subtotal = 0;
         tbody.querySelectorAll('tr.item-row').forEach(tr=>{
-          const q   = parseFloat(tr.querySelector('.i-cantidad')?.value || '0');
-          const p   = parseFloat(tr.querySelector('.i-precio')?.value || '0');
+          const q = parseFloat(tr.querySelector('.i-cantidad')?.value || '0');
+          const p = parseFloat(tr.querySelector('.i-precio')?.value || '0');
           const imp = (q*p) || 0;
           const iImp = tr.querySelector('.i-importe');
           if(iImp){ iImp.value = imp.toFixed(2); }
@@ -352,29 +343,19 @@
 
       addBtn?.addEventListener('click', ()=>{
         const idx = tbody.querySelectorAll('tr.item-row').length;
-        const base = getBaseCurrency(); // usa moneda maestra actual
+        const base = getBaseCurrency();
         tbody.insertAdjacentHTML('beforeend', rowTemplate(idx, base));
         const newRow = tbody.lastElementChild;
         bindRowEvents(newRow);
-
-        // Asegurar que respete base (por si no había master aún)
         const master = getMasterSelect();
-        if(master && base){
-          enforceCurrencyOnAll(base);
-        }
+        if(master && base){ enforceCurrencyOnAll(base); }
         recalc();
       });
 
-      // Bind inicial
       bindRowEvents();
-      // Si ya hay filas cargadas (old()), fija y propaga base desde la primera
       const baseInit = getBaseCurrency();
-      if(baseInit){
-        enforceCurrencyOnAll(baseInit, getMasterSelect());
-      }
+      if(baseInit){ enforceCurrencyOnAll(baseInit, getMasterSelect()); }
       recalc();
-
-      // Recalcular IVA al cambiar porcentaje
       ivaPct?.addEventListener('input', recalc);
     })();
   </script>
