@@ -54,6 +54,8 @@ class OrdenCompraController extends Controller implements HasMiddleware
             'solicitante',
             'proveedor',
             'detalles:id,orden_compra_id,concepto',
+            'creator:id,name',   
+            'updater:id,name',   
         ])->where('empresa_tenant_id', $tenantId);
 
         if ($q !== '') {
@@ -268,6 +270,8 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $payload['proveedor'] = $prov->nombre;
         }
 
+        $payload['created_by'] = Auth::id();
+
         /** @var \App\Models\OrdenCompra $oc */
         $oc = \App\Models\OrdenCompra::create($payload);
 
@@ -305,7 +309,8 @@ class OrdenCompraController extends Controller implements HasMiddleware
         }
 
         // --- Total en cabecera
-        $oc->update(['monto' => $totalOC]);
+        $oc->monto = $totalOC;
+        $oc->saveQuietly(); 
 
         return $oc;
     });
@@ -359,7 +364,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $request->validate([
             'items'            => ['required','array','min:1'],
             'items.*.cantidad' => ['required','numeric','min:0.001'],
-            'items.*.unidad'   => ['nullable','string','max:50'],
+            'items.*.unidad'   => ['required','string','max:50'],
             'items.*.concepto' => ['required','string','max:500'],
             'items.*.moneda'   => ['required','string','max:10'],
             'items.*.precio'   => ['required','numeric','min:0'],
@@ -405,6 +410,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
 
             // 3) Cabecera
+            $data['updated_by'] = Auth::id();
             $oc->update($data);
 
             // 4) Reemplazar partidas
@@ -442,7 +448,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
 
             // 5) Total cabecera
-            $oc->update(['monto' => $totalOC]);
+            $oc->update(['monto' => $totalOC, 'updated_by' => Auth::id()]);
 
             // 6) Si moviste hacia atrás, baja el contador al tope real (MAX(seq) en BD)
             if ($mueveAtras) {

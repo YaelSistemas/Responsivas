@@ -22,7 +22,7 @@
     @media (max-width:768px){ input,select,textarea{ font-size:16px } }
 
     /* ====== Estilos propios ====== */
-    .page-wrap{max-width:1650px;margin:0 auto}
+    .page-wrap{max-width:1750px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
@@ -48,6 +48,8 @@
     .tbl col.c-desc  { width:22% }  /* esta sí puede wrapear */
     .tbl col.c-monto { width:10% }
     .tbl col.c-fact  { width:6%  }
+    .tbl col.c-creo  { width:10% }
+    .tbl col.c-edito { width:10% }
     .tbl col.c-acc   { width:4%  }
 
     /* Descripción permite salto (lo demás 1 línea) */

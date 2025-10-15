@@ -4,6 +4,7 @@
 
   $ocs = $ocs ?? ($rows ?? $paginator ?? $items ?? collect());
   $isPaginator = $ocs instanceof AbstractPaginator;
+  $isAdmin = auth()->user()?->hasRole('Administrador');
 @endphp
 
 <style>
@@ -31,9 +32,13 @@
     <col class="c-soli">
     <col class="c-prov">
     <col class="c-conceptos">
-    <col class="col.c-desc">
+    <col class="c-desc">
     <col class="c-monto">
     <col class="c-fact">
+    @if($isAdmin)
+      <col class="c-creo">
+      <col class="c-edito">
+    @endif    
     <col class="c-acc">
   </colgroup>
 
@@ -47,6 +52,10 @@
       <th>Descripción</th>
       <th>Monto</th>
       <th>Factura</th>
+      @if($isAdmin)
+        <th>Creada por</th>
+        <th>Editada por</th>
+      @endif     
       <th>Acciones</th>
     </tr>
   </thead>
@@ -81,6 +90,17 @@
       $fact  = $oc->factura ?: '—';
       $desc  = filled($oc->descripcion) ? trim($oc->descripcion) : '—';
 
+      $creadorNombre = $oc->creator?->nombre
+      ?? $oc->creator?->name
+      ?? '—';
+
+      $editorNombre = $oc->updater?->nombre
+          ?? $oc->updater?->name
+          ?? '—';
+
+      $creadaEn = optional($oc->created_at)->format('d-m-Y H:i');
+      $editadaEn = optional($oc->updated_at)->format('d-m-Y H:i');
+
       $canView   = auth()->user()->can('oc.view');
       $canEdit   = auth()->user()->can('oc.edit');
       $canDelete = auth()->user()->can('oc.delete');
@@ -94,6 +114,10 @@
       <td class="desc" title="{{ $desc }}">{{ $desc }}</td>
       <td title="{{ $monto }}">${{ $monto }}</td>
       <td title="{{ $fact }}">{{ $fact }}</td>
+      @if($isAdmin)
+        <td title="Creada: {{ $creadaEn }}">{{ $creadorNombre }}</td>
+        <td title="Editada: {{ $editadaEn }}">{{ $editorNombre }}</td>
+      @endif
       <td class="actions">
         @can('oc.view')
           <a href="{{ route('oc.show', $oc) }}" title="Ver">

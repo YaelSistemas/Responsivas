@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class OrdenCompra extends Model
 {
     protected $table = 'ordenes_compra';
@@ -17,6 +17,7 @@ class OrdenCompra extends Model
         'descripcion',
         'monto',
         'factura',
+        'created_by','updated_by',
     ];
 
     protected $casts = [
@@ -42,5 +43,26 @@ class OrdenCompra extends Model
     public function detalles()
     {
     return $this->hasMany(\App\Models\OrdenCompraDetalle::class, 'orden_compra_id');
+    }
+
+    protected static function booted()
+    {
+        static::creating(function ($oc) {
+            if (auth()->check()) $oc->created_by = $oc->created_by ?: auth()->id();
+        });
+
+        static::updating(function ($oc) {
+            if (auth()->check()) $oc->updated_by = auth()->id();
+        });
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'updated_by');
     }
 }
