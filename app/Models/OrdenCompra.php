@@ -100,4 +100,9 @@ class OrdenCompra extends Model
             default             => 'tag-blue',
         };
     }
+
+    public function adjuntos()
+    {
+        return $this->hasMany(\App\Models\OcAdjunto::class, 'orden_compra_id');
+    }
 }

@@ -95,6 +95,10 @@
       padding-top:.4rem; padding-bottom:.4rem;
       padding-left:.35rem; padding-right:.35rem;
     }
+
+    /* Base del modal (por si el modal no trae su <style> embebido) */
+    .oc-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .oc-modal{background:#fff;width:min(960px,94vw);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
   </style>
 
   <div class="zoom-outer">
@@ -274,4 +278,61 @@
       });
     })();
   </script>
+
+  <script>
+(function(){
+  const wrap = document.getElementById('oc-wrap');
+
+  // Abre el modal
+  wrap.addEventListener('click', async (ev)=>{
+    const btn = ev.target.closest('button[data-open-adjuntos]');
+    if(!btn) return;
+
+    const url = btn.getAttribute('data-open-adjuntos');
+
+    try{
+      const res = await fetch(url, { headers:{ 'X-Requested-With':'XMLHttpRequest' } });
+      const html = (await res.text()).trim();
+
+      // Crea un contenedor temporal con TODO el HTML
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      // 1) Inserta todos los nodos (no solo el primero)
+      // 2) Re-ejecuta los <script> embebidos para que se enlacen los eventos
+      const nodes = Array.from(tmp.childNodes);
+      for (const n of nodes) {
+        if (n.nodeType === 1 && n.tagName === 'SCRIPT') {
+          const s = document.createElement('script');
+          // Copiamos inline o src
+          if (n.src) { s.src = n.src; } else { s.textContent = n.textContent; }
+          // Copiamos atributos tipo type, defer si los hubiera
+          if (n.type) s.type = n.type;
+          document.body.appendChild(s);
+        } else {
+          document.body.appendChild(n);
+        }
+      }
+
+      // Cerrar al hacer click fuera o en el botón ✕, si tu modal no trae ya su propio script
+      document.body.addEventListener('click', function onClose(e){
+        const backdrop = document.querySelector('.oc-modal-backdrop');
+        if(!backdrop) { document.body.removeEventListener('click', onClose); return; }
+        const closeBtn = e.target.closest('.oc-modal-close');
+        if (e.target === backdrop || closeBtn) {
+          backdrop.remove();
+          document.body.removeEventListener('click', onClose);
+        }
+      });
+
+    }catch(err){
+      console.error(err);
+      alert('No se pudo abrir los adjuntos.');
+    }
+  });
+})();
+</script>
+
+
+
 </x-app-layout>

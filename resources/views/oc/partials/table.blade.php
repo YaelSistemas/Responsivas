@@ -46,10 +46,10 @@
     text-align:center; border:1px solid transparent;
   }
 
-  /* Colores */
-  .tag-blue  { background:#e0f2fe; color:#075985; border-color:#bae6fd; }  /* Abierta */
-  .tag-green { background:#dcfce7; color:#166534; border-color:#bbf7d0; }  /* Pagada */
-  .tag-red   { background:#fee2e2; color:#991b1b; border-color:#fecaca; }  /* Cancelada */
+  /* Colores (unificados con borde) */
+  .tag-blue  { background:#e0f2fe; color:#075985; border:1px solid #bae6fd; }  /* Abierta */
+  .tag-green { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }  /* Pagada */
+  .tag-red   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }  /* Cancelada */
 
   .tag-select:focus{ outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.25); }
 
@@ -57,7 +57,24 @@
   .tbl col.c-estado { width:7% }
   .tbl td.estado{
     text-align:center; padding-left:.35rem; padding-right:.35rem;
+    padding-top:.4rem; padding-bottom:.4rem;
   }
+
+  /* ===== Factura / Clip ===== */
+  .tbl td.factura{ text-align:center; }
+  .clip-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    gap:.25rem; border-radius:9999px; border:1px solid transparent;
+    padding:.25rem .55rem; line-height:1; font-weight:600;
+    transition:all .2s ease; background:#f3f4f6; color:#9ca3af; border-color:#e5e7eb;
+    cursor:pointer;
+  }
+  .clip-btn .clip-count{ font-size:.8rem; line-height:1; }
+  .clip-btn.has-adj{
+    background:#eef2ff; color:#3730a3; border-color:#c7d2fe;
+  }
+  .clip-btn.has-adj:hover{ background:#e0e7ff; }
+  .clip-btn.no-adj{ /* gris */ }
 </style>
 
 <table class="tbl">
@@ -134,6 +151,12 @@
       $editadaEn = optional($oc->updated_at)->format('d-m-Y H:i');
 
       $puedeCambiar = auth()->user()->hasAnyRole(['Administrador', 'Compras Superior']);
+      $puedeAdjuntar = $puedeCambiar || auth()->user()->can('oc.edit');
+
+      // contador con withCount() o fallback
+      $adjCount = $oc->adjuntos_count ?? (method_exists($oc, 'adjuntos') ? $oc->adjuntos()->count() : 0);
+      $hasAdj = $adjCount > 0;
+
       $canView   = auth()->user()->can('oc.view');
       $canEdit   = auth()->user()->can('oc.edit');
       $canDelete = auth()->user()->can('oc.delete');
@@ -147,9 +170,23 @@
       <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td>
       <td class="desc" title="{{ $desc }}">{{ $desc }}</td>
       <td title="{{ $monto }}">${{ $monto }}</td>
-      <td title="{{ $fact }}">{{ $fact }}</td>
 
-      {{-- Estado --}}
+      {{-- ===== Factura + Clip ===== --}}
+      <td class="factura">
+        <button
+          type="button"
+          class="clip-btn {{ $hasAdj ? 'has-adj' : 'no-adj' }}"
+          data-open-adjuntos="{{ route('oc.adjuntos.modal', $oc) }}"
+          title="{{ $hasAdj ? 'Ver adjuntos' : 'Sin archivos adjuntos (clic para agregar)' }}"
+        >
+          📎
+          @if($hasAdj)
+            <span class="clip-count">{{ $adjCount }}</span>
+          @endif
+        </button>
+      </td>
+
+      {{-- ===== Estado ===== --}}
       <td class="estado">
         @if ($puedeCambiar)
           <select data-estado
@@ -168,8 +205,18 @@
       </td>
 
       @if($isAdmin)
-        <td title="Creada: {{ $creadaEn }}">{{ $creadorNombre }}</td>
-        <td title="Editada: {{ $editadaEn }}">{{ $editorNombre }}</td>
+        <td title="Creada: {{ $creadaEn }}">
+          <div style="display:flex;flex-direction:column;align-items:center;line-height:1.2">
+            <strong style="color:#111827">{{ $creadorNombre }}</strong>
+            <span style="font-size:.75rem;color:#6b7280">{{ $creadaEn }}</span>
+          </div>
+        </td>
+        <td title="Editada: {{ $editadaEn }}">
+          <div style="display:flex;flex-direction:column;align-items:center;line-height:1.2">
+            <strong style="color:#111827">{{ $editorNombre }}</strong>
+            <span style="font-size:.75rem;color:#6b7280">{{ $editadaEn }}</span>
+          </div>
+        </td>
       @endif
 
       <td class="actions">

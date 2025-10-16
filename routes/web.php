@@ -15,6 +15,7 @@ use App\Http\Controllers\ResponsivaController;
 use App\Http\Controllers\PublicResponsivaController;
 use App\Http\Controllers\OrdenCompraController;
 use App\Http\Controllers\ProveedorController;
+use App\Http\Controllers\OcAdjuntoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -212,4 +213,15 @@ Route::middleware(['auth'])->group(function () {
         ->middleware(['auth','permission:proveedores.delete'])
         ->whereNumber('proveedor')
         ->name('proveedores.destroy');
+
+    
+        Route::middleware(['auth'])->group(function () {
+    // Modal (HTML)
+    Route::get('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'modal'])->name('oc.adjuntos.modal');
+    // Subida múltiple
+    Route::post('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'store'])->name('oc.adjuntos.store');
+    // Descargar / Eliminar
+    Route::get('/oc/adjuntos/{adjunto}/download', [OcAdjuntoController::class, 'download'])->name('oc.adjuntos.download');
+    Route::delete('/oc/adjuntos/{adjunto}', [OcAdjuntoController::class, 'destroy'])->name('oc.adjuntos.destroy');
+});
 });
