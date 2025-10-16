@@ -164,7 +164,7 @@
     .items .bigger3  { font-size:16px; font-weight:700; }
     .items .bigger4  { font-size:18px; font-weight:700; }
 
-    /* Reglas extra (las de siempre) */
+    /* Reglas extra */
     .items tr.extra.e1 td { border-bottom:0 !important; }
     .items tr.extra.e2 td,
     .items tr.extra.e3 td { border-top:0 !important; border-bottom:0 !important; }
@@ -174,7 +174,6 @@
     .items tr.extra.e6 td { border-left:0 !important; border-right:0 !important; border-bottom:0 !important; }
     .items tr.extra.e7 td,
     .items tr.extra.e8 td { border:0 !important; }
-
     .items tr.extra.e1 td:last-child,
     .items tr.extra.e2 td:last-child,
     .items tr.extra.e3 td:last-child,
@@ -193,6 +192,40 @@
       border-top: 0 !important;
       border-bottom: 1px solid #111 !important;
       padding:0 !important;
+    }
+
+    /* Fila de NOTAS */
+    .items tr.notes td{
+      border-top: 0 !important;
+      border-bottom: 0 !important;
+    }
+
+    /* Col 1: borde de separación con 2 */
+    .items tr.notes td:first-child{
+      border-right: 1px solid #111 !important;
+    }
+
+    /* Bloque notas (cols 2–3): sin bordes laterales */
+    .items tr.notes td.note-cell{
+      border-left: 0 !important;
+      border-right: 0 !important;
+      text-align: center;
+      padding-left: 6px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    /* Col 4 (3er <td> en la fila de notas): bordes izquierdo y derecho */
+    .items tr.notes td:nth-child(3){
+      border-left: 1px solid #111 !important;   /* separación 3|4 */
+      border-right: 1px solid #111 !important;  /* separación 4|5  ← agregado */
+    }
+
+
+    /* Col 5 (último <td>): borde derecho exterior */
+    .items tr.notes td:last-child{
+      border-left: 0 !important;
+      border-right: 1px solid #111 !important;
     }
 
     /* ====== Print ====== */
@@ -260,7 +293,6 @@
           </table>
 
           {{-- ========= PROVEEDOR / ORDEN ========= --}}
-          <!-- Proveedor en MAYÚSCULAS y "ORDEN DE COMPRA" centrado -->
           <table class="tbl meta-grid upper">
             <colgroup>
               <col style="width:8%">
@@ -329,19 +361,18 @@
 
             $moneda = $detalles->first()->moneda ?? 'MXN';
 
-            $baseBlocks   = 9;
+            $baseBlocks   = 9;                            // ← mínimo visible
             $totalItems   = $detalles->count();
             $blocksToDraw = max($baseBlocks, $totalItems);
           @endphp
 
-          <!-- Partidas en MAYÚSCULAS -->
           <table class="tbl items upper">
             <colgroup>
-              <col style="width:10%">  {{-- Cantidad --}}
-              <col style="width:10%">  {{-- Unidad --}}
-              <col style="width:48%">  {{-- Concepto --}}
-              <col style="width:12%">  {{-- Precio --}}
-              <col style="width:20%">  {{-- Importe --}}
+              <col style="width:10%"><!-- Cantidad -->
+              <col style="width:10%"><!-- Unidad   -->
+              <col style="width:48%"><!-- Concepto -->
+              <col style="width:12%"><!-- Precio   -->
+              <col style="width:20%"><!-- Importe  -->
             </colgroup>
 
             <tr>
@@ -395,12 +426,22 @@
               @php if ($d) $idxDetalle++; @endphp
             @endfor
 
+            {{-- NOTAS (solo en columnas 2 y 3) --}}
+            @php $notas = trim((string)($oc->notas ?? '')); @endphp
+            <tr class="notes no-upper">
+              <td>&nbsp;</td>
+              <td colspan="2" class="note-cell">{!! $notas !== '' ? nl2br(e($notas)) : '&nbsp;' !!}</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
             @php
               [$sSym, $sVal] = $moneyParts($sumSubtotal, $moneda);
               [$vSym, $vVal] = $moneyParts($sumIva,       $moneda);
               [$tSym, $tVal] = $moneyParts($sumTotal,     $moneda);
             @endphp
 
+            {{-- ===== TOTALES ===== --}}
             <tr class="summary">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
               <td class="right"><b>SUBTOTAL</b></td>
@@ -423,9 +464,7 @@
               </td>
             </tr>
 
-            {{-- ===== 8 filas extra =====
-                 NOTA: agregamos .no-upper para que estas filas NO hereden mayúsculas.
-                 Solo el nombre del usuario lleva .upper-force. --}}
+            {{-- ===== 8 filas extra ===== --}}
             <tr class="extra e1 no-upper">
               <td colspan="2" class="center xxsmall"><b>DEPTO. DE COMPRAS</b></td>
               <td colspan="3" class="xxsmall"><b>OBSERVACIONES:</b></td>

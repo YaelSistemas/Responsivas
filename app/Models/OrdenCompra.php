@@ -15,6 +15,7 @@ class OrdenCompra extends Model
         'solicitante_id',
         'proveedor_id',
         'descripcion',
+        'notas',
         'monto',
         'factura',
         'created_by','updated_by',

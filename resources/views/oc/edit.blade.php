@@ -291,6 +291,14 @@
               </div>
             </div>
 
+            <div class="row">
+              <div style="width:100%">
+                <label>Notas</label>
+                <textarea name="notas" rows="4" placeholder="Notas internas u observaciones">{{ old('notas', $oc->notas ?? '') }}</textarea>
+                @error('notas') <div class="err">{{ $message }}</div> @enderror
+              </div>
+            </div>
+
             <div class="grid2">
               <a href="{{ route('oc.index') }}" class="btn-cancel">Cancelar</a>
               <button type="submit" class="btn">Actualizar orden</button>

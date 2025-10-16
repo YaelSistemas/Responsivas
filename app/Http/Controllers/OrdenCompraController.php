@@ -155,6 +155,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
         'solicitante_id' => ['required', 'exists:colaboradores,id'],
         'proveedor_id'   => ['required', 'exists:proveedores,id'],
         'descripcion'    => ['nullable', 'string'],
+        'notas' => ['nullable','string','max:2000'],
         'monto'          => ['nullable', 'numeric', 'min:0'],
         'factura'        => ['nullable', 'string', 'max:100'],
         'numero_orden'   => ['nullable', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')],
@@ -356,6 +357,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
             'solicitante_id' => ['required', 'exists:colaboradores,id'],
             'proveedor_id'   => ['required', 'exists:proveedores,id'],
             'descripcion'    => ['nullable', 'string'],
+            'notas' => ['nullable','string','max:2000'],
             'monto'          => ['nullable', 'numeric', 'min:0'], // se recalcula
             'factura'        => ['nullable', 'string', 'max:100'],
         ]);

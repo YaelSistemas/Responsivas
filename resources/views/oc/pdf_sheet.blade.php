@@ -75,37 +75,37 @@
   $moneda      = $detalles->first()->moneda ?? 'MXN';
 
   // 13 filas base; si hay más, se generan dinámicamente
-  $baseBlocks   = 9;
+  $baseBlocks   = 13;
   $blocksToDraw = max($baseBlocks, $detalles->count());
 
   /* ===== Layout ===== */
   $rows = $detalles->count();
 
-  $PAGE_MARGIN = '10mm';
-  $FS_BASE = 12; $PAD = 6; $ROW_H = 26; $SPACER_H = 12;
-  $HERO_ROW_H = 36; $LOGO_MAX_H = 105; $LOGO_MAX_W = 220;
-  $TITLE_MAIN = 14; $TITLE_SUB = 12;
+  $PAGE_MARGIN = '6mm';
+    $FS_BASE = 11;  $PAD = 3; $ROW_H = 18; $SPACER_H = 4;
+    $HERO_ROW_H = 24; $LOGO_MAX_H = 72; $LOGO_MAX_W = 170;
+    $TITLE_MAIN = 11; $TITLE_SUB = 9;
 
-  if ($rows > 9 && $rows <= 16) {
-    $PAGE_MARGIN = '9mm';
-    $FS_BASE = 11; $PAD = 5; $ROW_H = 22; $SPACER_H = 8;
-    $HERO_ROW_H = 32; $LOGO_MAX_H = 95; $LOGO_MAX_W = 200;
-    $TITLE_MAIN = 13; $TITLE_SUB = 11;
+  if ($rows > 7 && $rows <= 12) {
+    $PAGE_MARGIN = '6mm';
+    $FS_BASE = 10;  $PAD = 3; $ROW_H = 18; $SPACER_H = 4;
+    $HERO_ROW_H = 24; $LOGO_MAX_H = 72; $LOGO_MAX_W = 170;
+    $TITLE_MAIN = 11; $TITLE_SUB = 9;
   } elseif ($rows > 16 && $rows <= 22) {
-    $PAGE_MARGIN = '8mm';
-    $FS_BASE = 10; $PAD = 4; $ROW_H = 20; $SPACER_H = 4;
-    $HERO_ROW_H = 28; $LOGO_MAX_H = 85; $LOGO_MAX_W = 190;
-    $TITLE_MAIN = 12; $TITLE_SUB = 10;
+    $PAGE_MARGIN = '6mm';
+    $FS_BASE = 10;  $PAD = 3; $ROW_H = 18; $SPACER_H = 0;
+    $HERO_ROW_H = 24; $LOGO_MAX_H = 72; $LOGO_MAX_W = 170;
+    $TITLE_MAIN = 11; $TITLE_SUB = 9;
   } elseif ($rows > 22) {
     $PAGE_MARGIN = '6mm';
-    $FS_BASE = 9;  $PAD = 3; $ROW_H = 18; $SPACER_H = 0;
+    $FS_BASE = 11;  $PAD = 3; $ROW_H = 18; $SPACER_H = 0;
     $HERO_ROW_H = 24; $LOGO_MAX_H = 72; $LOGO_MAX_W = 170;
     $TITLE_MAIN = 11; $TITLE_SUB = 9;
   }
 
   // Relleno visual para OCs cortas (≤13)
-  if ($rows <= 9) {
-    $SPACER_H = 6;                // separadores pequeños entre filas
+  if ($rows <= 13) {
+    $SPACER_H = 4;                // separadores pequeños entre filas
     $ROW_H    = 26;               // conserva altura estándar
   }
 
@@ -198,6 +198,35 @@
       border-top:0 !important; border-bottom:1px solid #111 !important; padding:0 !important;
     }
 
+    /* ===== Fila de NOTAS (PDF) ===== */
+    .items tr.notes td{
+      border-top: 0 !important;        /* sin línea arriba */
+      border-bottom: 0 !important;     /* sin línea abajo */
+    }
+    /* (1) Separación 1|2: borde derecho de col 1 */
+    .items tr.notes td:first-child{
+      border-right: 1px solid #111 !important;
+    }
+    /* (2) Bloque notas (cols 2–3): sin bordes laterales */
+    .items tr.notes td.note-cell{
+      border-left: 0 !important;
+      border-right: 0 !important;
+      text-align: center;
+      padding-left: {{ max(4,$PAD-2) }}px;
+      font-size: {{ max(10,$FS_BASE-1) }}px;
+      line-height: 1.2;
+    }
+    /* (3) Separación 3|4: borde izquierdo de la col 4 (3er <td> por el colspan) */
+    .items tr.notes td:nth-child(3){
+      border-left: 1px solid #111 !important;
+      border-right: 0 !important;
+    }
+    /* (4) Separación 4|5 + borde derecho exterior en col 5 (último <td>) */
+    .items tr.notes td:last-child{
+      border-left: 1px solid #111 !important;   /* 4|5 */
+      border-right: 1px solid #111 !important;  /* borde exterior */
+    }
+
     @if (!$DRAW_SPACERS)
       .items tr.spacer{ display:none; }
     @endif
@@ -269,6 +298,17 @@
 
       @php if ($d) $idxDetalle++; @endphp
     @endfor
+
+    {{-- ======= NOTAS (entre partidas y totales) ======= --}}
+    @php $notas = trim((string)($oc->notas ?? '')); @endphp
+    <tr class="notes no-upper">
+      <td>&nbsp;</td>  {{-- Col 1 vacía, mantiene borde 1|2 --}}
+      <td colspan="2" class="note-cell">
+        {!! $notas !== '' ? nl2br(e($notas)) : '&nbsp;' !!}
+      </td>
+      <td>&nbsp;</td>  {{-- Col 4 con borde izquierdo (3|4) --}}
+      <td>&nbsp;</td>  {{-- Col 5 con borde izquierdo (4|5) y derecho exterior --}}
+    </tr>
 
     @php
       [$sSym, $sVal] = $moneyParts($sumSubtotal, $moneda);

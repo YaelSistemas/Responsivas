@@ -41,10 +41,11 @@
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
 
     /* Anchos de columnas (usa <colgroup> en el partial) */
-    .tbl col.c-no    { width:10% }
-    .tbl col.c-fecha { width:10% }
+    .tbl col.c-no    { width:8% }
+    .tbl col.c-fecha { width:8% }
     .tbl col.c-soli  { width:20% }
     .tbl col.c-prov  { width:18% }
+    .tbl col.c-conceptos  { width:18% }
     .tbl col.c-desc  { width:22% }  /* esta sí puede wrapear */
     .tbl col.c-monto { width:10% }
     .tbl col.c-fact  { width:6%  }
