@@ -181,7 +181,11 @@ Route::middleware(['auth'])->group(function () {
         ->middleware(['auth','permission:oc.delete'])
         ->whereNumber('oc')
         ->name('oc.destroy');
-
+        
+    Route::patch('/oc/{oc}/estado', [OrdenCompraController::class, 'updateEstado'])
+    ->middleware(['auth'])
+    ->name('oc.estado');
+    
     /*
     |--------------------  Proveedores (con permisos)  --------------------
     */

@@ -616,4 +616,36 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $folios->setNextSeq($this->tenantId(), (int)$data['next_seq']);
         return back()->with('ok', "Siguiente consecutivo fijado a {$data['next_seq']}");
     }
+
+    public function updateEstado(Request $request, OrdenCompra $oc)
+    {
+        $user = Auth::user();
+
+        // Solo Administrador o Compras Superior pueden cambiar estado
+        if (!$user->hasAnyRole(['Administrador', 'Compras Superior'])) {
+            abort(403, 'No tienes permisos para cambiar el estado de una orden.');
+        }
+
+        $data = $request->validate([
+            'estado' => ['required', Rule::in(OrdenCompra::ESTADOS)]
+        ]);
+
+        $oc->estado = $data['estado'];
+        if (Schema::hasColumn($oc->getTable(), 'updated_by')) {
+            $oc->updated_by = $user->id;
+        }
+        $oc->save();
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'ok'     => true,
+                'estado' => $oc->estado,
+                'label'  => $oc->estado_label,
+                'class'  => $oc->estado_class,
+                'msg'    => 'Estado actualizado correctamente.',
+            ]);
+        }
+
+        return back()->with('updated', true);
+    }
 }
