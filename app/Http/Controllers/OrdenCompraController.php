@@ -149,19 +149,20 @@ class OrdenCompraController extends Controller implements HasMiddleware
     $tenantId = $this->tenantId();
     $tabla    = (new OrdenCompra)->getTable();
 
-    // Validación cabecera
+    // ✅ Validación cabecera (agrego iva_porcentaje)
     $data = $request->validate([
-        'fecha'          => ['required', 'date'],
-        'solicitante_id' => ['required', 'exists:colaboradores,id'],
-        'proveedor_id'   => ['required', 'exists:proveedores,id'],
-        'descripcion'    => ['nullable', 'string'],
-        'notas' => ['nullable','string','max:2000'],
-        'monto'          => ['nullable', 'numeric', 'min:0'],
-        'factura'        => ['nullable', 'string', 'max:100'],
-        'numero_orden'   => ['nullable', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')],
+        'fecha'           => ['required', 'date'],
+        'solicitante_id'  => ['required', 'exists:colaboradores,id'],
+        'proveedor_id'    => ['required', 'exists:proveedores,id'],
+        'descripcion'     => ['nullable', 'string'],
+        'notas'           => ['nullable','string','max:2000'],
+        'monto'           => ['nullable', 'numeric', 'min:0'],
+        'factura'         => ['nullable', 'string', 'max:100'],
+        'numero_orden'    => ['nullable', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')],
+        'iva_porcentaje'  => ['nullable','numeric','min:0','max:100'], // ← nuevo
     ]);
 
-    // Validación partidas
+    // Validación partidas (sin cambios funcionales)
     $request->validate([
         'items'            => ['required','array','min:1'],
         'items.*.cantidad' => ['required','numeric','min:0.001'],
@@ -169,7 +170,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
         'items.*.concepto' => ['required','string','max:500'],
         'items.*.moneda'   => ['required','string','max:10'],
         'items.*.precio'   => ['required','numeric','min:0'],
-        'items.*.iva_pct'  => ['nullable','numeric','min:0','max:100'],
+        'items.*.iva_pct'  => ['nullable','numeric','min:0','max:100'], // puede venir, pero no se usa
     ]);
 
     $user   = auth()->user();
@@ -177,14 +178,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
     $orden = DB::transaction(function () use ($tenantId, $tabla, $data, $request, $prefix) {
 
-        /* ===================== BLOQUE CRÍTICO =====================
-           Evita que dos usuarios tomen el mismo folio.
-           - Bloqueamos el contador
-           - Reconciliamos con el máximo real en BD
-           - Decidimos y consumimos el número de forma atómica
-        =========================================================== */
-
-        // 1) Bloquear (y crear si no existe)
+        /* ===================== BLOQUE CRÍTICO (folios) ===================== */
         $counter = DB::table('oc_counters')->where('tenant_id', $tenantId)->lockForUpdate()->first();
         if (!$counter) {
             DB::table('oc_counters')->insert([
@@ -196,16 +190,14 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $counter = (object)['last_seq' => 0];
         }
 
-        // 2) Reconciliar con el máximo real de la tabla (por si hubo ediciones hacia atrás)
         $maxDb = (int) DB::table($tabla)
             ->where('empresa_tenant_id', $tenantId)
             ->selectRaw("MAX(CAST(SUBSTRING_INDEX(numero_orden,'-',-1) AS UNSIGNED)) AS m")
             ->value('m');
 
-        $currSeq = max((int)$counter->last_seq, $maxDb); // tope actual real
-        $nextSeq = $currSeq + 1;                         // siguiente sugerido
+        $currSeq = max((int)$counter->last_seq, $maxDb);
+        $nextSeq = $currSeq + 1;
 
-        // 3) Resolver override (si lo hay) y CONSUMIR
         $isAdmin  = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
         $override = null;
         $reqSeq   = null;
@@ -217,11 +209,10 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
         }
 
-        $seq     = null; // para columna seq (puede quedar null en override hacia atrás)
-        $noOrden = null; // visible
+        $seq     = null;
+        $noOrden = null;
 
         if ($override !== null && $reqSeq !== null) {
-            // No permitir duplicar un número que ya exista
             $yaExiste = DB::table($tabla)
                 ->where('empresa_tenant_id', $tenantId)
                 ->where('numero_orden', $override)
@@ -233,27 +224,22 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
 
             if ($reqSeq >= $nextSeq) {
-                // Override hacia ADELANTE: dejamos last_seq = reqSeq (siguiente será reqSeq+1)
                 DB::table('oc_counters')
                     ->where('tenant_id', $tenantId)
                     ->update(['last_seq' => $reqSeq, 'updated_at' => now()]);
-                $seq     = $reqSeq;           // alinear seq interna si existe esa columna
+                $seq     = $reqSeq;
                 $noOrden = $override;
             } else {
-                // Override hacia ATRÁS: NO movemos el contador; próxima seguirá siendo $nextSeq
-                $seq     = null;              // importante para no chocar a futuro
+                $seq     = null;
                 $noOrden = $override;
-                // (no tocamos last_seq aquí)
             }
         } else {
-            // Sin override: consumimos $nextSeq y actualizamos last_seq = $nextSeq
             DB::table('oc_counters')
                 ->where('tenant_id', $tenantId)
                 ->update(['last_seq' => $nextSeq, 'updated_at' => now()]);
             $seq     = $nextSeq;
             $noOrden = sprintf('%s-%04d', $prefix, $seq);
         }
-
         /* =================== FIN BLOQUE CRÍTICO =================== */
 
         // --- Cabecera
@@ -262,7 +248,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $payload['numero_orden']      = $noOrden;
 
         if (\Schema::hasColumn($tabla, 'seq')) {
-            $payload['seq'] = $seq; // puede ser null cuando override hacia atrás
+            $payload['seq'] = $seq;
         }
 
         if (\Schema::hasColumn($tabla, 'proveedor')) {
@@ -271,13 +257,26 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $payload['proveedor'] = $prov->nombre;
         }
 
+        // ✅ Guardar el IVA elegido (si la columna existe)
+        if (\Schema::hasColumn($tabla, 'iva_porcentaje')) {
+            $payload['iva_porcentaje'] = array_key_exists('iva_porcentaje', $data)
+                ? (float)$data['iva_porcentaje']
+                : 16.0;
+        }
+
         $payload['created_by'] = Auth::id();
 
         /** @var \App\Models\OrdenCompra $oc */
         $oc = \App\Models\OrdenCompra::create($payload);
 
         // --- Partidas
-        $totalOC = 0;
+        $subtotalOC = 0.0;
+
+        // IVA de cabecera a usar en partidas (si quieres almacenarlo por fila también)
+        $ivaPctOC = array_key_exists('iva_porcentaje', $data)
+            ? (float)$data['iva_porcentaje']
+            : 16.0;
+
         foreach ($request->items as $row) {
             $isEmpty = !($row['cantidad'] ?? null) && !($row['precio'] ?? null) && !($row['concepto'] ?? null);
             if ($isEmpty) continue;
@@ -285,11 +284,12 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $cantidad = (float)($row['cantidad'] ?? 0);
             $precio   = (float)($row['precio'] ?? 0);
             $moneda   = $row['moneda'] ?? 'MXN';
-            $ivaPct   = strlen((string)($row['iva_pct'] ?? '')) ? (float)$row['iva_pct'] : 16;
 
             $importe  = round($cantidad * $precio, 4);
             $subtotal = $importe;
-            $ivaMonto = round($subtotal * ($ivaPct/100), 4);
+
+            // Si quieres persistir IVA por fila, usa el de cabecera:
+            $ivaMonto = round($subtotal * ($ivaPctOC/100), 4);
             $total    = round($subtotal + $ivaMonto, 4);
 
             \App\Models\OrdenCompraDetalle::create([
@@ -300,24 +300,30 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 'moneda'    => $moneda,
                 'precio'    => $precio,
                 'importe'   => $importe,
-                'iva_pct'   => $ivaPct,
+                'iva_pct'   => $ivaPctOC,   // ← a partir del de cabecera
                 'iva_monto' => $ivaMonto,
                 'subtotal'  => $subtotal,
                 'total'     => $total,
             ]);
 
-            $totalOC += $total;
+            $subtotalOC += $subtotal;
         }
 
-        // --- Total en cabecera
-        $oc->monto = $totalOC;
-        $oc->saveQuietly(); 
+        // ✅ Totales en cabecera usando el IVA elegido
+        $ivaMontoOC = round($subtotalOC * ($ivaPctOC/100), 4);
+        $totalOC    = round($subtotalOC + $ivaMontoOC, 4);
+
+        if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotalOC;
+        if (\Schema::hasColumn($tabla, 'iva_monto'))  $oc->iva_monto  = $ivaMontoOC;
+        $oc->monto = $totalOC; // total / monto
+        $oc->saveQuietly();
 
         return $oc;
     });
 
     return redirect()->route('oc.show', $orden)->with('ok', 'Orden creada.');
 }
+
 
     /* ===================== Editar ===================== */
 
@@ -359,6 +365,8 @@ class OrdenCompraController extends Controller implements HasMiddleware
         'descripcion'    => ['nullable', 'string'],
         'notas'          => ['nullable','string','max:2000'],
         'factura'        => ['nullable', 'string', 'max:100'],
+        // ✅ nuevo: permitir cambiar el IVA de cabecera
+        'iva_porcentaje' => ['nullable','numeric','min:0','max:100'],
     ]);
 
     // === Validación partidas ===
@@ -409,6 +417,16 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $data['proveedor'] = $prov?->nombre ?? '';
         }
 
+        // === IVA de CABECERA a usar en toda la edición ===
+        $ivaPctOC = $request->has('iva_porcentaje') && $request->input('iva_porcentaje') !== null
+            ? (float)$request->input('iva_porcentaje')
+            : (is_numeric($oc->iva_porcentaje) ? (float)$oc->iva_porcentaje : 16.0);
+
+        // si existe la columna, persistimos el IVA elegido en cabecera
+        if (\Schema::hasColumn($tabla, 'iva_porcentaje')) {
+            $data['iva_porcentaje'] = $ivaPctOC;
+        }
+
         // 3) Partidas: actualizar/crear/eliminar y ACUMULAR total (SIN tocar cabecera aún)
         $existentes = $oc->detalles()->get()->keyBy('id'); // id => modelo
         $vistos = [];
@@ -427,14 +445,15 @@ class OrdenCompraController extends Controller implements HasMiddleware
             ];
 
             $importe  = round($payload['cantidad'] * $payload['precio'], 4);
-            $ivaPct   = strlen((string)($row['iva_pct'] ?? '')) ? (float)$row['iva_pct'] : 16;
+            // ✅ usar SIEMPRE el IVA de cabecera (no el de la fila)
+            $ivaPct   = $ivaPctOC;
             $subtotal = $importe;
             $ivaMonto = round($subtotal * ($ivaPct/100), 4);
             $total    = round($subtotal + $ivaMonto, 4);
 
             $payload += [
                 'importe'   => $importe,
-                'iva_pct'   => $ivaPct,
+                'iva_pct'   => $ivaPct,      // ← alineado con cabecera
                 'iva_monto' => $ivaMonto,
                 'subtotal'  => $subtotal,
                 'total'     => $total,
@@ -443,43 +462,42 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $id = $row['id'] ?? null;
 
             if ($id && $existentes->has($id)) {
-    $det = $existentes[$id];
+                $det = $existentes[$id];
 
-    // Compara viejo vs nuevo con tolerancia para numéricos
-    $numFields = ['cantidad','precio','importe','iva_pct','iva_monto','subtotal','total'];
-    $changed   = false;
+                // Compara viejo vs nuevo con tolerancia para numéricos
+                $numFields = ['cantidad','precio','importe','iva_pct','iva_monto','subtotal','total'];
+                $changed   = false;
 
-    foreach ($payload as $k => $v) {
-        $old = $det->getOriginal($k);
+                foreach ($payload as $k => $v) {
+                    $old = $det->getOriginal($k);
 
-        if (in_array($k, $numFields, true)) {
-            $oldN = is_null($old) ? null : (float)$old;
-            $newN = is_null($v)   ? null : (float)$v;
+                    if (in_array($k, $numFields, true)) {
+                        $oldN = is_null($old) ? null : (float)$old;
+                        $newN = is_null($v)   ? null : (float)$v;
 
-            if ($oldN === null && $newN === null) continue;
-            if ($oldN === null || $newN === null) { $changed = true; break; }
+                        if ($oldN === null && $newN === null) continue;
+                        if ($oldN === null || $newN === null) { $changed = true; break; }
 
-            // tolerancia para redondeos (4 decimales)
-            if (abs($oldN - $newN) > 0.0001) { $changed = true; break; }
-        } else {
-            // strings: compara trimmed
-            if (trim((string)$old) !== trim((string)$v)) { $changed = true; break; }
-        }
-    }
+                        // tolerancia para redondeos (4 decimales)
+                        if (abs($oldN - $newN) > 0.0001) { $changed = true; break; }
+                    } else {
+                        // strings: compara trimmed
+                        if (trim((string)$old) !== trim((string)$v)) { $changed = true; break; }
+                    }
+                }
 
-    if ($changed) {
-        $det->fill($payload)->save();  // solo guarda si cambió de verdad
-    } else {
-        // NO hacer touch() para no disparar eventos
-        // $det->touch();  // <- déjalo comentado
-    }
+                if ($changed) {
+                    $det->fill($payload)->save();  // solo guarda si cambió de verdad
+                } else {
+                    // NO hacer touch() para no disparar eventos
+                    // $det->touch();
+                }
 
-    $vistos[] = (int)$id;
-} else {
-    // CREATE → sí guarda (y loguea)
-    $oc->detalles()->create($payload);
-}
-
+                $vistos[] = (int)$id;
+            } else {
+                // CREATE → sí guarda (y loguea)
+                $oc->detalles()->create($payload);
+            }
 
             $totalOC += $total;
         }
@@ -498,7 +516,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
         // ÚNICO save de cabecera en todo el flujo
         if ($oc->isDirty()) {
-            $oc->save();        // ← aquí se disparará 1 solo "updated" con TODOS los cambios
+            $oc->save();        // ← "updated" con TODOS los cambios
         } else {
             $oc->saveQuietly(); // no registrar log si realmente no cambió nada
         }
@@ -511,6 +529,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
     return redirect()->route('oc.index')->with('updated', true);
 }
+
 
 
 

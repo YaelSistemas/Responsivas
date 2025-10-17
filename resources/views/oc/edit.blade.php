@@ -40,12 +40,12 @@
     .right{text-align:right}
     .nowrap{white-space:nowrap}
 
-    .items-table td:nth-child(4){ min-width:110px; }
+    .items-table td:nth-child(4){ min-width: 110px; }
     .items-table select.i-moneda{
-      -webkit-appearance:none; -moz-appearance:none; appearance:none;
+      -webkit-appearance: none; -moz-appearance: none; appearance: none;
       padding-right: 2.6rem;
-      background-image:url("data:image/svg+xml;utf8,<svg fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path d='M19 9l-7 7-7-7'/></svg>");
-      background-repeat:no-repeat; background-position:right .45rem center; background-size:12px 12px; background-color:#fff; line-height:1.25;
+      background-image: url("data:image/svg+xml;utf8,<svg fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path d='M19 9l-7 7-7-7'/></svg>");
+      background-repeat: no-repeat; background-position: right .45rem center; background-size: 12px 12px; background-color:#fff; line-height:1.25;
     }
     .items-table select.i-moneda::-ms-expand{ display:none; }
 
@@ -56,20 +56,31 @@
     .w-18{ width:120px; }
     .inline{ display:flex; align-items:flex-end; gap:12px; }
 
-    .currency-alert{
-      display:none; margin-top:8px; padding:8px 10px; border-radius:8px;
-      background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px;
-    }
+    .currency-alert{ display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px; }
     .currency-alert.show{ display:block; }
   </style>
 
   @php
     $fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDateString());
-    $defaultIva   = old('iva_porcentaje', 16);
+    $detIva = (function($oc){
+        $col = $oc->relationLoaded('detalles')
+            ? $oc->detalles
+            : $oc->detalles()->select('iva_pct')->get();
+        $vals = collect($col)->pluck('iva_pct')
+            ->filter(fn($v) => $v !== null)
+            ->unique()->values();
+        return $vals->count() === 1 ? (float) $vals->first() : null;
+    })($oc);
+
+    $defaultIva = old(
+        'iva_porcentaje',
+        is_numeric($oc->iva_porcentaje ?? null)
+            ? (float) $oc->iva_porcentaje
+            : ($detIva !== null ? $detIva : 16)
+    );
 
     $isAdminCanEditFolio = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
 
-    // Prefill detalles (ahora incluye id siempre)
     $prefill = old('items');
     if (!$prefill) {
       $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
@@ -223,7 +234,6 @@
                 <tbody id="itemsTbody">
                   @foreach($prefill as $idx => $it)
                   <tr class="item-row">
-                    {{-- Hidden id SIEMPRE (vacío si es nueva) --}}
                     <input type="hidden" name="items[{{ $idx }}][id]" value="{{ old("items.$idx.id", $it['id'] ?? '') }}">
                     <td>
                       <input type="number" step="0.0001" min="0"
@@ -236,8 +246,8 @@
                     <td>
                       @php $mon = old("items.$idx.moneda", $it['moneda'] ?? 'MXN'); @endphp
                       <select name="items[{{ $idx }}][moneda]" class="i-moneda">
-                        <option value="MXN" @selected($mon==='MXN')>MXN</option>
-                        <option value="USD" @selected($mon==='USD')>USD</option>
+                        <option value="MXN" @selected($mon==='MXN')>MXN&nbsp;</option>
+                        <option value="USD" @selected($mon==='USD')>USD&nbsp;</option>
                       </select>
                     </td>
                     <td>
@@ -383,8 +393,8 @@
           <td><input type="text" name="items[${idx}][concepto]"></td>
           <td>
             <select name="items[${idx}][moneda]" class="i-moneda">
-              <option value="MXN" ${mMXN}>MXN</option>
-              <option value="USD" ${mUSD}>USD</option>
+              <option value="MXN" ${mMXN}>MXN&nbsp;</option>
+              <option value="USD" ${mUSD}>USD&nbsp;</option>
             </select>
           </td>
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
