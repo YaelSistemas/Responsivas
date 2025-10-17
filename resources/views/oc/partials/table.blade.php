@@ -89,8 +89,7 @@
     <col class="c-fact">
     <col class="c-estado">
     @if($isAdmin)
-      <col class="c-creo">
-      <col class="c-edito">
+      <col class="c-hist">
     @endif
     <col class="c-acc">
   </colgroup>
@@ -107,8 +106,7 @@
       <th>Factura</th>
       <th>Estado</th>
       @if($isAdmin)
-        <th>Creada por</th>
-        <th>Editada por</th>
+        <th>Historial</th>
       @endif
       <th>Acciones</th>
     </tr>
@@ -205,18 +203,15 @@
       </td>
 
       @if($isAdmin)
-        <td title="Creada: {{ $creadaEn }}">
-          <div style="display:flex;flex-direction:column;align-items:center;line-height:1.2">
-            <strong style="color:#111827">{{ $creadorNombre }}</strong>
-            <span style="font-size:.75rem;color:#6b7280">{{ $creadaEn }}</span>
-          </div>
+        <td class="text-center">
+          <button type="button"
+                  class="btn btn-sm"
+                  data-open-historial="{{ route('oc.historial.modal', $oc) }}"
+                  title="Ver historial">
+                    Historial
+          </button>
         </td>
-        <td title="Editada: {{ $editadaEn }}">
-          <div style="display:flex;flex-direction:column;align-items:center;line-height:1.2">
-            <strong style="color:#111827">{{ $editorNombre }}</strong>
-            <span style="font-size:.75rem;color:#6b7280">{{ $editadaEn }}</span>
-          </div>
-        </td>
+
       @endif
 
       <td class="actions">

@@ -341,125 +341,179 @@ class OrdenCompraController extends Controller implements HasMiddleware
     }
 
     public function update(Request $request, OrdenCompra $oc, OrdenCompraFolioService $folios)
-    {
-        $this->authorizeCompany($oc);
+{
+    $this->authorizeCompany($oc);
 
-        $tabla = (new OrdenCompra)->getTable();
+    $tabla = (new OrdenCompra)->getTable();
 
-        // ¿Quién puede cambiar el folio?
-        $puedeCambiarFolio = auth()->user()->hasRole('Administrador')
-            || auth()->user()->can('oc.edit_prefix');
+    // ¿Quién puede cambiar el folio?
+    $puedeCambiarFolio = auth()->user()->hasRole('Administrador')
+        || auth()->user()->can('oc.edit_prefix');
 
-        // === Validación cabecera ===
-        $data = $request->validate([
-            'numero_orden'   => [$puedeCambiarFolio ? 'required' : 'sometimes', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')->ignore($oc->id)],
-            'fecha'          => ['required', 'date'],
-            'solicitante_id' => ['required', 'exists:colaboradores,id'],
-            'proveedor_id'   => ['required', 'exists:proveedores,id'],
-            'descripcion'    => ['nullable', 'string'],
-            'notas' => ['nullable','string','max:2000'],
-            'monto'          => ['nullable', 'numeric', 'min:0'], // se recalcula
-            'factura'        => ['nullable', 'string', 'max:100'],
-        ]);
+    // === Validación cabecera (sin monto, lo calculamos nosotros) ===
+    $data = $request->validate([
+        'numero_orden'   => [$puedeCambiarFolio ? 'required' : 'sometimes', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')->ignore($oc->id)],
+        'fecha'          => ['required', 'date'],
+        'solicitante_id' => ['required', 'exists:colaboradores,id'],
+        'proveedor_id'   => ['required', 'exists:proveedores,id'],
+        'descripcion'    => ['nullable', 'string'],
+        'notas'          => ['nullable','string','max:2000'],
+        'factura'        => ['nullable', 'string', 'max:100'],
+    ]);
 
-        // === Validación partidas ===
-        $request->validate([
-            'items'            => ['required','array','min:1'],
-            'items.*.cantidad' => ['required','numeric','min:0.001'],
-            'items.*.unidad'   => ['required','string','max:50'],
-            'items.*.concepto' => ['required','string','max:500'],
-            'items.*.moneda'   => ['required','string','max:10'],
-            'items.*.precio'   => ['required','numeric','min:0'],
-            'items.*.iva_pct'  => ['nullable','numeric','min:0','max:100'],
-        ]);
+    // === Validación partidas ===
+    $request->validate([
+        'items'            => ['required','array','min:1'],
+        'items.*.id'       => ['nullable','integer','min:1'],
+        'items.*.cantidad' => ['required','numeric','min:0.001'],
+        'items.*.unidad'   => ['required','string','max:50'],
+        'items.*.concepto' => ['required','string','max:500'],
+        'items.*.moneda'   => ['required','string','max:10'],
+        'items.*.precio'   => ['required','numeric','min:0'],
+        'items.*.iva_pct'  => ['nullable','numeric','min:0','max:100'],
+    ]);
 
-        $tenantId = $this->tenantId();
+    $tenantId = $this->tenantId();
 
-        DB::transaction(function () use ($request, $oc, $tabla, $data, $tenantId, $puedeCambiarFolio, $folios) {
+    DB::transaction(function () use ($request, $oc, $tabla, $data, $tenantId, $puedeCambiarFolio, $folios) {
 
-            $mueveAtras = false;
+        $mueveAtras = false;
 
-            // 1) Tratamiento del cambio de folio
-            if ($puedeCambiarFolio && !empty($data['numero_orden'])) {
-                $requestedSeq = null;
-                if (preg_match('/(\d+)$/', $data['numero_orden'], $m)) {
-                    $requestedSeq = (int) $m[1];
+        // 1) Tratamiento del cambio de folio (NO guardamos aquí; solo preparamos $data)
+        if ($puedeCambiarFolio && !empty($data['numero_orden'])) {
+            $requestedSeq = null;
+            if (preg_match('/(\d+)$/', $data['numero_orden'], $m)) {
+                $requestedSeq = (int) $m[1];
+            }
+
+            if ($requestedSeq) {
+                $currentNext = $folios->peekNext($tenantId);
+
+                if ($requestedSeq >= $currentNext) {
+                    $folios->bumpTo($tenantId, $requestedSeq); // mover hacia adelante
+                } else {
+                    $mueveAtras = true; // reconciliar al final
                 }
 
-                if ($requestedSeq) {
-                    $currentNext = $folios->peekNext($tenantId);
-
-                    if ($requestedSeq >= $currentNext) {
-                        // Adelante → empuja el contador para que la PRÓXIMA sea ese+1
-                        $folios->bumpTo($tenantId, $requestedSeq);
-                    } else {
-                        // Atrás → después de guardar, bajaremos el contador al tope real
-                        $mueveAtras = true;
-                    }
-
-                    if (\Schema::hasColumn($tabla, 'seq')) {
-                        $data['seq'] = $requestedSeq;
-                    }
+                if (\Schema::hasColumn($tabla, 'seq')) {
+                    $data['seq'] = $requestedSeq;
                 }
-            } else {
-                unset($data['numero_orden']);
             }
+        } else {
+            unset($data['numero_orden']);
+        }
 
-            // 2) Proveedor texto (si existe)
-            if (\Schema::hasColumn($tabla, 'proveedor')) {
-                $prov = Proveedor::find($data['proveedor_id']);
-                $data['proveedor'] = $prov?->nombre ?? '';
-            }
+        // 2) Proveedor texto (si existe)
+        if (\Schema::hasColumn($tabla, 'proveedor')) {
+            $prov = Proveedor::find($data['proveedor_id']);
+            $data['proveedor'] = $prov?->nombre ?? '';
+        }
 
-            // 3) Cabecera
-            $data['updated_by'] = Auth::id();
-            $oc->update($data);
+        // 3) Partidas: actualizar/crear/eliminar y ACUMULAR total (SIN tocar cabecera aún)
+        $existentes = $oc->detalles()->get()->keyBy('id'); // id => modelo
+        $vistos = [];
+        $totalOC = 0;
 
-            // 4) Reemplazar partidas
-            $oc->detalles()->delete();
+        foreach ($request->items as $row) {
+            $isEmpty = !($row['cantidad'] ?? null) && !($row['precio'] ?? null) && !($row['concepto'] ?? null);
+            if ($isEmpty) continue;
 
-            $totalOC = 0;
-            foreach ($request->items as $row) {
-                $isEmpty = !($row['cantidad'] ?? null) && !($row['precio'] ?? null) && !($row['concepto'] ?? null);
-                if ($isEmpty) continue;
+            $payload = [
+                'cantidad'  => (float)($row['cantidad'] ?? 0),
+                'unidad'    => $row['unidad'] ?? null,
+                'concepto'  => $row['concepto'],
+                'moneda'    => $row['moneda'] ?? 'MXN',
+                'precio'    => (float)($row['precio'] ?? 0),
+            ];
 
-                $cantidad = (float)($row['cantidad'] ?? 0);
-                $precio   = (float)($row['precio'] ?? 0);
-                $moneda   = $row['moneda'] ?? 'MXN';
-                $ivaPct   = strlen((string)($row['iva_pct'] ?? '')) ? (float)$row['iva_pct'] : 16;
+            $importe  = round($payload['cantidad'] * $payload['precio'], 4);
+            $ivaPct   = strlen((string)($row['iva_pct'] ?? '')) ? (float)$row['iva_pct'] : 16;
+            $subtotal = $importe;
+            $ivaMonto = round($subtotal * ($ivaPct/100), 4);
+            $total    = round($subtotal + $ivaMonto, 4);
 
-                $importe  = round($cantidad * $precio, 4);
-                $subtotal = $importe;
-                $ivaMonto = round($subtotal * ($ivaPct/100), 4);
-                $total    = round($subtotal + $ivaMonto, 4);
+            $payload += [
+                'importe'   => $importe,
+                'iva_pct'   => $ivaPct,
+                'iva_monto' => $ivaMonto,
+                'subtotal'  => $subtotal,
+                'total'     => $total,
+            ];
 
-                $oc->detalles()->create([
-                    'cantidad'  => $cantidad,
-                    'unidad'    => $row['unidad'] ?? null,
-                    'concepto'  => $row['concepto'],
-                    'moneda'    => $moneda,
-                    'precio'    => $precio,
-                    'importe'   => $importe,
-                    'iva_pct'   => $ivaPct,
-                    'iva_monto' => $ivaMonto,
-                    'subtotal'  => $subtotal,
-                    'total'     => $total,
-                ]);
+            $id = $row['id'] ?? null;
 
-                $totalOC += $total;
-            }
+            if ($id && $existentes->has($id)) {
+    $det = $existentes[$id];
 
-            // 5) Total cabecera
-            $oc->update(['monto' => $totalOC, 'updated_by' => Auth::id()]);
+    // Compara viejo vs nuevo con tolerancia para numéricos
+    $numFields = ['cantidad','precio','importe','iva_pct','iva_monto','subtotal','total'];
+    $changed   = false;
 
-            // 6) Si moviste hacia atrás, baja el contador al tope real (MAX(seq) en BD)
-            if ($mueveAtras) {
-                $folios->reconcileToDbMax($tenantId);
-            }
-        });
+    foreach ($payload as $k => $v) {
+        $old = $det->getOriginal($k);
 
-        return redirect()->route('oc.index')->with('updated', true);
+        if (in_array($k, $numFields, true)) {
+            $oldN = is_null($old) ? null : (float)$old;
+            $newN = is_null($v)   ? null : (float)$v;
+
+            if ($oldN === null && $newN === null) continue;
+            if ($oldN === null || $newN === null) { $changed = true; break; }
+
+            // tolerancia para redondeos (4 decimales)
+            if (abs($oldN - $newN) > 0.0001) { $changed = true; break; }
+        } else {
+            // strings: compara trimmed
+            if (trim((string)$old) !== trim((string)$v)) { $changed = true; break; }
+        }
     }
+
+    if ($changed) {
+        $det->fill($payload)->save();  // solo guarda si cambió de verdad
+    } else {
+        // NO hacer touch() para no disparar eventos
+        // $det->touch();  // <- déjalo comentado
+    }
+
+    $vistos[] = (int)$id;
+} else {
+    // CREATE → sí guarda (y loguea)
+    $oc->detalles()->create($payload);
+}
+
+
+            $totalOC += $total;
+        }
+
+        // DELETE los que ya no vienen → disparará OcDetalleObserver::deleted
+        $toDelete = $existentes->keys()->diff($vistos);
+        foreach ($toDelete as $id) {
+            $existentes[$id]->delete();
+        }
+
+        // 4) Guardar CABECERA una sola vez (ahora sí), incluyendo el total calculado
+        $data['monto']      = $totalOC;
+        $data['updated_by'] = Auth::id();
+
+        $oc->fill($data);
+
+        // ÚNICO save de cabecera en todo el flujo
+        if ($oc->isDirty()) {
+            $oc->save();        // ← aquí se disparará 1 solo "updated" con TODOS los cambios
+        } else {
+            $oc->saveQuietly(); // no registrar log si realmente no cambió nada
+        }
+
+        // 5) Si moviste el folio hacia atrás, baja el contador al tope real (MAX(seq) en BD)
+        if ($mueveAtras) {
+            $folios->reconcileToDbMax($tenantId);
+        }
+    });
+
+    return redirect()->route('oc.index')->with('updated', true);
+}
+
+
+
 
     /* ===================== Vistas y PDF ===================== */
 

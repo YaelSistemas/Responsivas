@@ -105,4 +105,10 @@ class OrdenCompra extends Model
     {
         return $this->hasMany(\App\Models\OcAdjunto::class, 'orden_compra_id');
     }
+
+    public function logs()
+    {
+        return $this->hasMany(\App\Models\OcLog::class, 'orden_compra_id')->latest();
+    }
+
 }

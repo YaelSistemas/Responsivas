@@ -16,6 +16,7 @@ use App\Http\Controllers\PublicResponsivaController;
 use App\Http\Controllers\OrdenCompraController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\OcAdjuntoController;
+use App\Http\Controllers\OcLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -182,10 +183,42 @@ Route::middleware(['auth'])->group(function () {
         ->middleware(['auth','permission:oc.delete'])
         ->whereNumber('oc')
         ->name('oc.destroy');
-        
+
+    // Estado (solo autenticado; dentro del método validas roles)
     Route::patch('/oc/{oc}/estado', [OrdenCompraController::class, 'updateEstado'])
-    ->middleware(['auth'])
-    ->name('oc.estado');
+        ->middleware(['auth'])
+        ->whereNumber('oc')
+        ->name('oc.estado');
+
+    /*
+    |--------------------  Adjuntos OC --------------------
+    */
+    Route::middleware(['auth'])->group(function () {
+        // Modal (HTML)
+        Route::get('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'modal'])
+            ->whereNumber('oc')
+            ->name('oc.adjuntos.modal');
+
+        // Subida múltiple
+        Route::post('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'store'])
+            ->whereNumber('oc')
+            ->name('oc.adjuntos.store');
+
+        // Descargar / Eliminar
+        Route::get('/oc/adjuntos/{adjunto}/download', [OcAdjuntoController::class, 'download'])
+            ->name('oc.adjuntos.download');
+        Route::delete('/oc/adjuntos/{adjunto}', [OcAdjuntoController::class, 'destroy'])
+            ->name('oc.adjuntos.destroy');
+    });
+
+    /*
+    |--------------------  Historial OC --------------------
+    */
+    Route::middleware(['auth','permission:oc.view'])->group(function () {
+        Route::get('/oc/{oc}/historial', [OcLogController::class, 'modal'])
+            ->whereNumber('oc')
+            ->name('oc.historial.modal');
+    });
     
     /*
     |--------------------  Proveedores (con permisos)  --------------------
@@ -213,15 +246,4 @@ Route::middleware(['auth'])->group(function () {
         ->middleware(['auth','permission:proveedores.delete'])
         ->whereNumber('proveedor')
         ->name('proveedores.destroy');
-
-    
-        Route::middleware(['auth'])->group(function () {
-    // Modal (HTML)
-    Route::get('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'modal'])->name('oc.adjuntos.modal');
-    // Subida múltiple
-    Route::post('/oc/{oc}/adjuntos', [OcAdjuntoController::class, 'store'])->name('oc.adjuntos.store');
-    // Descargar / Eliminar
-    Route::get('/oc/adjuntos/{adjunto}/download', [OcAdjuntoController::class, 'download'])->name('oc.adjuntos.download');
-    Route::delete('/oc/adjuntos/{adjunto}', [OcAdjuntoController::class, 'destroy'])->name('oc.adjuntos.destroy');
-});
 });

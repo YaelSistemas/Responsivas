@@ -16,7 +16,10 @@
     @media (max-width:768px){  .zoom-inner{ --zoom:.90 } .page-wrap{max-width:94vw;padding:0 4vw} }
     @media (max-width:640px){  .zoom-inner{ --zoom:.70 } .page-wrap{max-width:94vw;padding:0 4vw} }
     @media (max-width:400px){  .zoom-inner{ --zoom:.55 } .page-wrap{max-width:94vw;padding:0 4vw} }
-    @media (max-width:768px){ input,select,textarea{ font-size:16px } } /* iOS anti-zoom */
+    @media (max-width:768px){ input,select,textarea{ font-size:16px } }
+
+    /* ==== Evitar “salto” al abrir modal (compensación scrollbar) ==== */
+    body.modal-open .zoom-outer { padding-right: var(--sbw, 0); }
 
     /* ====== Estilos propios ====== */
     .page-wrap{max-width:1900px;margin:0 auto}
@@ -24,58 +27,59 @@
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
 
-    .tbl{width:100%;border-collapse:separate;border-spacing:0}
-    .tbl th,.tbl td{
+    /* ====== LISTADO (scopeado a .oc-index) ====== */
+    .oc-index .tbl{width:100%;border-collapse:separate;border-spacing:0}
+    .oc-index .tbl th,.oc-index .tbl td{
       padding:.70rem .9rem;text-align:center;vertical-align:middle;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
     }
-    .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
-    .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
+    .oc-index .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
+    .oc-index .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
 
     /* Anchos (colgroup definido en el partial) */
-    .tbl col.c-no    { width:8% }
-    .tbl col.c-fecha { width:8% }
-    .tbl col.c-soli  { width:20% }
-    .tbl col.c-prov  { width:18% }
-    .tbl col.c-conceptos  { width:18% }
-    .tbl col.c-desc  { width:22% }
-    .tbl col.c-monto { width:10% }
-    .tbl col.c-fact  { width:6%  }
-    .tbl col.c-creo  { width:10% }
-    .tbl col.c-edito { width:10% }
-    .tbl col.c-acc   { width:4%  }
+    .oc-index .tbl col.c-no    { width:8% }
+    .oc-index .tbl col.c-fecha { width:8% }
+    .oc-index .tbl col.c-soli  { width:20% }
+    .oc-index .tbl col.c-prov  { width:18% }
+    .oc-index .tbl col.c-conceptos  { width:18% }
+    .oc-index .tbl col.c-desc  { width:22% }
+    .oc-index .tbl col.c-monto { width:10% }
+    .oc-index .tbl col.c-fact  { width:6%  }
+    .oc-index .tbl col.c-creo  { width:10% }
+    .oc-index .tbl col.c-edito { width:10% }
+    .oc-index .tbl col.c-acc   { width:4%  }
 
-    .tbl td.desc{ white-space:normal; overflow:visible; text-overflow:unset; line-height:1.15; }
+    .oc-index .tbl td.desc{ white-space:normal; overflow:visible; text-overflow:unset; line-height:1.15; }
 
-    /* Toolbar */
-    #oc-toolbar .select-wrap{position:relative;display:inline-block}
-    #oc-toolbar select[name="per_page"]{
+    /* Toolbar del listado */
+    .oc-index #oc-toolbar .select-wrap{position:relative;display:inline-block}
+    .oc-index #oc-toolbar select[name="per_page"]{
       -webkit-appearance:none;appearance:none;background-image:none;width:88px;
       padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;
       background:#fff;border:1px solid #d1d5db;border-radius:6px;
     }
-    #oc-toolbar .select-wrap .caret{
+    .oc-index #oc-toolbar .select-wrap .caret{
       position:absolute;right:10px;top:50%;transform:translateY(-50%);
       pointer-events:none;color:#6b7280;font-size:12px
     }
 
     /* ===== SELECT como píldora (sin flecha, tamaño fijo) ===== */
-    .tag-select{
+    .oc-index .tag-select{
       appearance:none; -webkit-appearance:none; -moz-appearance:none;
       background-image:none;
       display:block; margin:0 auto; box-sizing:border-box;
       border-radius:9999px; cursor:pointer;
       font-size:.75rem; font-weight:600; line-height:1.1;
-      width:100px; height:28px;              /* tamaño fijo UNIFICADO */
-      padding:.20rem 1.25rem .20rem .60rem;  /* hueco de “flecha” */
+      width:100px; height:28px;
+      padding:.20rem 1.25rem .20rem .60rem;
       text-align-last:center;
       border:1px solid transparent;
     }
-    .tag-select::-ms-expand{ display:none; }
-    .tag-select:focus{ outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.25); }
+    .oc-index .tag-select::-ms-expand{ display:none; }
+    .oc-index .tag-select:focus{ outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.25); }
 
     /* ===== Span de solo lectura con el MISMO tamaño ===== */
-    .tag-readonly{
+    .oc-index .tag-readonly{
       display:inline-block; box-sizing:border-box;
       width:100px; height:28px;
       padding:.20rem 1.25rem .20rem .60rem;
@@ -84,17 +88,50 @@
     }
 
     /* ===== Colores (select y span) ===== */
-    .tag-blue  { background:#e0f2fe; color:#075985; border:1px solid #bae6fd; }  /* Abierta */
-    .tag-green { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }  /* Pagada */
-    .tag-red   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }  /* Cancelada */
+    .oc-index .tag-blue  { background:#e0f2fe; color:#075985; border:1px solid #bae6fd; }
+    .oc-index .tag-green { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+    .oc-index .tag-red   { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
 
     /* ===== Columna estado compacta/centrada ===== */
-    .tbl col.c-estado { width: 7% }
-    .tbl td.estado{
+    .oc-index .tbl col.c-estado { width: 7% }
+    .oc-index .tbl td.estado{
       text-align:center;
       padding-top:.4rem; padding-bottom:.4rem;
       padding-left:.35rem; padding-right:.35rem;
     }
+
+    /* ===== Factura / Clip ===== */
+    .oc-index .tbl td.factura{ text-align:center; }
+    .oc-index .clip-btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:.25rem; border-radius:9999px; border:1px solid transparent;
+      padding:.25rem .55rem; line-height:1; font-weight:600;
+      transition:all .2s ease; background:#f3f4f6; color:#9ca3af; border-color:#e5e7eb;
+      cursor:pointer;
+    }
+    .oc-index .clip-btn .clip-count{ font-size:.8rem; line-height:1; }
+    .oc-index .clip-btn.has-adj{
+      background:#eef2ff; color:#3730a3; border-color:#c7d2fe;
+    }
+    .oc-index .clip-btn.has-adj:hover{ background:#e0e7ff; }
+    .oc-index .clip-btn.no-adj{ /* gris */ }
+
+    /* Acciones */
+    .oc-index .tbl td.actions a,
+    .oc-index .tbl td.actions button{
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:.35rem; padding:.25rem .45rem; border-radius:.375rem;
+      text-decoration:none; border:1px solid transparent; background:#f9fafb; color:#1f2937;
+    }
+    .oc-index .tbl td.actions a:hover,
+    .oc-index .tbl td.actions button:hover{ background:#eef2ff; color:#1e40af; }
+    .oc-index .tbl td.actions .danger{ background:#fef2f2; color:#991b1b; }
+    .oc-index .tbl td.actions .danger:hover{ background:#fee2e2; color:#7f1d1d; }
+
+    /* utilidades SOLO para el index */
+    .oc-index .is-disabled{ opacity:.55; cursor:not-allowed; pointer-events:none; }
+    .oc-index .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .oc-index .muted{ color:#6b7280; }
 
     /* Base del modal (por si el modal no trae su <style> embebido) */
     .oc-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
@@ -103,7 +140,7 @@
 
   <div class="zoom-outer">
     <div class="zoom-inner">
-      <div class="page-wrap py-6">
+      <div class="page-wrap py-6 oc-index">  {{-- ← AÑADIDO .oc-index --}}
         {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold">Órdenes de compra</h2>
@@ -200,7 +237,7 @@
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
 
-      if (history.pushState) { // URL bonita sin ?partial=1
+      if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
         history.pushState({}, '', pretty.toString());
@@ -265,8 +302,6 @@
           }
 
           const data = await r.json();
-
-          // Mantiene tamaño fijo y cambia color
           const colorClass = data.class || (val === 'pagada' ? 'tag-green' : (val === 'cancelada' ? 'tag-red' : 'tag-blue'));
           sel.className = 'tag-select ' + colorClass;
 
@@ -279,60 +314,156 @@
     })();
   </script>
 
+  {{-- Abrir MODAL de adjuntos (wrapper .oc-mount) --}}
   <script>
+  (function(){
+    const wrap = document.getElementById('oc-wrap');
+
+    wrap.addEventListener('click', async (ev)=>{
+      const btn = ev.target.closest('button[data-open-adjuntos]');
+      if(!btn) return;
+
+      const url = btn.getAttribute('data-open-adjuntos');
+
+      try{
+        const res = await fetch(url, { headers:{ 'X-Requested-With':'XMLHttpRequest' } });
+        const html = (await res.text()).trim();
+
+        // Monta TODO dentro de un wrapper para poder eliminar estilos/scripts al cerrar
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+
+        const mount = document.createElement('div');
+        mount.className = 'oc-mount';
+        Array.from(tmp.childNodes).forEach(n => mount.appendChild(n));
+        document.body.appendChild(mount);
+
+        /* Re-ejecutar los <script> embebidos del modal */
+        const scripts = mount.querySelectorAll('script');
+        scripts.forEach((old) => {
+          const s = document.createElement('script');
+          if (old.src) s.src = old.src;
+          else s.textContent = old.textContent;
+          if (old.type) s.type = old.type;
+          old.parentNode.replaceChild(s, old);
+        });
+
+        // Cerrar al click en backdrop o botón ✕ (y eliminar wrapper completo)
+        function onClose(e){
+          const backdrop = document.querySelector('.oc-modal-backdrop');
+          if(!backdrop) { document.body.removeEventListener('click', onClose); return; }
+          const closeBtn = e.target.closest('.oc-modal-close');
+          if (e.target === backdrop || closeBtn) {
+            const m = document.querySelector('.oc-mount');
+            if (m) m.remove();
+            document.body.classList.remove('modal-open');
+            document.documentElement.style.removeProperty('--sbw');
+            document.body.removeEventListener('click', onClose);
+          }
+        }
+        document.body.addEventListener('click', onClose);
+
+      }catch(err){
+        console.error(err);
+        alert('No se pudo abrir los adjuntos.');
+      }
+    });
+  })();
+  </script>
+
+  {{-- Historial (cache off + wrapper + estilo local) --}}
+<script>
 (function(){
   const wrap = document.getElementById('oc-wrap');
 
-  // Abre el modal
+  function openHistModal(html){
+    // Wrapper que podremos eliminar completo
+    const mount = document.createElement('div');
+    mount.className = 'hist-mount';
+    // Inyecta un pequeño estilo SOLO para el historial (evita recortes)
+    const style = document.createElement('style');
+    style.textContent = `
+      .hist-mount .tbl th, .hist-mount .tbl td{
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: initial !important;
+        vertical-align: top;
+      }
+    `;
+    mount.appendChild(style);
+
+    // Contenido del modal que viene del servidor
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    mount.appendChild(box);
+
+    document.body.appendChild(mount);
+
+    // Cerrar
+    const backdrop = mount.querySelector('.modal-backdrop, .oc-modal-backdrop');
+    const closeBtn = mount.querySelector('[data-close-modal], .oc-modal-close');
+
+    function close(){ mount.remove(); }
+
+    if (backdrop) backdrop.addEventListener('click', close);
+    if (closeBtn) closeBtn.addEventListener('click', close);
+
+    // ESC para cerrar
+    document.addEventListener('keydown', function onEsc(e){
+      if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', onEsc); }
+    });
+  }
+
   wrap.addEventListener('click', async (ev)=>{
-    const btn = ev.target.closest('button[data-open-adjuntos]');
+    const btn = ev.target.closest('[data-open-historial]');
     if(!btn) return;
 
-    const url = btn.getAttribute('data-open-adjuntos');
+    // Cache-busting para ver cambios recientes
+    const baseUrl = btn.getAttribute('data-open-historial');
+    const url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
 
     try{
-      const res = await fetch(url, { headers:{ 'X-Requested-With':'XMLHttpRequest' } });
-      const html = (await res.text()).trim();
-
-      // Crea un contenedor temporal con TODO el HTML
-      const tmp = document.createElement('div');
-      tmp.innerHTML = html;
-
-      // 1) Inserta todos los nodos (no solo el primero)
-      // 2) Re-ejecuta los <script> embebidos para que se enlacen los eventos
-      const nodes = Array.from(tmp.childNodes);
-      for (const n of nodes) {
-        if (n.nodeType === 1 && n.tagName === 'SCRIPT') {
-          const s = document.createElement('script');
-          // Copiamos inline o src
-          if (n.src) { s.src = n.src; } else { s.textContent = n.textContent; }
-          // Copiamos atributos tipo type, defer si los hubiera
-          if (n.type) s.type = n.type;
-          document.body.appendChild(s);
-        } else {
-          document.body.appendChild(n);
-        }
-      }
-
-      // Cerrar al hacer click fuera o en el botón ✕, si tu modal no trae ya su propio script
-      document.body.addEventListener('click', function onClose(e){
-        const backdrop = document.querySelector('.oc-modal-backdrop');
-        if(!backdrop) { document.body.removeEventListener('click', onClose); return; }
-        const closeBtn = e.target.closest('.oc-modal-close');
-        if (e.target === backdrop || closeBtn) {
-          backdrop.remove();
-          document.body.removeEventListener('click', onClose);
-        }
+      const r = await fetch(url, {
+        headers: {
+          'X-Requested-With':'XMLHttpRequest',
+          'Cache-Control': 'no-cache'
+        },
+        cache: 'no-store'
       });
-
-    }catch(err){
-      console.error(err);
-      alert('No se pudo abrir los adjuntos.');
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const html = await r.text();
+      openHistModal(html);
+    }catch(e){
+      alert('No se pudo abrir el historial.');
+      console.error(e);
     }
   });
 })();
 </script>
 
 
+  <script>
+  // Delegación para modales OC cargados por AJAX (sin cambios)
+  (function () {
+    document.addEventListener('click', function (e) {
+      const closeBtn = e.target.closest('[data-modal-close]');
+      if (closeBtn) {
+        const backdrop = closeBtn.closest('[data-modal-backdrop]') 
+                      || document.querySelector('[data-modal-backdrop]');
+        if (backdrop) backdrop.remove();
+        return;
+      }
+      if (e.target.matches('[data-modal-backdrop]')) {
+        e.target.remove();
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('[data-modal-backdrop]').forEach(b => b.remove());
+      }
+    });
+  })();
+  </script>
 
 </x-app-layout>

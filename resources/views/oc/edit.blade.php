@@ -67,15 +67,15 @@
     $fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDateString());
     $defaultIva   = old('iva_porcentaje', 16);
 
-    // Permisos: Admin o permiso específico pueden editar el folio
     $isAdminCanEditFolio = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
 
-    // Prefill detalles
+    // Prefill detalles (ahora incluye id siempre)
     $prefill = old('items');
     if (!$prefill) {
       $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
         ->map(function($d){
           return [
+            'id'       => $d->id,
             'cantidad' => $d->cantidad ?? '',
             'unidad'   => $d->unidad ?? '',
             'concepto' => $d->concepto ?? '',
@@ -86,7 +86,9 @@
         })->values()->all();
     }
     if (empty($prefill)) {
-      $prefill = [['cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>'']];
+      $prefill = [[
+        'id' => null, 'cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>''
+      ]];
     }
 
     $hasNonZeroDecimals = function($val): bool {
@@ -221,6 +223,8 @@
                 <tbody id="itemsTbody">
                   @foreach($prefill as $idx => $it)
                   <tr class="item-row">
+                    {{-- Hidden id SIEMPRE (vacío si es nueva) --}}
+                    <input type="hidden" name="items[{{ $idx }}][id]" value="{{ old("items.$idx.id", $it['id'] ?? '') }}">
                     <td>
                       <input type="number" step="0.0001" min="0"
                              name="items[{{ $idx }}][cantidad]"
@@ -372,6 +376,8 @@
         const mUSD = (baseMoneda === 'USD') ? 'selected' : '';
         return `
         <tr class="item-row">
+          <!-- hidden id vacío para nuevas -->
+          <input type="hidden" name="items[${idx}][id]" value="">
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][cantidad]" class="i-cantidad right"></td>
           <td><input type="text" name="items[${idx}][unidad]"></td>
           <td><input type="text" name="items[${idx}][concepto]"></td>
@@ -426,5 +432,17 @@
       recalc();
       ivaPct?.addEventListener('input', recalc);
     })();
+
+    // Evitar doble submit
+    const form = document.querySelector('form[action*="oc"][method="post"]');
+    if (form) {
+      let sent = false;
+      form.addEventListener('submit', (e) => {
+        if (sent) { e.preventDefault(); return; }
+        sent = true;
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+      });
+    }
   </script>
 </x-app-layout>
