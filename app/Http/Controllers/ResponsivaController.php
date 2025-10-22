@@ -483,15 +483,15 @@ class ResponsivaController extends Controller implements HasMiddleware
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         if (Schema::hasColumn('responsivas', 'signed_at') && $responsiva->signed_at) {
-            return back()->with('error', 'Esta responsiva ya está firmada.');
+            return redirect()
+                ->route('responsivas.show', $responsiva)
+                ->with('error', 'Esta responsiva ya está firmada.');
         }
 
         $now = now();
-        $expired = false;
-
-        if ($responsiva->sign_token_expires_at) {
-            $expired = $now->greaterThan($responsiva->sign_token_expires_at);
-        }
+        $expired = $responsiva->sign_token_expires_at
+            ? $now->greaterThan($responsiva->sign_token_expires_at)
+            : false;
 
         if (!$responsiva->sign_token || $expired) {
             $responsiva->sign_token = Str::random(64);
@@ -500,11 +500,19 @@ class ResponsivaController extends Controller implements HasMiddleware
             $responsiva->save();
         }
 
-        $linkFirma = route('public.sign.show', $responsiva->sign_token);
+        $linkFirma = route('public.sign.show', ['token' => $responsiva->sign_token]);
 
-        return back()
+        // (Opcional) guardar url en BD como respaldo
+        if (Schema::hasColumn('responsivas', 'firma_colaborador_url')) {
+            $responsiva->firma_colaborador_url = $linkFirma;
+            $responsiva->save();
+        }
+
+        return redirect()
+            ->route('responsivas.show', $responsiva)
             ->with('ok', 'Link de firma generado.')
-            ->with('firma_link', $linkFirma);
+            ->with('firma_link', $linkFirma)
+            ->with('open_firma_modal', true);   // <- clave para auto-abrir
     }
 
     public function firmarEnSitio(Request $req, Responsiva $responsiva)

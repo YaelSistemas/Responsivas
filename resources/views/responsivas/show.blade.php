@@ -491,12 +491,14 @@
 
   {{-- ========= MODAL: LINK DE FIRMA ========= --}}
   @php
-    $firmaLink = session('firma_link');
-    $colEmail = $col->email
-              ?? $col->correo
-              ?? $col->email_personal
-              ?? $col->email_laboral
-              ?? null;
+    $firmaLinkSession = session('firma_link');
+    $firmaLinkDb = $responsiva->firma_colaborador_url
+                ?? (isset($responsiva->sign_token) && $responsiva->sign_token
+                      ? route('public.sign.show', ['token' => $responsiva->sign_token])
+                      : null);
+    $firmaLink = $firmaLinkSession ?? $firmaLinkDb;
+
+    $colEmail = $col->email ?? $col->correo ?? $col->email_personal ?? $col->email_laboral ?? null;
     $subjectFirma = rawurlencode("Firma de responsiva {$responsiva->folio}");
     $bodyFirma = rawurlencode(
       "Hola {$nombreCompleto},\n\n".
@@ -506,9 +508,9 @@
   @endphp
 
   <div id="modalLinkFirma"
-       class="fixed inset-0 {{ $firmaLink ? 'flex' : 'hidden' }} items-center justify-center bg-black/50 p-4"
-       style="z-index:70;"
-       onclick="closeLinkFirma()">
+      class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4"
+      style="z-index:70;"
+      onclick="closeLinkFirma()">
     <div class="bg-white rounded-lg p-4 w-[560px] max-w-[94vw]" style="border:1px solid #111" onclick="event.stopPropagation()">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <h3 class="text-lg font-semibold" style="margin:0">Enlace de firma</h3>
@@ -520,35 +522,40 @@
         <div>
           <label class="text-sm text-gray-600">Link</label>
           <input id="firmaLinkInput" type="text"
-                 value="{{ $firmaLink ?? '' }}"
-                 readonly
-                 style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">
+                value="{{ $firmaLink ?? '' }}"
+                readonly
+                style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <a id="btnAbrirFirma" class="btn btn-primary"
-             href="{{ $firmaLink ?? '#' }}" target="_blank" rel="noopener"
-             {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
+            href="{{ $firmaLink ?? '#' }}" target="_blank" rel="noopener"
+            {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
             Abrir link
           </a>
 
           <button type="button" class="btn btn-secondary" onclick="copyFirmaLink()">Copiar link</button>
 
-          {{-- SOLO Outlook/cliente por defecto (mailto) --}}
           <a class="btn btn-secondary"
-             href="mailto:{{ urlencode($colEmail ?? '') }}?subject={{ $subjectFirma }}&body={{ $bodyFirma }}"
-             {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
+            href="mailto:{{ urlencode($colEmail ?? '') }}?subject={{ $subjectFirma }}&body={{ $bodyFirma }}"
+            {{ $firmaLink ? '' : 'aria-disabled=true style=pointer-events:none;opacity:.6' }}>
             Enviar por correo (Outlook)
           </a>
         </div>
 
         <small class="text-gray-500">
-          Nota: “Enviar por correo (Outlook)” usa <code>mailto:</code>. En Windows abrirá tu cliente de correo por defecto (Outlook de escritorio si está predeterminado).
+          Nota: usa <code>mailto:</code> y abrirá tu cliente de correo predeterminado.
         </small>
       </div>
     </div>
   </div>
   {{-- ========= /MODAL: LINK DE FIRMA ========= --}}
+
+  @if (session('open_firma_modal') && session('firma_link'))
+    <script>
+      window.addEventListener('DOMContentLoaded', () => openLinkFirma());
+    </script>
+  @endif
 
   {{-- ============= MODAL DE FIRMA (FUERA DE .zoom-inner PARA EVITAR transform) ============= --}}
   @can('responsivas.edit')
