@@ -401,14 +401,27 @@
 
     // Cerrar
     const backdrop = mount.querySelector('.modal-backdrop, .oc-modal-backdrop');
-    const closeBtn = mount.querySelector('[data-close-modal], .oc-modal-close');
+    const closeBtn = mount.querySelector('[data-modal-close], .oc-modal-close, .close');
+    const modal    = mount.querySelector('.oc-modal');
 
     function close(){ mount.remove(); }
 
-    if (backdrop) backdrop.addEventListener('click', close);
+    // 1) Cerrar solo si el click es EXACTAMENTE sobre el backdrop
+    if (backdrop) {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) close();
+      });
+    }
+
+    // 2) Evitar que los clicks dentro del cuadro propaguen al backdrop
+    if (modal) {
+      modal.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    // 3) Botón ✕
     if (closeBtn) closeBtn.addEventListener('click', close);
 
-    // ESC para cerrar
+    // 4) ESC para cerrar
     document.addEventListener('keydown', function onEsc(e){
       if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', onEsc); }
     });

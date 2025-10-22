@@ -7,88 +7,114 @@ use App\Models\OcLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 class OrdenCompraObserver
 {
     protected static array $seen = [];
 
-    /** Normaliza el valor por campo para evitar falsos positivos (string "1" vs int 1, etc.) */
+    /** Normaliza valores para evitar falsos positivos en updated() */
     protected function norm(string $field, $value)
     {
         if ($value === null) return null;
 
-        // IDs foráneos
         if (in_array($field, ['solicitante_id', 'proveedor_id'], true)) {
-            return (string) (int) $value; // "1"
+            return (string) (int) $value;
         }
 
-        // Numéricos/monetarios
         if (in_array($field, ['iva_porcentaje','subtotal','iva_monto','monto'], true)) {
-            return (string) (float) $value; // "123.45"
+            return (string) (float) $value;
         }
 
-        // Fecha ya la formateamos aparte a Y-m-d
         if ($field === 'fecha') {
             return (string) $value;
         }
 
-        // Resto: comparar como string
         return (string) $value;
     }
 
+    /**
+     * Log de creación (una sola vez, después de que se confirmen cabecera y partidas).
+     */
     public function created(OrdenCompra $oc): void
     {
-        // intencionalmente vacío -> registramos la creación en saved()
+        // Ejecutar después de que termine la transacción del store()
+        DB::afterCommit(function () use ($oc) {
+            $oc->refresh(); // <-- asegura que ya tenga seq, totales y relaciones consolidadas
+            // Cargar relaciones consolidadas
+            if (method_exists($oc, 'solicitante')) $oc->loadMissing('solicitante');
+            if (method_exists($oc, 'proveedor'))   $oc->loadMissing('proveedor');
+            if (method_exists($oc, 'detalles'))    $oc->loadMissing('detalles');
+
+            // Si tu cabecera no tiene subtotal/iva/total, tomarlos de las partidas
+            $sumSubtotal = $oc->detalles->sum(fn($d) => (float) ($d->subtotal ?? $d->importe ?? 0));
+            $sumIva      = $oc->detalles->sum(fn($d) => (float) ($d->iva_monto ?? 0));
+            $sumTotal    = $oc->detalles->sum(function($d){
+                $sub = (float) ($d->subtotal ?? $d->importe ?? 0);
+                $iva = (float) ($d->iva_monto ?? 0);
+                return (float) ($d->total ?? ($sub + $iva));
+            });
+
+            $ivaPctFallback = optional($oc->detalles->first())->iva_pct;
+            $ivaPctCabecera = Schema::hasColumn($oc->getTable(),'iva_porcentaje') ? $oc->iva_porcentaje : null;
+            $ivaPctFinal    = is_numeric($ivaPctCabecera) ? (float)$ivaPctCabecera
+                                : (is_numeric($ivaPctFallback) ? (float)$ivaPctFallback : null);
+
+            $solName = $oc->solicitante
+                ? trim(($oc->solicitante->nombre ?? '').' '.($oc->solicitante->apellidos ?? ''))
+                : null;
+
+            $payload = [
+                'numero_orden'   => $oc->numero_orden,
+                'fecha'          => $oc->fecha ? Carbon::parse($oc->fecha)->format('Y-m-d') : null,
+                'solicitante'    => $solName ?? ($oc->solicitante?->name ?? $oc->solicitante_id),
+                'proveedor'      => $oc->proveedor?->nombre ?? $oc->proveedor_id,
+                'descripcion'    => $oc->descripcion,
+
+                // Cabecera si existe; si no, sumas de partidas
+                'iva_porcentaje' => $ivaPctFinal,
+                'subtotal'       => Schema::hasColumn($oc->getTable(),'subtotal')  ? $oc->subtotal  : $sumSubtotal,
+                'iva'            => Schema::hasColumn($oc->getTable(),'iva_monto') ? $oc->iva_monto : $sumIva,
+                'total'          => $oc->monto ?? ($oc->total ?? $sumTotal),
+
+                'notas'          => Schema::hasColumn($oc->getTable(),'notas') ? $oc->notas : null,
+                'estado'         => $oc->estado,
+
+                'items'          => method_exists($oc, 'detalles')
+                    ? $oc->detalles->map(function($d){
+                        return [
+                            'id'       => $d->id,
+                            'cantidad' => $d->cantidad,
+                            'um'       => $d->unidad ?? ($d->unidad_medida ?? $d->um ?? null),
+                            'concepto' => $d->concepto,
+                            'moneda'   => $d->moneda,
+                            'precio'   => $d->precio ?? ($d->precio_unitario ?? null),
+                            'importe'  => $d->importe ?? ($d->subtotal ?? null),
+                            'nota'     => $d->nota ?? null,
+                        ];
+                    })->values()->all()
+                    : [],
+            ];
+
+            // 🔒 anti-duplicado:
+            if (OcLog::where('orden_compra_id', $oc->id)
+                    ->where('type', 'created')
+                    ->exists()) {
+                return;
+            }
+            
+            OcLog::create([
+                'orden_compra_id' => $oc->id,
+                'user_id'         => Auth::id(),
+                'type'            => 'created',
+                'data'            => $payload,
+            ]);
+        });
     }
 
-    public function saved(OrdenCompra $oc): void
-    {
-        if (!$oc->wasRecentlyCreated) return;
-
-        if (method_exists($oc, 'solicitante')) $oc->loadMissing('solicitante');
-        if (method_exists($oc, 'proveedor'))   $oc->loadMissing('proveedor');
-        if (method_exists($oc, 'detalles'))    $oc->loadMissing('detalles');
-
-        $solName = $oc->solicitante
-            ? trim(($oc->solicitante->nombre ?? '').' '.($oc->solicitante->apellidos ?? ''))
-            : null;
-
-        $payload = [
-            'numero_orden'   => $oc->numero_orden,
-            'fecha'          => $oc->fecha ? Carbon::parse($oc->fecha)->format('Y-m-d') : null,
-            'solicitante'    => $solName ?? ($oc->solicitante?->name ?? $oc->solicitante_id),
-            'proveedor'      => $oc->proveedor?->nombre ?? $oc->proveedor_id,
-            'descripcion'    => $oc->descripcion,
-            'iva_porcentaje' => Schema::hasColumn($oc->getTable(),'iva_porcentaje') ? $oc->iva_porcentaje : null,
-            'subtotal'       => Schema::hasColumn($oc->getTable(),'subtotal')      ? $oc->subtotal      : null,
-            'iva'            => Schema::hasColumn($oc->getTable(),'iva_monto')     ? $oc->iva_monto     : null,
-            'total'          => $oc->monto ?? ($oc->total ?? null),
-            'notas'          => Schema::hasColumn($oc->getTable(),'notas')         ? $oc->notas         : null,
-            'estado'         => $oc->estado,
-            'items'          => method_exists($oc, 'detalles')
-                ? $oc->detalles->map(function($d){
-                    return [
-                        'id'       => $d->id,
-                        'cantidad' => $d->cantidad,
-                        'um'       => $d->unidad ?? ($d->unidad_medida ?? $d->um ?? null),
-                        'concepto' => $d->concepto,
-                        'moneda'   => $d->moneda,
-                        'precio'   => $d->precio ?? ($d->precio_unitario ?? null),
-                        'importe'  => $d->importe ?? ($d->subtotal ?? null),
-                        'nota'     => $d->nota ?? null,
-                    ];
-                })->values()->all()
-                : [],
-        ];
-
-        OcLog::create([
-            'orden_compra_id' => $oc->id,
-            'user_id'         => Auth::id(),
-            'type'            => 'created',
-            'data'            => $payload,
-        ]);
-    }
-
+    /**
+     * Log de edición de cabecera (mantener como lo tenías).
+     */
     public function updated(OrdenCompra $oc): void
     {
         $watch = [
@@ -108,7 +134,6 @@ class OrdenCompraObserver
                 } catch (\Throwable $e) {}
             }
 
-            // ⇩⇩ Comparación con valores normalizados para evitar "1" vs 1, "12.0" vs 12 etc.
             if ($this->norm($field, $old) !== $this->norm($field, $new)) {
                 $changes[$field] = ['from' => $old, 'to' => $new];
             }
@@ -116,7 +141,6 @@ class OrdenCompraObserver
 
         if (!$changes) return;
 
-        // Traducir IDs a "id - nombre"
         foreach ($changes as $campo => &$chg) {
             if ($campo === 'solicitante_id') {
                 $oldColab = \App\Models\Colaborador::find($chg['from'] ?? null);
@@ -150,7 +174,7 @@ class OrdenCompraObserver
             ];
         } else {
             $type = 'updated';
-            $data = $changes; // sin wrapper "changes"
+            $data = $changes;
         }
 
         $fingerprint = $oc->id.'|'.$type.'|'.md5(json_encode($data, JSON_UNESCAPED_UNICODE));

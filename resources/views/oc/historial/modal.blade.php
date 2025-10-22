@@ -99,6 +99,9 @@
                       <tr><th>Proveedor</th><td>{{ $d['proveedor'] ?? '' }}</td></tr>
                       <tr><th>Descripción</th><td>{{ $d['descripcion'] ?? '' }}</td></tr>
                       <tr><th>IVA %</th><td>{{ $d['iva_porcentaje'] ?? '' }}</td></tr>
+                      <tr><th>Subtotal</th><td class="mono">{{ $d['subtotal'] ?? '' }}</td></tr>
+                      <tr><th>IVA</th><td class="mono">{{ $d['iva'] ?? '' }}</td></tr>
+                      <tr><th>Total</th><td class="mono">{{ $d['total'] ?? '' }}</td></tr>
                       <tr><th>Notas</th><td>{{ $d['notas'] ?? '' }}</td></tr>
                     </tbody>
                   </table>
@@ -180,27 +183,84 @@
                 @case('state_changed')
                 @case('status_changed')
                   @php
-                    $from = $d['from'] ?? '';
-                    $to   = $d['to']   ?? '';
-                    $cls  = $to === 'pagada' ? 'b-green' : ($to === 'cancelada' ? 'b-red' : 'b-blue');
+                    $from = (string)($d['from'] ?? '');
+                    $to   = (string)($d['to']   ?? '');
+
+                    $color = function ($v) {
+                        return match (strtolower($v)) {
+                            'pagada'    => 'b-green',
+                            'cancelada' => 'b-red',
+                            default     => 'b-blue',
+                        };
+                    };
+
+                    $clsFrom = $color($from);
+                    $clsTo   = $color($to);
                   @endphp
+
                   <div class="ev-meta">
-                    Estado: <span class="badge b-blue">{{ ucfirst($from) }}</span>
-                    → <span class="badge {{ $cls }}">{{ ucfirst($to) }}</span>
+                    Estado:
+                    <span class="badge {{ $clsFrom }}">{{ ucfirst($from) }}</span>
+                    → <span class="badge {{ $clsTo }}">{{ ucfirst($to) }}</span>
                   </div>
                 @break
 
                 @case('item_added')
+                  <div class="ev-meta" style="margin-bottom:.4rem;">Partida agregada:</div>
+
                   <table class="diff-table">
+                    <thead>
+                      <tr>
+                        <th>Cant</th>
+                        <th>U/M</th>
+                        <th>Concepto</th>
+                        <th>Moneda</th>
+                        <th>Precio</th>
+                        <th>Importe</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      <tr><th>Concepto</th><td>{{ $d['concepto'] ?? '' }}</td></tr>
-                      <tr><th>Cantidad</th><td class="mono">{{ $d['cantidad'] ?? '' }}</td></tr>
-                      <tr><th>U/M</th><td>{{ $d['um'] ?? '' }}</td></tr>
-                      <tr><th>Moneda</th><td>{{ $d['moneda'] ?? '' }}</td></tr>
-                      <tr><th>Precio</th><td class="mono">{{ $d['precio'] ?? '' }}</td></tr>
-                      <tr><th>Importe</th><td class="mono">{{ $d['importe'] ?? '' }}</td></tr>
+                      <tr>
+                        <td class="mono">{{ $d['cantidad'] ?? '' }}</td>
+                        <td>{{ $d['um'] ?? '' }}</td>
+                        <td>{{ $d['concepto'] ?? '' }}</td>
+                        <td>{{ $d['moneda'] ?? '' }}</td>
+                        <td class="mono">{{ $d['precio'] ?? '' }}</td>
+                        <td class="mono">{{ $d['importe'] ?? '' }}</td>
+                      </tr>
                     </tbody>
                   </table>
+
+                  {{-- Si existe snapshot de todas las partidas, mostrar la tabla completa --}}
+                  @if(!empty($d['items']) && is_array($d['items']))
+                    <div class="ev-meta" style="margin-top:.5rem;">Partidas totales actuales:</div>
+                    <table class="diff-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Cant</th>
+                          <th>U/M</th>
+                          <th>Concepto</th>
+                          <th>Moneda</th>
+                          <th>Precio</th>
+                          <th>Importe</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @foreach($d['items'] as $idx=>$it)
+                          <tr>
+                            <td class="mono">{{ $idx+1 }}</td>
+                            <td class="mono">{{ $it['cantidad'] ?? '' }}</td>
+                            <td>{{ $it['unidad'] ?? ($it['um'] ?? '') }}</td>
+                            <td>{{ $it['concepto'] ?? '' }}</td>
+                            <td>{{ $it['moneda'] ?? '' }}</td>
+                            <td class="mono">{{ $it['precio'] ?? '' }}</td>
+                            <td class="mono">{{ $it['importe'] ?? ($it['subtotal'] ?? '') }}</td>
+                          </tr>
+                        @endforeach
+                      </tbody>
+                    </table>
+                  @endif
                 @break
 
                 @case('item_updated')
@@ -225,9 +285,9 @@
                   <div class="ev-meta">Partida eliminada:</div>
                   <table class="diff-table">
                     <tbody>
-                      <tr><th>Concepto</th><td>{{ $d['concepto'] ?? '' }}</td></tr>
                       <tr><th>Cantidad</th><td class="mono">{{ $d['cantidad'] ?? '' }}</td></tr>
                       <tr><th>U/M</th><td>{{ $d['um'] ?? '' }}</td></tr>
+                      <tr><th>Concepto</th><td>{{ $d['concepto'] ?? '' }}</td></tr>
                       <tr><th>Moneda</th><td>{{ $d['moneda'] ?? '' }}</td></tr>
                       <tr><th>Precio</th><td class="mono">{{ $d['precio'] ?? '' }}</td></tr>
                       <tr><th>Importe</th><td class="mono">{{ $d['importe'] ?? '' }}</td></tr>
