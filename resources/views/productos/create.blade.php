@@ -102,6 +102,19 @@
               @error('tracking') <div class="err">{{ $message }}</div> @enderror
             </div>
 
+            {{-- Color (solo visible si tipo = consumible) --}}
+            <div class="form-group" id="color-consumible-wrap" style="{{ old('tipo')==='consumible' ? '' : 'display:none' }}">
+              <label>Color</label>
+              <select name="color_consumible" id="color-consumible">
+                <option value="" disabled {{ old('color_consumible') ? '' : 'selected' }}>Selecciona color…</option>
+                <option value="Black (BK)" @selected(old('color_consumible')==='Black (BK)')>Black (BK)</option>
+                <option value="Magenta (M)" @selected(old('color_consumible')==='Magenta (M)')>Magenta (M)</option>
+                <option value="Yellow (Y)" @selected(old('color_consumible')==='Yellow (Y)')>Yellow (Y)</option>
+                <option value="Cian (C)" @selected(old('color_consumible')==='Cian (C)')>Cian (C)</option>
+              </select>
+              @error('color_consumible') <div class="err">{{ $message }}</div> @enderror
+            </div>
+
             {{-- SKU (visible si: tipo = consumible  o (tipo=otro y tracking=cantidad) ) --}}
             <div class="form-group" id="sku-wrap" style="{{ (old('tipo')==='consumible' || (old('tipo')==='otro' && old('tracking')==='cantidad')) ? '' : 'display:none' }}">
               <label>SKU (p.ej. consumibles/variantes)</label>
@@ -204,11 +217,13 @@
 
     const colorInput   = document.getElementById('colorInput');
     const descripcion  = document.getElementById('descripcion');
+    const colorConsumibleWrap = document.getElementById('color-consumible-wrap');
+
 
     // defaults por tipo (monitor y pantalla como impresora; periférico ahora serial)
     const defaultTracking = {
       consumible: 'cantidad',
-      periferico: 'serial',   // ⬅️ CAMBIO: antes 'cantidad'
+      periferico: 'serial',   
       equipo_pc:  'serial',
       impresora:  'serial',
       monitor:    'serial',
@@ -225,6 +240,7 @@
       cantWrap.style.display  = 'none';
       equipoSpecs.style.display = 'none';
       descWrap.style.display  = 'none';
+      colorConsumibleWrap.style.display = 'none';
     }
 
     function updateSKUVisibility() {
@@ -276,6 +292,13 @@
         trackingWrap.style.display = 'none';
         tracking?.removeAttribute('required');
         if (tracking) tracking.value = defaultTracking[t] || '';
+      }
+
+      // Campo color solo visible si tipo = "consumible"
+      if (t === 'consumible') {
+        colorConsumibleWrap.style.display = '';
+      } else {
+        colorConsumibleWrap.style.display = 'none';
       }
 
       toggleByTracking();

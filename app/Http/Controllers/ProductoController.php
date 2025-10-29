@@ -54,7 +54,7 @@ class ProductoController extends Controller implements HasMiddleware
         $productos = \App\Models\Producto::query()
             ->where('empresa_tenant_id', $tenant)
             ->when($q, function ($w) use ($q, $tenant) {
-                $terms = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY); // divide "laptop dell 3501" en ["laptop","dell","3501"]
+                $terms = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY);
 
                 $w->where(function ($qq) use ($terms, $tenant) {
                     foreach ($terms as $term) {
@@ -63,6 +63,9 @@ class ProductoController extends Controller implements HasMiddleware
                                 ->orWhere('marca', 'like', "%{$term}%")
                                 ->orWhere('modelo', 'like', "%{$term}%")
                                 ->orWhere('sku', 'like', "%{$term}%")
+                                // 🔸 Nuevo: color consumible y color en JSON
+                                ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(especificaciones, '$.color')) LIKE ?", ["%{$term}%"])
+                                // 🔸 Series relacionadas
                                 ->orWhereHas('series', function ($s) use ($term, $tenant) {
                                     $s->where('empresa_tenant_id', $tenant)
                                     ->where('serie', 'like', "%{$term}%");
@@ -71,7 +74,6 @@ class ProductoController extends Controller implements HasMiddleware
                     }
                 });
             })
-
             ->withCount([
                 'series as series_disponibles_count' => function ($s) use ($tenant) {
                     $s->where('empresa_tenant_id', $tenant)->where('estado', 'disponible');
@@ -136,6 +138,7 @@ class ProductoController extends Controller implements HasMiddleware
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
+            'color_consumible' => ['nullable', Rule::requiredIf(fn() => $request->input('tipo') === 'consumible'),'string','max:50'],
             // Carga inicial
             'series_lotes'   => 'nullable|string',
             'stock_inicial'  => 'nullable|integer|min:0',
@@ -163,9 +166,9 @@ class ProductoController extends Controller implements HasMiddleware
             : 'pieza';
 
         $specs = null;
-        if ($data['tipo'] === 'equipo_pc') {
+        if (in_array($data['tipo'], ['equipo_pc', 'consumible'])) {
             $specs = array_filter([
-                'color' => $request->input('spec.color'),
+                'color' => $request->input('spec.color') ?? $request->input('color_consumible'),
                 'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
                 'almacenamiento' => array_filter([
                     'tipo' => $request->input('spec.almacenamiento.tipo'),

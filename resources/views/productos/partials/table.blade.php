@@ -51,7 +51,25 @@
               @endif
             </div>
             @if($p->sku)
-              <div class="text-xs text-gray-500">SKU: {{ $p->sku }}</div>
+              @php
+                // 🔸 Obtener el color desde las especificaciones (JSON) del producto
+                $color = strtolower(trim($p->especificaciones['color'] ?? ''));
+
+                // 🔸 Determinar el color visual según el valor
+                $colorHex = match (true) {
+                  str_contains($color, 'magenta') => '#ff1dce', // Magenta
+                  str_contains($color, 'cian')    => '#06b6d4', // Cian
+                  str_contains($color, 'yellow'),
+                  str_contains($color, 'amarillo')=> '#ca8a04', // Amarillo
+                  str_contains($color, 'black'),
+                  str_contains($color, 'negro')   => '#000000', // Negro
+                  default                         => '#6b7280', // Gris por defecto
+                };
+              @endphp
+
+              <div class="text-xs" style="color: {{ $colorHex }}">
+                SKU: {{ $p->sku }}
+              </div>
             @endif
             @if($p->descripcion)
               <div class="text-xs text-gray-600 mt-1">{{ Str::limit($p->descripcion, 120) }}</div>
