@@ -42,6 +42,17 @@
     }
 
     .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace}
+
+    /* ===== Centrar texto en la tabla de colaboradores ===== */
+    #tabla-colaboradores th,
+    #tabla-colaboradores td {
+    text-align: center !important;
+    }
+
+    /* Mantener centrado el encabezado pero alinear a la izquierda los nombres */
+    #tabla-colaboradores tbody td:first-child {
+      text-align: left !important;
+    }
   </style>
 
   <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->

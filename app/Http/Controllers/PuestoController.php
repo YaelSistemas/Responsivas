@@ -6,6 +6,8 @@ use App\Models\Puesto;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class PuestoController extends Controller implements HasMiddleware
 {
@@ -55,14 +57,29 @@ class PuestoController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
+        $tenantId = $this->tenantId(); // usa tu método actual para obtener el tenant
+
         $data = $request->validate([
-            'nombre'      => 'required|string|max:255',
-            'descripcion' => 'nullable|string|max:1000',
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('puestos')
+                    ->where(fn ($query) => $query->where('empresa_tenant_id', $tenantId)),
+            ],
+            'descripcion' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'nombre.unique' => 'Ya existe un puesto con este nombre en esta empresa.',
         ]);
 
-        Puesto::create($data); // tenant/folio/created_by se ponen en el modelo
+        $data['empresa_tenant_id'] = $tenantId;
+        $data['created_by'] = Auth::id();
 
-        return redirect()->route('puestos.index')->with('created', true);
+        Puesto::create($data);
+
+        return redirect()
+            ->route('puestos.index')
+            ->with('created', true);
     }
 
     public function edit(Puesto $puesto)
@@ -72,14 +89,29 @@ class PuestoController extends Controller implements HasMiddleware
 
     public function update(Request $request, Puesto $puesto)
     {
+        $tenantId = $this->tenantId(); // usa tu método actual para obtener el tenant
+
         $data = $request->validate([
-            'nombre'      => 'required|string|max:255',
-            'descripcion' => 'nullable|string|max:1000',
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('puestos')
+                    ->where(fn ($query) => $query->where('empresa_tenant_id', $tenantId))
+                    ->ignore($puesto->id), // 👈 ignora el ID actual al editar
+            ],
+            'descripcion' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'nombre.unique' => 'Ya existe un puesto con este nombre en esta empresa.',
         ]);
 
-        $puesto->update($data); // no tocamos tenant ni folio
+        $data['updated_by'] = Auth::id() ?? null;
 
-        return redirect()->route('puestos.index')->with('updated', true);
+        $puesto->update($data);
+
+        return redirect()
+            ->route('puestos.index')
+            ->with('updated', true);
     }
 
     public function destroy(Puesto $puesto)

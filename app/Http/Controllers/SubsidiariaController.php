@@ -6,6 +6,8 @@ use App\Models\Subsidiaria;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
 
 class SubsidiariaController extends Controller implements HasMiddleware
 {
@@ -55,14 +57,28 @@ class SubsidiariaController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
+        $tenantId = $this->tenantId(); // o el método que uses para identificar el tenant
+
         $data = $request->validate([
-            'nombre'      => 'required|string|max:255',
-            'descripcion' => 'nullable|string|max:1000',
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('subsidiarias')
+                    ->where(fn ($query) => $query->where('empresa_tenant_id', $tenantId)),
+            ],
+            'descripcion' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        Subsidiaria::create($data); // tenant/folio/created_by en el modelo
+        // Agregamos los valores automáticos del modelo (tenant, usuario, folio, etc.)
+        $data['empresa_tenant_id'] = $tenantId;
+        $data['created_by'] = Auth::id();
 
-        return redirect()->route('subsidiarias.index')->with('created', true);
+        Subsidiaria::create($data);
+
+        return redirect()
+            ->route('subsidiarias.index')
+            ->with('created', true);
     }
 
     public function edit(Subsidiaria $subsidiaria)
@@ -72,14 +88,29 @@ class SubsidiariaController extends Controller implements HasMiddleware
 
     public function update(Request $request, Subsidiaria $subsidiaria)
     {
+        $tenantId = $this->tenantId(); // o el método que usas para identificar el tenant
+
         $data = $request->validate([
-            'nombre'      => 'required|string|max:255',
-            'descripcion' => 'nullable|string|max:1000',
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('subsidiarias')
+                    ->where(fn ($query) => $query->where('empresa_tenant_id', $tenantId))
+                    ->ignore($subsidiaria->id), // 👈 esto permite usar el mismo nombre del registro actual
+            ],
+            'descripcion' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'nombre.unique' => 'Ya existe una subsidiaria con este nombre en esta empresa.',
         ]);
+
+        $data['updated_by'] = Auth::id() ?? null;
 
         $subsidiaria->update($data);
 
-        return redirect()->route('subsidiarias.index')->with('updated', true);
+        return redirect()
+            ->route('subsidiarias.index')
+            ->with('updated', true);
     }
 
     public function destroy(Subsidiaria $subsidiaria)
