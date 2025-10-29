@@ -1,5 +1,7 @@
 @php
-  $puedeAdjuntar = auth()->user()->hasAnyRole(['Administrador','Compras Superior']) || auth()->user()->can('oc.edit');
+  $puedeAdjuntar = true;
+  //Si solo quiero que el Admin y Compras Superior sea el que sube adjuntos descomentar linea de abajo
+  //$puedeAdjuntar = auth()->user()->hasAnyRole(['Administrador','Compras Superior']) || auth()->user()->can('oc.edit');
 @endphp
 
 <div class="oc-modal-backdrop" data-oc-modal>

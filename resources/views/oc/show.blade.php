@@ -209,7 +209,7 @@
     .items tr.notes td.note-cell{
       border-left: 0 !important;
       border-right: 0 !important;
-      text-align: center;
+      text-align: left;
       padding-left: 6px;
       font-size: 11px;
       line-height: 1.2;

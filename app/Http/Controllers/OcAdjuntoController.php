@@ -36,7 +36,8 @@ class OcAdjuntoController extends Controller
      */
     public function store(Request $request, OrdenCompra $oc)
     {
-        abort_unless($this->canManage(), 403);
+        // Si se quiere que solo los que tenga permisos edit de OC puedan subir adjuntos descomentar la linea de abajo
+        // abort_unless($this->canManage(), 403);
 
         // Permite 'file' (singular) además de 'files[]'
         if ($request->hasFile('file') && !$request->hasFile('files')) {
@@ -108,77 +109,77 @@ class OcAdjuntoController extends Controller
      * Eliminar adjunto (físico + BD) con log.
      */
     public function destroy(Request $request, OcAdjunto $adjunto)
-{
-    abort_unless($this->canManage(), 403);
+    {
+        // Si se quiere que solo los que tenga permisos delete de OC puedan eliminar adjuntos descomentar la linea de abajo
+        // abort_unless($this->canManage(), 403);
 
-    // Toma el ID directo (no dependas de la relación)
-    $ocId = $adjunto->orden_compra_id;
+        // Toma el ID directo (no dependas de la relación)
+        $ocId = $adjunto->orden_compra_id;
 
-    // Cachea metadata ANTES de borrar
-    $meta = [
-        'name' => $adjunto->original_name,
-        'size' => $adjunto->size,
-        'mime' => $adjunto->mime,
-        'path' => $adjunto->path,
-    ];
-    $disk = $adjunto->disk ?: 'public';
+        // Cachea metadata ANTES de borrar
+        $meta = [
+            'name' => $adjunto->original_name,
+            'size' => $adjunto->size,
+            'mime' => $adjunto->mime,
+            'path' => $adjunto->path,
+        ];
+        $disk = $adjunto->disk ?: 'public';
 
-    try {
-        // 1) Borrar archivo (no fallar si no existe)
-        if (!empty($meta['path'])) {
-            try { Storage::disk($disk)->delete($meta['path']); }
-            catch (\Throwable $fsErr) {
-                \Log::warning('No se pudo borrar el archivo del adjunto', [
-                    'adjunto_id' => $adjunto->id,
-                    'path'       => $meta['path'],
-                    'disk'       => $disk,
-                    'err'        => $fsErr->getMessage(),
-                ]);
+        try {
+            // 1) Borrar archivo (no fallar si no existe)
+            if (!empty($meta['path'])) {
+                try { Storage::disk($disk)->delete($meta['path']); }
+                catch (\Throwable $fsErr) {
+                    \Log::warning('No se pudo borrar el archivo del adjunto', [
+                        'adjunto_id' => $adjunto->id,
+                        'path'       => $meta['path'],
+                        'disk'       => $disk,
+                        'err'        => $fsErr->getMessage(),
+                    ]);
+                }
             }
+
+            // 2) Borrar registro en BD
+            $adjunto->delete();
+
+            // 3) Registrar SIEMPRE el evento (usando el ID crudo)
+            OcLog::create([
+                'orden_compra_id' => $ocId,
+                'user_id'         => Auth::id(),
+                'type'            => 'attachment_removed', // tu vista ya contempla removed/deleted
+                'data'            => $meta,
+            ]);
+
+            // 4) Recuento actualizado (sin relación)
+            $count = OcAdjunto::where('orden_compra_id', $ocId)->count();
+
+            // 5) Responder AJAX
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'ok'    => true,
+                    'msg'   => 'Adjunto eliminado.',
+                    'count' => $count,
+                ], 200);
+            }
+
+            return back()->with('updated', true);
+
+        } catch (\Throwable $e) {
+            \Log::error('Error al eliminar adjunto', [
+                'adjunto_id' => $adjunto->id ?? null,
+                'err'        => $e->getMessage(),
+            ]);
+
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'ok'      => false,
+                    'message' => 'No se pudo eliminar',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+
+            return back()->with('error', 'No se pudo eliminar');
         }
-
-        // 2) Borrar registro en BD
-        $adjunto->delete();
-
-        // 3) Registrar SIEMPRE el evento (usando el ID crudo)
-        OcLog::create([
-            'orden_compra_id' => $ocId,
-            'user_id'         => Auth::id(),
-            'type'            => 'attachment_removed', // tu vista ya contempla removed/deleted
-            'data'            => $meta,
-        ]);
-
-        // 4) Recuento actualizado (sin relación)
-        $count = OcAdjunto::where('orden_compra_id', $ocId)->count();
-
-        // 5) Responder AJAX
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json([
-                'ok'    => true,
-                'msg'   => 'Adjunto eliminado.',
-                'count' => $count,
-            ], 200);
-        }
-
-        return back()->with('updated', true);
-
-    } catch (\Throwable $e) {
-        \Log::error('Error al eliminar adjunto', [
-            'adjunto_id' => $adjunto->id ?? null,
-            'err'        => $e->getMessage(),
-        ]);
-
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json([
-                'ok'      => false,
-                'message' => 'No se pudo eliminar',
-                'error'   => $e->getMessage(),
-            ], 500);
-        }
-
-        return back()->with('error', 'No se pudo eliminar');
     }
-}
-
 
 }
