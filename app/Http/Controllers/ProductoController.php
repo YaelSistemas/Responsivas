@@ -54,17 +54,24 @@ class ProductoController extends Controller implements HasMiddleware
         $productos = \App\Models\Producto::query()
             ->where('empresa_tenant_id', $tenant)
             ->when($q, function ($w) use ($q, $tenant) {
-                $w->where(function ($qq) use ($q, $tenant) {
-                    $qq->where('nombre', 'like', "%{$q}%")
-                       ->orWhere('sku', 'like', "%{$q}%")
-                       ->orWhere('marca', 'like', "%{$q}%")
-                       ->orWhere('modelo', 'like', "%{$q}%")
-                       ->orWhereHas('series', function ($s) use ($q, $tenant) {
-                           $s->where('empresa_tenant_id', $tenant)
-                             ->where('serie', 'like', "%{$q}%");
-                       });
+                $terms = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY); // divide "laptop dell 3501" en ["laptop","dell","3501"]
+
+                $w->where(function ($qq) use ($terms, $tenant) {
+                    foreach ($terms as $term) {
+                        $qq->where(function ($sub) use ($term, $tenant) {
+                            $sub->where('nombre', 'like', "%{$term}%")
+                                ->orWhere('marca', 'like', "%{$term}%")
+                                ->orWhere('modelo', 'like', "%{$term}%")
+                                ->orWhere('sku', 'like', "%{$term}%")
+                                ->orWhereHas('series', function ($s) use ($term, $tenant) {
+                                    $s->where('empresa_tenant_id', $tenant)
+                                    ->where('serie', 'like', "%{$term}%");
+                                });
+                        });
+                    }
                 });
             })
+
             ->withCount([
                 'series as series_disponibles_count' => function ($s) use ($tenant) {
                     $s->where('empresa_tenant_id', $tenant)->where('estado', 'disponible');
@@ -136,7 +143,16 @@ class ProductoController extends Controller implements HasMiddleware
             'spec.color'                               => ['nullable','string','max:50'],
             'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
             'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
-            'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
+            'spec.almacenamiento.capacidad_gb'         => [
+                'nullable','integer','min:1','max:50000',
+                function($attr,$value,$fail) use ($request) {
+                    $tipo = $request->input('tipo');
+                    $tipoAlm = $request->input('spec.almacenamiento.tipo');
+                    if (in_array($tipo, ['equipo_pc','otro']) && $value && !$tipoAlm) {
+                        $fail('Debes seleccionar el tipo de almacenamiento si indicas capacidad en GB.');
+                    }
+                }
+            ],
             'spec.procesador'                          => ['nullable','string','max:120'],
         ]);
 

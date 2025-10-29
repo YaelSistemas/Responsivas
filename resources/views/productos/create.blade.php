@@ -114,7 +114,7 @@
               <div style="font-weight:700;margin:10px 0 6px;">Especificaciones del equipo de cómputo</div>
               <div class="grid-2">
                 <div>
-                  <label>Color</label>
+                  <label>Descripción o Color</label>
                   <input id="colorInput" name="spec[color]" value="{{ old('spec.color') }}">
                   @error('spec.color') <div class="err">{{ $message }}</div> @enderror
                 </div>
@@ -294,6 +294,25 @@
       syncColorToDescripcion();
     }
   })();
-  </script>
 
+  // === Validar almacenamiento (tipo requerido si hay capacidad) ===
+  form?.addEventListener('submit', (e) => {
+    const tipoProd = (tipo.value || '').toLowerCase();
+    if (tipoProd === 'equipo_pc' || tipoProd === 'otro') {
+      const tipoAlmacen = form.querySelector('[name="spec[almacenamiento][tipo]"]');
+      const capAlmacen = form.querySelector('[name="spec[almacenamiento][capacidad_gb]"]');
+
+      const capacidad = parseInt(capAlmacen?.value || 0);
+      const tipoSel   = (tipoAlmacen?.value || '').trim();
+
+      // Si hay capacidad pero no se eligió tipo → error
+      if (capacidad > 0 && !tipoSel) {
+        e.preventDefault();
+        alert('Debes seleccionar el tipo de almacenamiento (SSD, HDD o M.2) si colocas una capacidad.');
+        tipoAlmacen.focus();
+        return false;
+      }
+    }
+  });
+  </script>
 </x-app-layout>

@@ -29,8 +29,7 @@
   <table class="tbl w-full">
     <thead>
       <tr>
-        <th style="width:320px">Producto</th>
-        <th>Marca / Modelo</th>
+        <th style="width:380px">Producto</th>
         <th style="width:180px">Tipo</th>
         <th style="width:220px">Series / SKU</th>
         <th style="width:160px">Stock</th>
@@ -41,22 +40,21 @@
     <tbody>
       @forelse ($productos as $p)
         <tr>
-          {{-- Producto + SKU + Descripción --}}
+          {{-- Producto + Marca + Modelo + SKU + Descripción --}}
           <td class="font-medium col-producto">
-            <div>{{ $p->nombre }}</div>
+            <div>
+              {{ $p->nombre }}
+              @if($p->marca || $p->modelo)
+                <span class="text-gray-600 text-sm">
+                  — {{ trim($p->marca . ' ' . $p->modelo) }}
+                </span>
+              @endif
+            </div>
             @if($p->sku)
               <div class="text-xs text-gray-500">SKU: {{ $p->sku }}</div>
             @endif
             @if($p->descripcion)
               <div class="text-xs text-gray-600 mt-1">{{ Str::limit($p->descripcion, 120) }}</div>
-            @endif
-          </td>
-
-          {{-- Marca / Modelo --}}
-          <td>
-            <div>{{ $p->marca ?: '—' }}</div>
-            @if($p->modelo)
-              <div class="text-xs text-gray-500">{{ $p->modelo }}</div>
             @endif
           </td>
 
