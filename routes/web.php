@@ -17,6 +17,7 @@ use App\Http\Controllers\OrdenCompraController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\OcAdjuntoController;
 use App\Http\Controllers\OcLogController;
+use App\Http\Controllers\DevolucionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -153,6 +154,18 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/responsivas/{responsiva}/firma', [ResponsivaController::class, 'destroyFirma'])
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firma.destroy');
+    
+        /*
+    |--------------------  Devoluciones  --------------------
+    */
+    Route::resource('devoluciones', DevolucionController::class)
+        ->only(['index','create','store','show','edit','update','destroy'])
+        ->middleware(['auth']);
+
+    // PDF interno
+    Route::get('/devoluciones/{devolucion}/pdf', [DevolucionController::class, 'pdf'])
+        ->middleware(['auth'])
+        ->name('devoluciones.pdf');
 
     /*
     |--------------------  Órdenes de Compra (con permisos)  --------------------

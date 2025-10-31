@@ -157,7 +157,7 @@
                 </div>
                 <div>
                   <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-                  <input type="date" name="fecha_entrega" value="{{ old('fecha_entrega', $hoy) }}" required>
+                  <input type="date" name="fecha_entrega" value="{{ old('fecha_entrega') }}" required>
                   @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>

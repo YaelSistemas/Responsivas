@@ -98,7 +98,10 @@ class Responsiva extends Model
     public function recibi()     { return $this->belongsTo(Colaborador::class, 'recibi_colaborador_id'); }
     public function colaborador(){ return $this->belongsTo(Colaborador::class); }
     public function usuario()    { return $this->belongsTo(User::class,'user_id'); }
-    public function detalles()   { return $this->hasMany(ResponsivaDetalle::class); }
+    public function detalles()
+    {
+        return $this->hasMany(\App\Models\ResponsivaDetalle::class, 'responsiva_id', 'id');
+    }
 
     public function scopeForEmpresa(Builder $q, int $empresaId): Builder
     {
