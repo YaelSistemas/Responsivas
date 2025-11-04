@@ -45,16 +45,18 @@
     // Verifica primero si hay una relación de responsiva
     $responsiva = $devolucion->responsiva ?? null;
 
+    // Si no hay colaborador definido aún, intenta tomarlo de la responsiva
     if (!$col && $responsiva && $responsiva->colaborador) {
         $col = $responsiva->colaborador;
+    }
 
-        // Busca la subsidiaria asociada al colaborador
+    // Si hay colaborador, intenta determinar su subsidiaria o empresa
+    if ($col) {
         $sub = $col->subsidiaria ?? $col?->subsidiary ?? null;
         if (!$sub && !empty($col->subsidiaria_id) && class_exists(\App\Models\Subsidiaria::class)) {
             $sub = \App\Models\Subsidiaria::find($col->subsidiaria_id);
         }
 
-        // Si tiene subsidiaria, toma su razón social o nombre
         if ($sub) {
             $emisorRazon = $sub->razon_social
                         ?? $sub->descripcion
@@ -62,9 +64,7 @@
                         ?? $sub->razon
                         ?? $sub->nombre
                         ?? $emisorRazon;
-        }
-        // Si no hay subsidiaria, toma la razón social de la empresa principal
-        elseif (isset($col->empresa)) {
+        } elseif (isset($col->empresa)) {
             $emisorRazon = $col->empresa->razon_social
                         ?? $col->empresa->descripcion
                         ?? $col->empresa->nombre_fiscal

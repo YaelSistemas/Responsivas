@@ -161,38 +161,47 @@ public function update(Request $request, $id)
     $devolucion = Devolucion::with('productos')->findOrFail($id);
 
     DB::transaction(function () use ($devolucion, $validated, $request) {
-        // 1️⃣ Actualizamos los campos principales
+        // 1️⃣ Actualiza los datos principales
         $devolucion->update($validated);
 
-        // 2️⃣ Obtener los productos originalmente ligados
-        $productosAnteriores = $devolucion->productos()->pluck('producto_serie_id')->toArray();
-        $productosNuevos = collect($request->productos)->filter()->values()->toArray();
+        // 2️⃣ Obtener productos actuales del pivote
+        $seriesPrevias = $devolucion->productos()->pluck('devolucion_producto.producto_serie_id')->toArray();
 
-        // 3️⃣ Detectar diferencias
-        $agregados = array_diff($productosNuevos, $productosAnteriores);
-        $quitados  = array_diff($productosAnteriores, $productosNuevos);
+        // 3️⃣ Obtener las nuevas series seleccionadas
+        $seriesNuevas = collect($request->productos)
+            ->flatMap(function ($series) {
+                return is_array($series) ? $series : [$series];
+            })
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
 
-        // 4️⃣ Procesar los agregados (marcar como DISPONIBLES)
-        foreach ($request->productos as $productoId => $serieId) {
-            if (in_array($serieId, $agregados)) {
-                $serie = ProductoSerie::find($serieId);
-                if ($serie) {
-                    $devolucion->productos()->attach($productoId, [
-                        'producto_serie_id' => $serieId,
-                    ]);
-                    $serie->update(['estado' => 'disponible']);
+        // 4️⃣ Detectar diferencias
+        $agregadas = array_diff($seriesNuevas, $seriesPrevias);
+        $quitadas  = array_diff($seriesPrevias, $seriesNuevas);
+
+        // 5️⃣ Agregar nuevas series
+        foreach ($request->productos as $productoId => $series) {
+            $series = is_array($series) ? $series : [$series];
+            foreach ($series as $serieId) {
+                if (in_array($serieId, $agregadas)) {
+                    $serie = ProductoSerie::find($serieId);
+                    if ($serie) {
+                        $devolucion->productos()->attach($productoId, [
+                            'producto_serie_id' => $serieId,
+                        ]);
+                        $serie->update(['estado' => 'disponible']);
+                    }
                 }
             }
         }
 
-        // 5️⃣ Procesar los quitados (volver a ASIGNADOS)
-        foreach ($quitados as $serieId) {
+        // 6️⃣ Quitar las desmarcadas
+        foreach ($quitadas as $serieId) {
             $serie = ProductoSerie::find($serieId);
             if ($serie) {
-                // eliminar del pivote
                 $devolucion->productos()->wherePivot('producto_serie_id', $serieId)->detach();
-
-                // marcar como asignado
                 $serie->update(['estado' => 'Asignado']);
                 if ($serie->producto) {
                     $serie->producto->update(['estado' => 'Asignado']);
@@ -205,9 +214,6 @@ public function update(Request $request, $id)
         ->route('devoluciones.index')
         ->with('success', 'Devolución actualizada correctamente. Los productos fueron sincronizados según los cambios.');
 }
-
-
-
 
 
     public function store(Request $request)
@@ -225,30 +231,37 @@ public function update(Request $request, $id)
     DB::transaction(function () use ($validated, $request) {
         $devolucion = \App\Models\Devolucion::create($validated);
 
-        foreach ($request->productos as $productoId => $serieId) {
-            if (!$serieId) continue;
+        // 🔁 Recorre todos los productos
+        foreach ($request->productos as $productoId => $series) {
+            // Convierte en array por seguridad (por si solo viene un ID)
+            $series = is_array($series) ? $series : [$series];
 
-            $serie = \App\Models\ProductoSerie::find($serieId);
-            if (!$serie) continue;
+            // 🔁 Recorre todas las series del producto
+            foreach ($series as $serieId) {
+                if (!$serieId) continue;
 
-            // ⛔ Bloquea solo si YA se devolvió esa serie EN ESTA MISMA RESPONSIVA
-            $yaDevueltaEnEstaResponsiva = DB::table('devolucion_producto as dp')
-                ->join('devoluciones as d', 'd.id', '=', 'dp.devolucion_id')
-                ->where('dp.producto_serie_id', $serieId)
-                ->where('d.responsiva_id', $validated['responsiva_id'])
-                ->exists();
+                $serie = \App\Models\ProductoSerie::find($serieId);
+                if (!$serie) continue;
 
-            if ($yaDevueltaEnEstaResponsiva) {
-                continue; // ya estaba registrada la devolución para esta responsiva
+                // ⛔ Verifica si esa serie ya fue devuelta en esta misma responsiva
+                $yaDevueltaEnEstaResponsiva = DB::table('devolucion_producto as dp')
+                    ->join('devoluciones as d', 'd.id', '=', 'dp.devolucion_id')
+                    ->where('dp.producto_serie_id', $serieId)
+                    ->where('d.responsiva_id', $validated['responsiva_id'])
+                    ->exists();
+
+                if ($yaDevueltaEnEstaResponsiva) {
+                    continue; // ya estaba registrada la devolución para esta responsiva
+                }
+
+                // ✅ Registrar la serie en el pivote
+                $devolucion->productos()->attach($productoId, [
+                    'producto_serie_id' => $serieId,
+                ]);
+
+                // 🟢 Actualizar el estado de la serie
+                $serie->update(['estado' => 'disponible']);
             }
-
-            // Registra la devolución de esta serie para esta responsiva
-            $devolucion->productos()->attach($productoId, [
-                'producto_serie_id' => $serieId,
-            ]);
-
-            // 🔁 Marca la serie como DISPONIBLE (o 'devuelto' si usas ese estado)
-            $serie->update(['estado' => 'disponible']);
         }
     });
 
@@ -256,6 +269,7 @@ public function update(Request $request, $id)
         ->route('devoluciones.index')
         ->with('success', 'Devolución registrada correctamente.');
 }
+
 
 
     public function show($id)

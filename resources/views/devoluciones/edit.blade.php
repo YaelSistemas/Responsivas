@@ -142,10 +142,10 @@
                         <td>{{ $s?->serie ?? '-' }}</td>
                         <td>
                             <input
-                            type="checkbox"
-                            name="productos[{{ $p->id }}]"
-                            value="{{ $s->id }}"
-                            {{ $checked }}
+                              type="checkbox"
+                              name="productos[{{ $p->id }}][]"
+                              value="{{ $s->id }}"
+                              {{ $checked }}
                             >
                         </td>
                         </tr>

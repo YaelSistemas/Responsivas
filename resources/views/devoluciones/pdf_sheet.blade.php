@@ -1,356 +1,410 @@
-{{-- resources/views/devoluciones/pdf_sheet.blade.php --}}
 @php
   use Illuminate\Support\Str;
   use Illuminate\Support\Carbon;
 
-  /* ========== Empresa / Logo ========== */
-  $empresaNombre = 'Grupo Vysisa';
-  $logoFile      = public_path('images/logos/default.png');
+  $empresaNombre = 'GRUPO VYSISSA';
 
+  /* ===== LOGO ===== */
+  $logoFile = public_path('images/logos/default.png');
   if (class_exists(\App\Models\Empresa::class)) {
     $emp = \App\Models\Empresa::find((int) session('empresa_activa', auth()->user()?->empresa_id));
     if ($emp) {
-      $empresaNombre = $emp->nombre ?: $empresaNombre;
-      $candidates = [];
-      if (!empty($emp->logo_url))  $candidates[] = public_path(ltrim($emp->logo_url, '/'));
-      if (!empty($emp->logo))      $candidates[] = public_path('images/logos/'.ltrim($emp->logo, '/'));
-      $slug = Str::slug($empresaNombre, '-');
+      $slug = Str::slug($emp->nombre ?? '', '-');
       foreach (['png','jpg','jpeg','webp','svg'] as $ext) {
-        $candidates[] = public_path("images/logos/{$slug}.{$ext}");
-        $candidates[] = public_path("images/logos/empresa-{$emp->id}.{$ext}");
+        $candidate = public_path("images/logos/{$slug}.{$ext}");
+        if (is_file($candidate)) { $logoFile = $candidate; break; }
       }
-      foreach ($candidates as $abs) { if (is_file($abs)) { $logoFile = $abs; break; } }
     }
   }
 
-  $toB64 = function ($path) {
-    if (!is_file($path)) return null;
-    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    $mime = match($ext){'jpg','jpeg'=>'image/jpeg','png'=>'image/png','webp'=>'image/webp','svg'=>'image/svg+xml',default=>'image/png'};
-    return 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
-  };
-  $logoB64 = $toB64($logoFile);
+  $logoB64 = null;
+  if (is_file($logoFile)) {
+    $ext = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
+    $mime = match($ext) {
+      'jpg','jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      'svg' => 'image/svg+xml',
+      default => 'image/png'
+    };
+    $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
+  }
 
-  /* ========== Datos base ========== */
-  $responsiva = $devolucion->responsiva ?? null;
-  $colResp = $responsiva?->colaborador;
+  /* ===== DATOS BASE ===== */
+  $colaborador = $devolucion->usuario
+      ?? $devolucion->colaborador
+      ?? $devolucion->responsiva?->colaborador
+      ?? $devolucion->entregoColaborador;
 
-  $folio = $devolucion->folio ?? '—';
-  $fechaEntrega = $responsiva && $responsiva->fecha_entrega
-      ? Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+  $usuarioNombre = $colaborador
+      ? trim(($colaborador->nombre ?? '').' '.($colaborador->apellidos ?? '').' '.($colaborador->name ?? ''))
       : '—';
-  $colNombreUsuario = $colResp ? trim(($colResp->nombre ?? '').' '.($colResp->apellidos ?? '')) : '—';
 
-  $unidadServicio = $colResp?->unidad_servicio?->nombre
-                  ?? $colResp?->unidadServicio?->nombre
-                  ?? $colResp?->unidad
-                  ?? '—';
+  $fechaEntrega = $devolucion->fecha_entrega
+      ?? $devolucion->responsiva?->fecha_entrega
+      ?? null;
 
-  $isRenovacion = strtolower($devolucion->motivo ?? '') === 'renovacion';
-  $isBaja       = strtolower($devolucion->motivo ?? '') === 'baja_colaborador';
+  $fechaEntregaFmt = $fechaEntrega
+      ? Carbon::parse($fechaEntrega)->format('d-m-Y')
+      : '—';
 
-  $fechaDevolucionFmt = $devolucion->fecha_devolucion
-      ? Carbon::parse($devolucion->fecha_devolucion)->format('d-m-Y')
-      : '';
+  $unidadServicio = $colaborador?->unidad_servicio?->nombre
+      ?? $colaborador?->unidadServicio?->nombre
+      ?? $colaborador?->unidad
+      ?? '—';
 
-  // Firmas (como en show)
-  $col      = $devolucion->entregoColaborador ?? null;
-  $recibio  = $devolucion->recibidoPor ?? null;
-  $psitio   = $devolucion->psitioColaborador ?? null;
+  /* ===== RAZÓN SOCIAL ===== */
+  $razonSocial = null;
+  if ($colaborador?->subsidiaria) {
+      $razonSocial = $colaborador->subsidiaria->descripcion ?: $colaborador->subsidiaria->nombre;
+  }
+  if (!$razonSocial && $devolucion->responsiva?->colaborador?->subsidiaria) {
+      $razonSocial = $devolucion->responsiva->colaborador->subsidiaria->descripcion
+          ?: $devolucion->responsiva->colaborador->subsidiaria->nombre;
+  }
+  if (!$razonSocial && $devolucion->empresa) {
+      $razonSocial = $devolucion->empresa->descripcion ?: $devolucion->empresa->nombre;
+  }
+  $razonSocial = $razonSocial ?: '—';
+
+  $motivo = strtolower(trim($devolucion->motivo ?? ''));
+  $isBaja = $motivo === 'baja_colaborador' || $motivo === 'baja de colaborador';
+  $isRenovacion = $motivo === 'renovacion';
+
+  $fechaDevolucion = $devolucion->fecha_devolucion ?? null;
+  $fechaDevolucionFmt = $fechaDevolucion
+      ? \Illuminate\Support\Carbon::parse($fechaDevolucion)->format('d-m-Y')
+      : '—';
+
+  /* ===== FIRMAS ===== */
+  $col = $devolucion->entregoColaborador ?? null;
+  $recibio = $devolucion->recibidoPor ?? null;
+  $psitio  = $devolucion->psitioColaborador ?? null;
+
+  $recibioNombre = $recibio
+      ? trim(($recibio->nombre ?? '').' '.($recibio->apellidos ?? ''))
+        ?: ($recibio->name ?? '')
+      : '_________________________';
+
+  $colNombreEntrego = $col
+      ? trim(($col->nombre ?? '').' '.($col->apellidos ?? ''))
+      : '_________________________';
+
+  $psitioNombre = $psitio
+      ? trim(($psitio->nombre ?? '').' '.($psitio->apellidos ?? ''))
+      : '_________________________';
 
   $firmaUrlFor = function ($user) {
     if (!$user) return null;
     $id = $user->id ?? null;
     $name = trim($user->name ?? ($user->nombre ?? ''));
     foreach (['png','jpg','jpeg','webp','svg'] as $ext) {
-      if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) return asset("storage/firmas/{$id}.{$ext}");
-      if ($name && file_exists(public_path("storage/firmas/".Str::slug($name).".{$ext}"))) return asset("storage/firmas/".Str::slug($name).".{$ext}");
+      if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) return public_path("storage/firmas/{$id}.{$ext}");
+      if ($name && file_exists(public_path("storage/firmas/".Str::slug($name).".{$ext}"))) return public_path("storage/firmas/".Str::slug($name).".{$ext}");
     }
     return null;
   };
-  $firmaEntrego = $firmaUrlFor($col);
+
   $firmaRecibio = $firmaUrlFor($recibio);
+  $firmaEntrego = $firmaUrlFor($col);
   $firmaPsitio  = $firmaUrlFor($psitio);
-
-  $colNombreEntrego = $col ? trim(($col->nombre ?? '').' '.($col->apellidos ?? '')) : '—';
-  $recibioNombre    = $recibio ? trim(($recibio->nombre ?? '').' '.($recibio->apellidos ?? '')) ?: ($recibio->name ?? '') : '';
-  $psitioNombre     = $psitio ? trim(($psitio->nombre ?? '').' '.($psitio->apellidos ?? '')) ?: ($psitio->name ?? '') : '';
-
-  $productos = $devolucion->productos ?? collect();
-  $tipos = [
-    'equipo_pc'  => 'Equipo de Cómputo',
-    'impresora'  => 'Impresora/Multifuncional',
-    'monitor'    => 'Monitor',
-    'pantalla'   => 'Pantalla/TV',
-    'periferico' => 'Periférico',
-    'consumible' => 'Consumible',
-    'otro'       => 'Otro',
-    'pc_de_escritorio' => 'PC de Escritorio'
-  ];
-  $productosTexto = $productos->map(function ($p) use ($tipos) {
-    $tipoClave = $p->tipo ?? 'otro';
-    $tipoProducto = $tipos[$tipoClave] ?? ucfirst(str_replace('_', ' ', $tipoClave));
-    $nombreProducto = $p->nombre ?? 'producto';
-    return strtolower($tipoProducto).' (<b>'.e($nombreProducto).'</b>)';
-  })->implode(', ');
 @endphp
 
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>Devolución {{ $folio }}</title>
+  <meta charset="UTF-8">
+  <title>Formato de Devolución</title>
   <style>
-    @page { size: A4 portrait; margin: 6mm; }
-    html, body { margin:0; padding:0; font-family: DejaVu Sans, Arial, sans-serif; color:#000; }
+  @page {
+    size: letter portrait;
+    margin: 15px 18px 10px 18px;
+  }
 
-    .sheet { width: 98%; margin: 0 auto; }
-    .tbl{ width:100%; border-collapse:collapse; table-layout:fixed; }
-    .tbl th,.tbl td{ border:1px solid #111; padding:6px 8px; font-size:12px; line-height:1.15; vertical-align:middle; text-align:center; white-space:nowrap; }
-    .tbl th{ font-weight:700; text-transform:uppercase; background:#f8fafc; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: DejaVu Sans, Arial, sans-serif;
+    font-size: 9.8px;
+    color: #000;
+  }
 
-    /* ===== Encabezado ===== */
-    .hero{ table-layout:fixed; }
-    .hero .logo-cell{ width:28%; }
-    .hero .logo-box{ height:120px; display:flex; align-items:center; justify-content:center; }
-    .hero img{ max-width:200px; max-height:90px; display:block; }
-    .title-row{ text-align:center; }
-    .title-main{ font-weight:800; font-size:14px; }
-    .title-sub{ font-weight:700; font-size:12px; text-transform:uppercase; }
+  .sheet {
+    width: 100%;
+    transform-origin: top center;
+    display: flex;
+    justify-content: center;
+    position: relative;
+  }
 
-    /* ===== Tablas de metadatos ===== */
-.tbl.meta td, .tbl.meta th {
-  font-size: 10px;
-  padding: 5px 6px;
-  line-height: 1.3;
-  vertical-align: middle;
-  white-space: nowrap;
-}
+  table {
+    width: 100%;
+    margin: 0 auto;
+    border-collapse: collapse;
+    border: 1px solid #000;
+    page-break-inside: avoid !important;
+  }
 
-.tbl.meta .label {
-  font-weight: 700;
-  text-transform: uppercase;
-  text-align: left;
-  background: none;       /* 🔹 Quita sombreado */
-  border-right: 1px solid #000;
-}
+  td, th {
+    border: 1px solid #000;
+    padding: 3px 4px;
+    vertical-align: middle;
+    text-align: center;
+  }
 
-.tbl.meta .val {
-  text-align: center;
-  font-size: 10px;
-}
+  .logo-cell { width: 28%; text-align: center; }
 
-.tbl.meta .mark-x {
-  width: 22px;
-  font-weight: bold;
-  text-align: center;
-  font-size: 10px;
-}
+  .logo-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 80px;
+    width: 100%;
+  }
 
+  .logo-box img {
+    max-width: 90%;
+    max-height: 75px;
+    object-fit: contain;
+  }
 
+  .title-main { font-weight: bold; text-transform: uppercase; font-size: 13.5px; }
+  .title-sub  { font-weight: bold; text-transform: uppercase; font-size: 11.5px; }
 
-    .mark-x{ width:20px; text-align:center; font-weight:700; display:inline-block; }
+  .label { font-weight: bold; text-transform: uppercase; white-space: nowrap; text-align: left; }
+  .mark-cell { width: 18px; text-align: center; font-weight: bold; }
 
-    /* ===== Secciones ===== */
-    .section-title{ font-weight:800; text-align:left; margin:10px 0 4px; letter-spacing:.3px; font-size:12px; }
-    .blk{ margin-top:6px; font-size:12px; line-height:1.35; }
+  .meta-1 tr:last-child td { border-bottom: 1px solid #ccc !important; }
+  .meta-2 tr:first-child td { border-top: none !important; }
 
-    /* ===== Fecha ===== */
-    .fecha-wrap{ width: 340px; margin-left: auto; margin-top:10px; }
-    .fecha-wrap .label{ width: 60%; }
-    .fecha-wrap .val{ width: 40%; }
+  .section-title {
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-top: 5px;
+    margin-bottom: 2px;
+  }
 
-    /* ===== Firmas ===== */
-    .firmas-wrap{ margin-top:30px; }
-    .firma-row{ display:flex; gap:32px; justify-content:space-between; align-items:flex-start; }
-    .sign{ flex:1; text-align:center; }
-    .sign-title{ text-transform:uppercase; font-weight:700; margin-bottom:6px; }
-    .sign-sub{ font-size:10px; text-transform:uppercase; margin:-2px 0 8px; }
-    .sign-space{ height:56px; display:flex; align-items:center; justify-content:center; }
-    .firma-img{ max-height:56px; max-width:100%; display:block; margin:0 auto; mix-blend-mode:multiply; }
-    .sign-inner{ width:55%; margin:0 auto; }
-    .sign-name{ font-size:11px; text-transform:uppercase; margin-bottom:2px; }
-    .sign-line{ border-top:1px solid #111; height:1px; }
-    .sign-caption{ font-size:10px; text-transform:uppercase; margin-top:4px; }
+  .paragraph {
+    text-align: justify;
+    line-height: 1.25;
+    margin-bottom: 5px;
+  }
 
-    .mt-6{ margin-top:6px; }
-    .mt-10{ margin-top:10px; }
+  table.productos td, table.productos th {
+    padding: 3px 3px;
+    font-size: 9.5px;
+  }
+
+  @php $count = count($devolucion->productos ?? []); @endphp
+  @if ($count <= 4)
+    table.productos td, table.productos th { padding: 3px 3px; font-size: 9.5px; }
+  @elseif ($count <= 6)
+    table.productos td, table.productos th { padding: 2.5px 3px; font-size: 9px; }
+  @elseif ($count <= 8)
+    table.productos td, table.productos th { padding: 2px 2px; font-size: 8.7px; }
+  @elseif ($count <= 10)
+    table.productos td, table.productos th { padding: 1.8px 2px; font-size: 8.5px; }
+  @else
+    table.productos td, table.productos th { padding: 1.6px 1.8px; font-size: 8.3px; }
+  @endif
+
+  html, body { height: 100%; overflow: hidden !important; }
+  table, div, p, img { page-break-inside: avoid !important; }
+
+  /* Firmas fijas al fondo */
+  .firmas-fixed {
+    position: absolute;
+    bottom: 65px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    text-align: center;
+    page-break-inside: avoid !important;
+  }
+
+  .firmas-fixed table td { border: none !important; }
+  .firmas-fixed img { height: 65px; margin: 3px 0; }
+  .firmas-fixed p { margin: 1px 0; font-size: 9px; }
   </style>
 </head>
+
 <body>
   <div class="sheet">
-
-    {{-- ====== ENCABEZADO ====== --}}
-    <table class="tbl hero">
+    <!-- ===== ENCABEZADO ===== -->
+    <table>
       <tr>
         <td class="logo-cell" rowspan="3">
-          <div class="logo-box">@if($logoB64)<img src="{{ $logoB64 }}" alt="Logo">@endif</div>
+          <div class="logo-box">
+            @if($logoB64)
+              <img src="{{ $logoB64 }}" alt="Logo">
+            @endif
+          </div>
         </td>
-        <td class="title-row title-main">{{ $empresaNombre }}</td>
+        <td class="title-main">{{ $empresaNombre }}</td>
       </tr>
-      <tr><td class="title-row title-sub">Departamento de Sistemas</td></tr>
-      <tr><td class="title-row title-sub">Formato de Devolución</td></tr>
+      <tr><td class="title-sub">Departamento de Sistemas</td></tr>
+      <tr><td class="title-sub">Formato de Devolución</td></tr>
     </table>
 
-    {{-- ====== METADATOS 1 ====== --}}
-<table class="tbl meta mt-10">
-  <colgroup>
-    <col style="width:20%">
-    <col style="width:15%">
-    <col style="width:20%">
-    <col style="width:15%">
-    <col style="width:15%">
-    <col style="width:15%">
-  </colgroup>
-  <tr>
-    <td class="label">No. de Devolución</td>
-    <td class="val center">{{ $folio }}</td>
-    <td class="label">Fecha de Entrega</td>
-    <td class="val center">{{ $fechaEntrega }}</td>
-    <td class="label">Nombre de Usuario</td>
-    <td class="val center">{{ $colNombreUsuario }}</td>
-  </tr>
-</table>
+    <br>
 
-{{-- ====== METADATOS 2 ====== --}}
-<table class="tbl meta mt-6">
-  <colgroup>
-    <col style="width:22%">
-    <col style="width:20%">
-    <col style="width:16%">
-    <col style="width:18%">
-    <col style="width:6%">
-    <col style="width:12%">
-    <col style="width:6%">
-  </colgroup>
-  <tr>
-    <td class="label">Área/Departamento</td>
-    <td class="val center">{{ $unidadServicio }}</td>
-    <td class="label center">Motivo de Devolución</td>
-    <td class="label center">Baja de Colaborador</td>
-    <td class="val center">
-      @if($isBaja)
-        X
-      @else
-        &nbsp;
-      @endif
-    </td>
-    <td class="label center">Renovación</td>
-    <td class="val center">
-      @if($isRenovacion)
-        X
-      @else
-        &nbsp;
-      @endif
-    </td>
-  </tr>
-</table>
+    <!-- ===== METADATOS ===== -->
+    <table class="meta-1">
+      <tr>
+        <td class="label">No. de Devolución</td>
+        <td>{{ $devolucion->folio ?? '' }}</td>
+        <td class="label">Fecha de Entrega</td>
+        <td>{{ $fechaEntregaFmt }}</td>
+        <td class="label">Nombre de Usuario</td>
+        <td>{{ $usuarioNombre }}</td>
+      </tr>
+    </table>
 
+    <table class="meta-2">
+      <tr>
+        <td class="label">Área/Departamento</td>
+        <td>{{ $unidadServicio }}</td>
+        <td class="label">Motivo de Devolución</td>
+        <td class="label">Baja de Colaborador</td>
+        <td class="mark-cell">{!! $isBaja ? 'X' : '&#160;' !!}</td>
+        <td class="label">Renovación</td>
+        <td class="mark-cell">{!! $isRenovacion ? 'X' : '&#160;' !!}</td>
+      </tr>
+    </table>
 
+    <br>
 
-    {{-- ====== DECLARACIÓN ====== --}}
-    <div class="section-title">Declaración de Devolución</div>
-    <div class="blk">
-      <b>Por medio de la presente hago constar que:</b>
-      Se hace entrega a <b>{{ $empresaNombre }}</b> del {!! $productosTexto !!} en óptimas condiciones físicas y operativas.
-    </div>
-
-    <div class="blk">Consta de las siguientes características</div>
-
-    {{-- ====== TABLA PRODUCTOS ====== --}}
+    <!-- ===== DECLARACIÓN DE DEVOLUCIÓN ===== -->
     @php
+      // Catálogo de tipos legibles
+      $tipos = [
+          'equipo_pc'  => 'Equipo de Cómputo',
+          'impresora'  => 'Impresora/Multifuncional',
+          'monitor'    => 'Monitor',
+          'pantalla'   => 'Pantalla/TV',
+          'periferico' => 'Periférico',
+          'consumible' => 'Consumible',
+          'otro'       => 'Otro',
+      ];
+
+      // Construir lista dinámica como en show.blade.php
+      $productos = $devolucion->productos ?? collect();
+      $productosTexto = $productos->map(function ($p) use ($tipos) {
+          $tipoClave = $p->tipo ?? 'otro';
+          $tipoProducto = $tipos[$tipoClave] ?? ucfirst(str_replace('_', ' ', $tipoClave));
+          $nombreProducto = $p->nombre ?? 'producto';
+          return strtolower($tipoProducto) . ' (<b>' . e($nombreProducto) . '</b>)';
+      })->implode(', ');
+    @endphp
+
+    <p class="section-title">Declaración de Devolución</p>
+    <p class="paragraph">
+      <strong>Por medio de la presente hago constar que:</strong>
+      Se hace entrega a <strong>{{ $razonSocial }}</strong> del {!! $productosTexto !!}
+      en óptimas condiciones físicas y operativas.
+    </p>
+    <p class="paragraph">Consta de las siguientes características</p>
+
+    @php
+      $productos = $devolucion->productos ?? collect();
       $totalProductos = $productos->count();
       $filasVacias = max(0, 4 - $totalProductos);
     @endphp
-    <table class="tbl mt-10">
+
+    <table style="margin-top: 10px; border-collapse: collapse; width: 100%; text-align: center;">
       <thead>
-        <tr>
-          <th>Equipo</th>
-          <th>Descripción</th>
-          <th>Marca</th>
-          <th>Modelo</th>
-          <th>Serie</th>
+        <tr style="background-color: #f5f5f5; font-weight: bold;">
+          <th>PRODUCTO</th><th>DESCRIPCIÓN</th><th>MARCA</th><th>MODELO</th><th>N° DE SERIE</th>
         </tr>
       </thead>
       <tbody>
-        @foreach ($productos as $p)
+        @foreach($productos as $prod)
           @php
-            $pivot = $p->pivot ?? null;
-            $serie = \App\Models\ProductoSerie::find($pivot?->producto_serie_id);
+            $serieSeleccionada = null;
+            if ($prod->pivot && $prod->pivot->producto_serie_id) {
+                $serieSeleccionada = \App\Models\ProductoSerie::find($prod->pivot->producto_serie_id)?->serie;
+            }
+            if (!$serieSeleccionada) {
+                $serieSeleccionada = $prod->series?->pluck('serie')->filter()->join(', ');
+            }
           @endphp
           <tr>
-            <td>{{ $p->nombre }}</td>
-            <td>{{ $p->descripcion ?? '-' }}</td>
-            <td>{{ $p->marca ?? '-' }}</td>
-            <td>{{ $p->modelo ?? '-' }}</td>
-            <td>{{ $serie?->serie ?? '-' }}</td>
+            <td>{{ $prod->nombre ?? '—' }}</td>
+            <td>{{ $prod->descripcion ?? '—' }}</td>
+            <td>{{ $prod->marca ?? '—' }}</td>
+            <td>{{ $prod->modelo ?? '—' }}</td>
+            <td>{{ $serieSeleccionada ?: '—' }}</td>
           </tr>
         @endforeach
-        @for ($i = 0; $i < $filasVacias; $i++)
+
+        @for($i = 0; $i < $filasVacias; $i++)
           <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
         @endfor
       </tbody>
     </table>
 
-    {{-- ====== TEXTO FINAL ====== --}}
-    <div class="blk">
-      El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas. Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la cuenta de correo electrónico asignada a mi usuario.
-    </div>
+    <p class="paragraph" style="margin-top: 12px;">
+      El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas.
+      Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la cuenta de correo electrónico
+      asignada a mi usuario.
+    </p>
 
-    {{-- ====== FECHA DEVOLUCIÓN ====== --}}
-    <table class="tbl meta fecha-wrap">
+    <!-- ===== FECHA DE DEVOLUCIÓN (mantiene posición original) ===== -->
+    <table style="width: 100%; border: none; margin-top: 10px; margin-bottom: 65px;"> {{-- margen inferior para dejar espacio a las firmas --}}
       <tr>
-        <td class="label nowrap">Fecha de devolución</td>
-        <td class="val nowrap center">{{ $fechaDevolucionFmt ?: '—' }}</td>
+        <td style="border: none; text-align: right; padding-right: 0;">
+          <table style="border-collapse: collapse; width: 230px; text-align: center; margin-right: 0;">
+            <tr>
+              <td style="font-weight: bold; border: 1px solid #000; padding: 5px; text-align: center;">
+                FECHA DE DEVOLUCIÓN
+              </td>
+              <td style="border: 1px solid #000; padding: 5px; text-align: center;">
+                {{ $fechaDevolucionFmt }}
+              </td>
+            </tr>
+          </table>
+        </td>
       </tr>
     </table>
 
-    {{-- ====== FIRMAS ====== --}}
-    <div class="firmas-wrap">
-      <div class="firma-row">
-        <div class="sign">
-          <div class="sign-title">Recibió</div>
-          <div class="sign-sub">Departamento de Sistemas</div>
-          <div class="sign-space">
-            @if($firmaRecibio)<img class="firma-img" src="{{ $firmaRecibio }}" alt="Firma recibió">@endif
-          </div>
-          <div class="sign-inner">
-            <div class="sign-name">{{ $recibioNombre }}</div>
-            <div class="sign-line"></div>
-            <div class="sign-caption">Nombre y firma</div>
-          </div>
-        </div>
+    <!-- ===== FIRMAS (fijas al fondo, sin mover la fecha) ===== -->
+    <div class="firmas-fixed">
+      <!-- FILA SUPERIOR -->
+      <table style="width: 100%; border: none; text-align: center; margin-bottom: 35px;">
+        <tr>
+          <td style="width: 50%; border: none;">
+            <p><strong>RECIBIÓ</strong><br>DEPARTAMENTO DE SISTEMAS</p>
+            @if($firmaRecibio)
+              <img src="data:image/png;base64,{{ base64_encode(file_get_contents($firmaRecibio)) }}" style="height:65px;margin:5px 0;">
+            @else <div style="height:65px;"></div> @endif
+            <p style="text-transform:uppercase;">{{ $recibioNombre }}</p>
+            <hr style="width:55%;margin:4px auto;border-top:1px solid #000;">
+            <p>NOMBRE Y FIRMA</p>
+          </td>
 
-        <div class="sign">
-          <div class="sign-title">Entregó</div>
-          <div class="sign-sub">Conformidad Usuario</div>
-          <div class="sign-space">
-            @if($firmaEntrego)<img class="firma-img" src="{{ $firmaEntrego }}" alt="Firma entregó">@endif
-          </div>
-          <div class="sign-inner">
-            <div class="sign-name">{{ $colNombreEntrego }}</div>
-            <div class="sign-line"></div>
-            <div class="sign-caption">Nombre y firma</div>
-          </div>
-        </div>
-      </div>
+          <td style="width: 50%; border: none;">
+            <p><strong>ENTREGÓ</strong><br>CONFORMIDAD USUARIO</p>
+            @if($firmaEntrego)
+              <img src="data:image/png;base64,{{ base64_encode(file_get_contents($firmaEntrego)) }}" style="height:65px;margin:5px 0;">
+            @else <div style="height:65px;"></div> @endif
+            <p style="text-transform:uppercase;">{{ $colNombreEntrego }}</p>
+            <hr style="width:55%;margin:4px auto;border-top:1px solid #000;">
+            <p>NOMBRE Y FIRMA</p>
+          </td>
+        </tr>
+      </table>
 
-      <div class="firma-row" style="justify-content:center; margin-top:20px;">
-        <div class="sign" style="flex:0 0 60%; max-width:60%;">
-          <div class="sign-title">Recibió</div>
-          <div class="sign-sub">Persona en Sitio</div>
-          <div class="sign-space">
-            @if($firmaPsitio)<img class="firma-img" src="{{ $firmaPsitio }}" alt="Firma psitio">@endif
-          </div>
-          <div class="sign-inner">
-            <div class="sign-name">{{ $psitioNombre }}</div>
-            <div class="sign-line"></div>
-            <div class="sign-caption">Nombre y firma</div>
-          </div>
-        </div>
+      <!-- FIRMA INFERIOR -->
+      <div style="width:100%;">
+        <p><strong>RECIBIÓ</strong><br>PERSONA EN SITIO</p>
+        @if($firmaPsitio)
+          <img src="data:image/png;base64,{{ base64_encode(file_get_contents($firmaPsitio)) }}" style="height:65px;margin:5px 0;">
+        @else <div style="height:65px;"></div> @endif
+        <p style="text-transform:uppercase;">{{ $psitioNombre }}</p>
+        <hr style="width:35%;margin:4px auto;border-top:1px solid #000;">
+        <p>NOMBRE Y FIRMA</p>
       </div>
     </div>
-
   </div>
 </body>
 </html>

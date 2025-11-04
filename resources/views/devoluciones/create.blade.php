@@ -234,7 +234,7 @@
               <td>${modelo}</td>
               <td>${serie}</td>
               <td>
-                <input type="checkbox" name="productos[${p.id}]" value="${d.producto_serie_id}" class="h-4 w-4">
+                <input type="checkbox" name="productos[${p.id}][]" value="${d.producto_serie_id}" class="h-4 w-4">
               </td>
             </tr>`;
         });
