@@ -1,9 +1,14 @@
-<x-app-layout title="Series - {{ $producto->nombre }}">
+@php
+  $tituloProd = trim("{$producto->nombre} {$producto->marca} {$producto->modelo}");
+@endphp
+
+<x-app-layout title="Series - {{ $tituloProd }}">
   <x-slot name="header">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">
-      Series — {{ $producto->nombre }}
+      Series — {{ $tituloProd }}
     </h2>
   </x-slot>
+
 
   <style>
     /* ====== Zoom responsivo: MISMA VISTA, solo “más pequeña” en pantallas chicas ====== */

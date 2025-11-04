@@ -107,4 +107,10 @@ class Responsiva extends Model
     {
         return $q->withoutGlobalScope('empresa')->where('empresa_tenant_id', $empresaId);
     }
+
+    public function devoluciones()
+    {
+        return $this->hasMany(\App\Models\Devolucion::class, 'responsiva_id');
+    }
+
 }

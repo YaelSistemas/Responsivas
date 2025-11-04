@@ -449,23 +449,33 @@ class ResponsivaController extends Controller implements HasMiddleware
     {
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
+        // 🚫 Verificar si tiene devoluciones asociadas
+        if ($responsiva->devoluciones()->exists()) {
+            return redirect()
+                ->route('responsivas.index')
+                ->with('error', 'No se puede eliminar esta responsiva porque ya tiene una devolución asociada.');
+        }
+
         $tenantId = $this->tenantId();
 
         DB::transaction(function () use ($responsiva, $tenantId) {
             $serieIds = $responsiva->detalles()->pluck('producto_serie_id')->all();
 
             if (!empty($serieIds)) {
-                $disponible = defined(ProductoSerie::class.'::ESTADO_DISPONIBLE') ? ProductoSerie::ESTADO_DISPONIBLE : 'disponible';
+                $disponible = defined(ProductoSerie::class.'::ESTADO_DISPONIBLE')
+                    ? ProductoSerie::ESTADO_DISPONIBLE
+                    : 'disponible';
 
                 $series = ProductoSerie::deEmpresa($tenantId)
                     ->whereIn('id', $serieIds)
                     ->lockForUpdate()
-                    ->get(['id','estado','asignado_en_responsiva_id']);
+                    ->get(['id', 'estado', 'asignado_en_responsiva_id']);
 
                 foreach ($series as $s) {
-                    $s->estado = $disponible;
-                    $s->asignado_en_responsiva_id = null;
-                    $s->save();
+                    $s->update([
+                        'estado' => $disponible,
+                        'asignado_en_responsiva_id' => null,
+                    ]);
                 }
             }
 
