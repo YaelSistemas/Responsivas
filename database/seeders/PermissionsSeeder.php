@@ -20,6 +20,7 @@ class PermissionsSeeder extends Seeder
             'responsivas',
             'oc',
             'proveedores',
+            'devoluciones',
         ];
 
         // Acciones base

@@ -155,7 +155,7 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('permission:responsivas.edit')
         ->name('responsivas.firma.destroy');
     
-        /*
+    /*
     |--------------------  Devoluciones  --------------------
     */
     Route::resource('devoluciones', DevolucionController::class)
@@ -164,7 +164,6 @@ Route::middleware(['auth'])->group(function () {
 
     // PDF interno
     Route::get('/devoluciones/{devolucion}/pdf', [DevolucionController::class, 'pdf'])
-        ->middleware(['auth'])
         ->name('devoluciones.pdf');
 
     /*

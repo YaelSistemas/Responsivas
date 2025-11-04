@@ -10,267 +10,248 @@ use Illuminate\Support\Facades\DB;
 use App\Models\ResponsivaDetalle;
 use App\Models\User;
 use App\Models\Colaborador;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class DevolucionController extends Controller
+class DevolucionController extends Controller implements HasMiddleware
 {
-    public function index(Request $request)
-{
-    $q = $request->input('q');
-    $perPage = $request->input('per_page', 50);
-
-    $devoluciones = Devolucion::with([
-            'responsiva.colaborador.unidadServicio',
-            'productos',
-            'recibidoPor',
-            'psitioColaborador'
-        ])
-        ->when($q, function ($query) use ($q) {
-    $query->where('folio', 'like', "%$q%") // Folio de devolución
-        ->orWhere('motivo', 'like', "%$q%") // Motivo directo
-        ->orWhereHas('responsiva', function ($r) use ($q) {
-            $r->where('folio', 'like', "%$q%") // Folio de responsiva
-              ->orWhereHas('colaborador', function ($c) use ($q) {
-                  $c->where('nombre', 'like', "%$q%")
-                    ->orWhere('apellidos', 'like', "%$q%");
-              });
-        })
-        ->orWhereHas('psitioColaborador', function ($p) use ($q) {
-            $p->where('nombre', 'like', "%$q%")
-              ->orWhere('apellidos', 'like', "%$q%");
-        });
-})
-
-        // 🔹 Ordenar por número dentro del folio: ejemplo OES-0010 > OES-0009 > OES-0008
-        ->orderByRaw("CAST(SUBSTRING_INDEX(folio, '-', -1) AS UNSIGNED) DESC")
-        ->paginate($perPage);
-
-    // 🔹 Soporte AJAX parcial (para búsquedas dinámicas)
-    if ($request->ajax() && $request->has('partial')) {
-        return view('devoluciones.partials.table', compact('devoluciones'))->render();
+    /**
+     * ======== MIDDLEWARE DE PERMISOS ========
+     * (idéntico al de OrdenCompraController)
+     */
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('auth'),
+            new Middleware('permission:devoluciones.view',   only: ['index', 'show', 'pdf']),
+            new Middleware('permission:devoluciones.create', only: ['create', 'store']),
+            new Middleware('permission:devoluciones.edit',   only: ['edit', 'update']),
+            new Middleware('permission:devoluciones.delete', only: ['destroy']),
+        ];
     }
 
-    return view('devoluciones.index', compact('devoluciones', 'q', 'perPage'));
-}
+    /* ===================== LISTADO ===================== */
 
+    public function index(Request $request)
+    {
+        $q = $request->input('q');
+        $perPage = $request->input('per_page', 50);
+
+        $devoluciones = Devolucion::with([
+                'responsiva.colaborador.unidadServicio',
+                'productos',
+                'recibidoPor',
+                'psitioColaborador'
+            ])
+            ->when($q, function ($query) use ($q) {
+                $query->where('folio', 'like', "%$q%")
+                    ->orWhere('motivo', 'like', "%$q%")
+                    ->orWhereHas('responsiva', function ($r) use ($q) {
+                        $r->where('folio', 'like', "%$q%")
+                          ->orWhereHas('colaborador', function ($c) use ($q) {
+                              $c->where('nombre', 'like', "%$q%")
+                                ->orWhere('apellidos', 'like', "%$q%");
+                          });
+                    })
+                    ->orWhereHas('psitioColaborador', function ($p) use ($q) {
+                        $p->where('nombre', 'like', "%$q%")
+                          ->orWhere('apellidos', 'like', "%$q%");
+                    });
+            })
+            ->orderByRaw("CAST(SUBSTRING_INDEX(folio, '-', -1) AS UNSIGNED) DESC")
+            ->paginate($perPage);
+
+        if ($request->ajax() && $request->has('partial')) {
+            return view('devoluciones.partials.table', compact('devoluciones'))->render();
+        }
+
+        return view('devoluciones.index', compact('devoluciones', 'q', 'perPage'));
+    }
+
+    /* ===================== CREAR ===================== */
 
     public function create()
-{
-    $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
+    {
+        $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
 
-    // 1) Series actualmente asignadas (solo de la empresa activa)
-    $seriesAsignadas = ProductoSerie::where('estado', 'Asignado')
-        ->whereHas('producto', fn($q) => $q->where('empresa_tenant_id', $tenant))
-        ->pluck('id');
+        $seriesAsignadas = ProductoSerie::where('estado', 'Asignado')
+            ->whereHas('producto', fn($q) => $q->where('empresa_tenant_id', $tenant))
+            ->pluck('id');
 
-    if ($seriesAsignadas->isEmpty()) {
-        $responsivas = collect(); // nada que mostrar
-    } else {
-        // 2) Último detalle por serie
+        if ($seriesAsignadas->isEmpty()) {
+            $responsivas = collect();
+        } else {
+            $ultimaFilaPorSerie = ResponsivaDetalle::query()
+                ->whereIn('producto_serie_id', $seriesAsignadas)
+                ->select('producto_serie_id', DB::raw('MAX(id) as detalle_id'))
+                ->groupBy('producto_serie_id')
+                ->pluck('detalle_id')
+                ->toArray();
+
+            $detallesActuales = ResponsivaDetalle::with(['producto', 'serie', 'responsiva.colaborador'])
+                ->whereIn('id', $ultimaFilaPorSerie)
+                ->get();
+
+            $detallesPorResponsiva = $detallesActuales->groupBy('responsiva_id');
+
+            $responsivas = Responsiva::with('colaborador')
+                ->whereIn('id', $detallesPorResponsiva->keys())
+                ->where('empresa_tenant_id', $tenant)
+                ->get()
+                ->map(function ($r) use ($detallesPorResponsiva) {
+                    $r->setRelation('detalles', $detallesPorResponsiva->get($r->id, collect()));
+                    return $r;
+                })
+                ->values();
+        }
+
+        $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
+        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')->get(['id', 'nombre', 'apellidos']);
+
+        $user = auth()->user();
+        $adminDefault = ($user && $user->hasRole('Administrador')) ? $user->id : null;
+
+        return view('devoluciones.create', compact('responsivas', 'admins', 'colaboradores', 'adminDefault'));
+    }
+
+    /* ===================== GUARDAR ===================== */
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'responsiva_id'           => 'required|exists:responsivas,id',
+            'fecha_devolucion'        => 'required|date',
+            'motivo'                  => 'required|in:baja_colaborador,renovacion',
+            'recibi_id'               => 'required|exists:users,id',
+            'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
+            'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
+            'productos'               => 'required|array|min:1',
+        ]);
+
+        DB::transaction(function () use ($validated, $request) {
+            $devolucion = Devolucion::create($validated);
+
+            foreach ($request->productos as $productoId => $series) {
+                $series = is_array($series) ? $series : [$series];
+                foreach ($series as $serieId) {
+                    if (!$serieId) continue;
+
+                    $serie = ProductoSerie::find($serieId);
+                    if (!$serie) continue;
+
+                    $yaDevuelta = DB::table('devolucion_producto as dp')
+                        ->join('devoluciones as d', 'd.id', '=', 'dp.devolucion_id')
+                        ->where('dp.producto_serie_id', $serieId)
+                        ->where('d.responsiva_id', $validated['responsiva_id'])
+                        ->exists();
+
+                    if ($yaDevuelta) continue;
+
+                    $devolucion->productos()->attach($productoId, [
+                        'producto_serie_id' => $serieId,
+                    ]);
+
+                    $serie->update(['estado' => 'disponible']);
+                }
+            }
+        });
+
+        return redirect()->route('devoluciones.index')
+            ->with('success', 'Devolución registrada correctamente.');
+    }
+
+    /* ===================== EDITAR ===================== */
+
+    public function edit($id)
+    {
+        $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
+
+        $devolucion = Devolucion::with(['productos', 'responsiva.colaborador', 'psitioColaborador'])->findOrFail($id);
+
+        $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
+        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)->orderBy('nombre')->get(['id', 'nombre', 'apellidos']);
+        $responsivas = Responsiva::with('colaborador')->where('empresa_tenant_id', $tenant)->get();
+
         $ultimaFilaPorSerie = ResponsivaDetalle::query()
-            ->whereIn('producto_serie_id', $seriesAsignadas)
+            ->where('responsiva_id', $devolucion->responsiva_id)
             ->select('producto_serie_id', DB::raw('MAX(id) as detalle_id'))
             ->groupBy('producto_serie_id')
             ->pluck('detalle_id')
             ->toArray();
 
-        // 3) Detalles más recientes con relaciones
-        $detallesActuales = ResponsivaDetalle::with([
-                'producto',
-                'serie',
-                'responsiva.colaborador',
-            ])
+        $detallesActuales = ResponsivaDetalle::with(['producto', 'serie'])
             ->whereIn('id', $ultimaFilaPorSerie)
             ->get();
 
-        // 4) Agrupar por responsiva actual
-        $detallesPorResponsiva = $detallesActuales->groupBy('responsiva_id');
+        $seriesSeleccionadas = $devolucion->productos->pluck('pivot.producto_serie_id')->toArray();
 
-        // 5) Cargar las responsivas activas con solo sus detalles actuales (de la empresa activa)
-        $responsivas = Responsiva::with('colaborador')
-            ->whereIn('id', $detallesPorResponsiva->keys())
-            ->where('empresa_tenant_id', $tenant)
-            ->get()
-            ->map(function ($r) use ($detallesPorResponsiva) {
-                $r->setRelation('detalles', $detallesPorResponsiva->get($r->id, collect()));
-                return $r;
-            })
-            ->values();
+        return view('devoluciones.edit', compact(
+            'devolucion', 'admins', 'colaboradores', 'responsivas',
+            'detallesActuales', 'seriesSeleccionadas'
+        ));
     }
 
-    // Usuarios administradores
-    $admins = User::role('Administrador')
-        ->orderBy('name')
-        ->get(['id', 'name']);
+    /* ===================== ACTUALIZAR ===================== */
 
-    // Colaboradores por empresa activa
-    $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
-        ->orderBy('nombre')
-        ->get(['id', 'nombre', 'apellidos']);
+    public function update(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'responsiva_id'           => 'required|exists:responsivas,id',
+            'fecha_devolucion'        => 'required|date',
+            'motivo'                  => 'required|in:baja_colaborador,renovacion',
+            'recibi_id'               => 'required|exists:users,id',
+            'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
+            'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
+            'productos'               => 'required|array|min:1',
+        ]);
 
-    // Usuario autenticado (si es admin, se selecciona por defecto)
-    $user = auth()->user();
-    $adminDefault = ($user && $user->hasRole('Administrador')) ? $user->id : null;
+        $devolucion = Devolucion::with('productos')->findOrFail($id);
 
-    return view('devoluciones.create', compact('responsivas', 'admins', 'colaboradores', 'adminDefault'));
-}
+        DB::transaction(function () use ($devolucion, $validated, $request) {
+            $devolucion->update($validated);
 
-public function edit($id)
-{
-    $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
+            $seriesPrevias = $devolucion->productos()->pluck('devolucion_producto.producto_serie_id')->toArray();
 
-    $devolucion = Devolucion::with(['productos', 'responsiva.colaborador', 'psitioColaborador'])->findOrFail($id);
+            $seriesNuevas = collect($request->productos)
+                ->flatMap(fn($series) => is_array($series) ? $series : [$series])
+                ->filter()->unique()->values()->toArray();
 
-    $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
-    $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)->orderBy('nombre')->get(['id', 'nombre', 'apellidos']);
-    $responsivas = Responsiva::with('colaborador')->where('empresa_tenant_id', $tenant)->get();
+            $agregadas = array_diff($seriesNuevas, $seriesPrevias);
+            $quitadas  = array_diff($seriesPrevias, $seriesNuevas);
 
-    // ✅ Series actualmente asignadas a esa responsiva (una por serie)
-    $ultimaFilaPorSerie = ResponsivaDetalle::query()
-        ->where('responsiva_id', $devolucion->responsiva_id)
-        ->select('producto_serie_id', DB::raw('MAX(id) as detalle_id'))
-        ->groupBy('producto_serie_id')
-        ->pluck('detalle_id')
-        ->toArray();
-
-    $detallesActuales = ResponsivaDetalle::with(['producto', 'serie'])
-        ->whereIn('id', $ultimaFilaPorSerie)
-        ->get();
-
-    // ✅ Series ya devueltas en ESTA devolución (para pre-checar)
-    $seriesSeleccionadas = $devolucion->productos->pluck('pivot.producto_serie_id')->toArray();
-
-    return view('devoluciones.edit', compact(
-        'devolucion', 'admins', 'colaboradores', 'responsivas',
-        'detallesActuales', 'seriesSeleccionadas'
-    ));
-}
-
-
-public function update(Request $request, $id)
-{
-    $validated = $request->validate([
-        'responsiva_id'           => 'required|exists:responsivas,id',
-        'fecha_devolucion'        => 'required|date',
-        'motivo'                  => 'required|in:baja_colaborador,renovacion',
-        'recibi_id'               => 'required|exists:users,id',
-        'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
-        'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
-        'productos'               => 'required|array|min:1',
-    ]);
-
-    $devolucion = Devolucion::with('productos')->findOrFail($id);
-
-    DB::transaction(function () use ($devolucion, $validated, $request) {
-        // 1️⃣ Actualiza los datos principales
-        $devolucion->update($validated);
-
-        // 2️⃣ Obtener productos actuales del pivote
-        $seriesPrevias = $devolucion->productos()->pluck('devolucion_producto.producto_serie_id')->toArray();
-
-        // 3️⃣ Obtener las nuevas series seleccionadas
-        $seriesNuevas = collect($request->productos)
-            ->flatMap(function ($series) {
-                return is_array($series) ? $series : [$series];
-            })
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-
-        // 4️⃣ Detectar diferencias
-        $agregadas = array_diff($seriesNuevas, $seriesPrevias);
-        $quitadas  = array_diff($seriesPrevias, $seriesNuevas);
-
-        // 5️⃣ Agregar nuevas series
-        foreach ($request->productos as $productoId => $series) {
-            $series = is_array($series) ? $series : [$series];
-            foreach ($series as $serieId) {
-                if (in_array($serieId, $agregadas)) {
-                    $serie = ProductoSerie::find($serieId);
-                    if ($serie) {
-                        $devolucion->productos()->attach($productoId, [
-                            'producto_serie_id' => $serieId,
-                        ]);
-                        $serie->update(['estado' => 'disponible']);
+            foreach ($request->productos as $productoId => $series) {
+                $series = is_array($series) ? $series : [$series];
+                foreach ($series as $serieId) {
+                    if (in_array($serieId, $agregadas)) {
+                        $serie = ProductoSerie::find($serieId);
+                        if ($serie) {
+                            $devolucion->productos()->attach($productoId, [
+                                'producto_serie_id' => $serieId,
+                            ]);
+                            $serie->update(['estado' => 'disponible']);
+                        }
                     }
                 }
             }
-        }
 
-        // 6️⃣ Quitar las desmarcadas
-        foreach ($quitadas as $serieId) {
-            $serie = ProductoSerie::find($serieId);
-            if ($serie) {
-                $devolucion->productos()->wherePivot('producto_serie_id', $serieId)->detach();
-                $serie->update(['estado' => 'Asignado']);
-                if ($serie->producto) {
-                    $serie->producto->update(['estado' => 'Asignado']);
+            foreach ($quitadas as $serieId) {
+                $serie = ProductoSerie::find($serieId);
+                if ($serie) {
+                    $devolucion->productos()->wherePivot('producto_serie_id', $serieId)->detach();
+                    $serie->update(['estado' => 'Asignado']);
+                    if ($serie->producto) {
+                        $serie->producto->update(['estado' => 'Asignado']);
+                    }
                 }
             }
-        }
-    });
+        });
 
-    return redirect()
-        ->route('devoluciones.index')
-        ->with('success', 'Devolución actualizada correctamente. Los productos fueron sincronizados según los cambios.');
-}
+        return redirect()->route('devoluciones.index')
+            ->with('success', 'Devolución actualizada correctamente.');
+    }
 
-
-    public function store(Request $request)
-{
-    $validated = $request->validate([
-        'responsiva_id'           => 'required|exists:responsivas,id',
-        'fecha_devolucion'        => 'required|date',
-        'motivo'                  => 'required|in:baja_colaborador,renovacion',
-        'recibi_id'               => 'required|exists:users,id',
-        'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
-        'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
-        'productos'               => 'required|array|min:1',
-    ]);
-
-    DB::transaction(function () use ($validated, $request) {
-        $devolucion = \App\Models\Devolucion::create($validated);
-
-        // 🔁 Recorre todos los productos
-        foreach ($request->productos as $productoId => $series) {
-            // Convierte en array por seguridad (por si solo viene un ID)
-            $series = is_array($series) ? $series : [$series];
-
-            // 🔁 Recorre todas las series del producto
-            foreach ($series as $serieId) {
-                if (!$serieId) continue;
-
-                $serie = \App\Models\ProductoSerie::find($serieId);
-                if (!$serie) continue;
-
-                // ⛔ Verifica si esa serie ya fue devuelta en esta misma responsiva
-                $yaDevueltaEnEstaResponsiva = DB::table('devolucion_producto as dp')
-                    ->join('devoluciones as d', 'd.id', '=', 'dp.devolucion_id')
-                    ->where('dp.producto_serie_id', $serieId)
-                    ->where('d.responsiva_id', $validated['responsiva_id'])
-                    ->exists();
-
-                if ($yaDevueltaEnEstaResponsiva) {
-                    continue; // ya estaba registrada la devolución para esta responsiva
-                }
-
-                // ✅ Registrar la serie en el pivote
-                $devolucion->productos()->attach($productoId, [
-                    'producto_serie_id' => $serieId,
-                ]);
-
-                // 🟢 Actualizar el estado de la serie
-                $serie->update(['estado' => 'disponible']);
-            }
-        }
-    });
-
-    return redirect()
-        ->route('devoluciones.index')
-        ->with('success', 'Devolución registrada correctamente.');
-}
-
-
+    /* ===================== MOSTRAR ===================== */
 
     public function show($id)
     {
@@ -278,74 +259,55 @@ public function update(Request $request, $id)
         return view('devoluciones.show', compact('devolucion'));
     }
 
+    /* ===================== ELIMINAR ===================== */
+
     public function destroy($id)
-{
-    $devolucion = Devolucion::with(['productos', 'responsiva'])->findOrFail($id);
+    {
+        $devolucion = Devolucion::with(['productos', 'responsiva'])->findOrFail($id);
 
-    DB::transaction(function () use ($devolucion) {
-        foreach ($devolucion->productos as $producto) {
-            $pivot = $producto->pivot;
-            $serie = \App\Models\ProductoSerie::find($pivot->producto_serie_id);
+        DB::transaction(function () use ($devolucion) {
+            foreach ($devolucion->productos as $producto) {
+                $pivot = $producto->pivot;
+                $serie = ProductoSerie::find($pivot->producto_serie_id);
 
-            if (!$serie) {
-                continue;
-            }
+                if (!$serie) continue;
 
-            // ⚙️ 1️⃣ Obtener el ID de la última devolución registrada para este producto
-            $ultimaDevolucionId = \App\Models\Devolucion::whereHas('productos', function ($q) use ($serie) {
-                    $q->where('producto_serie_id', $serie->id);
-                })
-                ->max('id'); // ID de la devolución más reciente del producto
+                $ultimaDevolucionId = Devolucion::whereHas('productos', fn($q) => 
+                    $q->where('producto_serie_id', $serie->id)
+                )->max('id');
 
-            // ⚙️ 2️⃣ Verificar si el producto está asignado en alguna otra responsiva activa
-            $asignadaEnOtra = \App\Models\ResponsivaDetalle::where('producto_serie_id', $serie->id)
-                ->whereHas('responsiva', function ($q) use ($devolucion) {
-                    $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
-                    $q->where('empresa_tenant_id', $tenant)
-                      ->whereIn('motivo_entrega', ['asignacion', 'prestamo_provisional']);
-                })
-                ->exists();
+                $asignadaEnOtra = ResponsivaDetalle::where('producto_serie_id', $serie->id)
+                    ->whereHas('responsiva', fn($q) => 
+                        $q->whereIn('motivo_entrega', ['asignacion', 'prestamo_provisional'])
+                    )
+                    ->exists();
 
-            // ⚙️ 3️⃣ Lógica principal
-            if ($devolucion->id == $ultimaDevolucionId) {
-                // 🟢 Es la última devolución registrada para este producto
-                //    → volver a "Asignado", ya que la devolución más reciente fue eliminada
-                $serie->update(['estado' => 'Asignado']);
-                if ($serie->producto) {
-                    $serie->producto->update(['estado' => 'Asignado']);
+                if ($devolucion->id == $ultimaDevolucionId) {
+                    $serie->update(['estado' => 'Asignado']);
+                    if ($serie->producto) $serie->producto->update(['estado' => 'Asignado']);
                 }
-            } else {
-                // 🔹 No es la última devolución → mantener Disponible
-                //    (ya existe otra devolución posterior del mismo producto)
-                continue;
             }
-        }
 
-        // 🧹 4️⃣ Eliminar la devolución y sus relaciones pivote
-        $devolucion->productos()->detach();
-        $devolucion->delete();
-    });
+            $devolucion->productos()->detach();
+            $devolucion->delete();
+        });
 
-    return redirect()
-        ->route('devoluciones.index')
-        ->with('success', 'Devolución eliminada correctamente. Los productos fueron restaurados a su estado correspondiente.');
-}
+        return redirect()->route('devoluciones.index')
+            ->with('success', 'Devolución eliminada correctamente.');
+    }
 
-public function pdf($id)
-{
-    $devolucion = \App\Models\Devolucion::with([
-        'responsiva.colaborador.unidadServicio',
-        'productos',
-        'recibidoPor',
-        'psitioColaborador'
-    ])->findOrFail($id);
+    /* ===================== PDF ===================== */
 
-    $pdf = \PDF::loadView('devoluciones.pdf_sheet', compact('devolucion'));
+    public function pdf($id)
+    {
+        $devolucion = Devolucion::with([
+            'responsiva.colaborador.unidadServicio',
+            'productos',
+            'recibidoPor',
+            'psitioColaborador'
+        ])->findOrFail($id);
 
-    // 🔹 Abrir en el navegador (igual que el de OC)
-    return $pdf->stream('Devolución-'.$devolucion->folio.'.pdf');
-}
-
-
-
+        $pdf = \PDF::loadView('devoluciones.pdf_sheet', compact('devolucion'));
+        return $pdf->stream('Devolución-'.$devolucion->folio.'.pdf');
+    }
 }

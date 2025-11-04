@@ -206,14 +206,29 @@
               </label>
             </div>
 
-            <div class="sec-formatos">
+            <div class="col-grid sec-formatos">
+              {{-- Izquierda: Responsivas --}}
               <div class="card">
                 <div class="card-title">Responsivas</div>
                 <div class="perm-list">
                   @foreach(($groups['responsivas'] ?? []) as $p)
                     <label>
                       <input class="perm" type="checkbox" name="permissions[]"
-                             value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                            value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+
+              {{-- Derecha: Devoluciones --}}
+              <div class="card">
+                <div class="card-title">Devoluciones</div>
+                <div class="perm-list">
+                  @foreach(($groups['devoluciones'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                            value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
                       <span>{{ $p['label'] }}</span>
                     </label><br>
                   @endforeach

@@ -66,7 +66,7 @@
 
     $isRhActive       = request()->routeIs('colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*');
     $isProductosActive= request()->routeIs('productos.*');
-    $isFormatosActive = request()->routeIs('responsivas.*');
+    $isFormatosActive = request()->routeIs('responsivas.*', 'devoluciones.*');
 
     // COMPRAS: marcar activo si estoy en oc.* o proveedores.*
     $isComprasActive  = request()->routeIs('oc.*','proveedores.*');
@@ -182,10 +182,18 @@
 
             <div x-show="open" x-transition class="menu-panel">
               <div class="p-2">
+                @can('responsivas.view')
                 <a href="{{ route('responsivas.index') }}"
                    class="menu-item {{ request()->routeIs('responsivas.*') ? 'menu-item--active' : '' }}">
                   Responsivas
                 </a>
+                @endcan
+                @can('devoluciones.view')
+                <a href="{{ route('devoluciones.index') }}"
+                  class="menu-item {{ request()->routeIs('devoluciones.*') ? 'menu-item--active' : '' }}">
+                  Devoluciones
+                </a>
+                @endcan
               </div>
             </div>
           </div>
@@ -396,10 +404,18 @@
           <svg :class="{'rotate-180': formatos}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/></svg>
         </button>
         <div x-show="formatos" x-transition class="mobile-sub">
+          @can('responsivas.view')
           <a href="{{ route('responsivas.index') }}"
              class="mobile-a {{ request()->routeIs('responsivas.*') ? 'mobile-a--active' : '' }}">
             Responsivas
           </a>
+          @endcan
+          @can('devoluciones.view')
+          <a href="{{ route('devoluciones.index') }}"
+            class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
+            Devoluciones
+          </a>
+          @endcan
         </div>
       </div>
       @endcan
