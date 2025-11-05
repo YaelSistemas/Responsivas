@@ -86,9 +86,16 @@ Route::middleware(['auth'])->group(function () {
     
     // Fin de Colaboradores
 
+    // Unidades de Servicio
+
     Route::resource('unidades', UnidadServicioController::class)
         ->names('unidades')
         ->parameters(['unidades' => 'unidad']);
+    
+    Route::get('/unidades/{unidad}/historial', [UnidadServicioController::class, 'historial'])
+        ->name('unidades.historial');
+
+    // Fin de Unidades de Servicio
 
     Route::resource('areas', AreaController::class)
         ->names('areas')

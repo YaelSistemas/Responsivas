@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use App\Models\UnidadServicioHistorial;
 
 class UnidadServicioController extends Controller implements HasMiddleware
 {
@@ -147,4 +148,17 @@ class UnidadServicioController extends Controller implements HasMiddleware
 
         return redirect()->route('unidades.index')->with('deleted', true);
     }
+
+    public function historial($id)
+    {
+        $unidad = UnidadServicio::findOrFail($id);
+
+        $historial = \App\Models\UnidadServicioHistorial::where('unidad_id', $unidad->id)
+            ->with('user')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('unidades.historial.modal', compact('unidad', 'historial'));
+    }
+
 }

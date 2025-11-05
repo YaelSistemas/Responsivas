@@ -4,33 +4,27 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    /* ====== Zoom responsivo ====== */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* valor por defecto en desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      /* compensamos el ancho para que visualmente quepa todo sin recortar */
       width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (ajusta si quieres) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
     /* iOS: evita auto-zoom al enfocar inputs */
-    @media (max-width: 768px){
-      input, select, textarea{ font-size:16px; }
-    }
+    @media (max-width:768px){ input, select, textarea{ font-size:16px; } }
 
-    /* ====== Estilos propios de la vista ====== */
+    /* ====== Estilos generales ====== */
     .page-wrap{max-width:1100px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
-    .btn-link{color:#1f2937;text-decoration:underline}
-    .btn-danger{color:#b91c1c}
     .tbl{width:100%;border-collapse:separate;border-spacing:0}
     .tbl th,.tbl td{padding:.75rem .9rem;text-align:left;vertical-align:middle}
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
@@ -39,7 +33,7 @@
     /* Toolbar */
     #unidades-toolbar .select-wrap{position:relative;display:inline-block}
     #unidades-toolbar select[name="per_page"]{
-      -webkit-appearance:none; -moz-appearance:none; appearance:none; background-image:none;
+      -webkit-appearance:none; -moz-appearance:none; appearance:none;
       width:88px; padding:6px 28px 6px 10px; height:34px; line-height:1.25; font-size:14px;
       color:#111827; background:#fff; border:1px solid #d1d5db; border-radius:6px;
     }
@@ -47,17 +41,18 @@
       position:absolute; right:10px; top:50%; transform:translateY(-50%);
       pointer-events:none; color:#6b7280; font-size:12px;
     }
+
+    /* Bloqueo de scroll cuando el modal está abierto */
+    body.modal-open { overflow: hidden; }
   </style>
 
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
+  <!-- ====== Contenido principal ====== -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6">
         {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold">Unidades de servicio</h2>
-
-          {{-- SOLO si tiene permiso para crear --}}
           @can('unidades.create')
             <a href="{{ route('unidades.create') }}" class="btn btn-primary">Nueva unidad</a>
           @endcan
@@ -101,11 +96,14 @@
           @endphp
           <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
           <script>
-            setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+            setTimeout(()=>{
+              const a=document.getElementById('alert');
+              if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400);}
+            },2500);
           </script>
         @endif
 
-        {{-- Tabla (parcial) --}}
+        {{-- Tabla --}}
         <div class="card">
           <div class="overflow-x-auto" id="unidades-wrap">
             @include('unidades.partials.table')
@@ -115,7 +113,10 @@
     </div>
   </div>
 
-  {{-- AJAX con parcial HTML (búsqueda + paginación + per_page) --}}
+  {{-- 🔹 Contenedor global para modales AJAX --}}
+  <div id="ajax-modal-container"></div>
+
+  {{-- 🔸 AJAX (búsqueda, paginación, per_page) --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -130,13 +131,13 @@
       const per = perPageSelect ? perPageSelect.value : '';
       if(q)  url.searchParams.set('q', q);
       if(per) url.searchParams.set('per_page', per);
-      url.searchParams.set('partial', '1'); // solo el parcial
+      url.searchParams.set('partial', '1');
       return url.toString();
     }
 
     function wirePagination(){
       wrap.querySelectorAll('.pagination a, nav a').forEach(a=>{
-        a.addEventListener('click', function(ev){
+        a.addEventListener('click', ev=>{
           ev.preventDefault();
           ajaxLoad(a.getAttribute('href'));
         });
@@ -148,7 +149,6 @@
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
 
-      // Actualiza barra de direcciones (sin el flag partial)
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
@@ -158,25 +158,75 @@
       fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
         .then(r=>r.text())
         .then(html=>{
-          wrap.innerHTML = html.trim();   // el parcial incluye tabla + paginación
+          wrap.innerHTML = html.trim();
           wirePagination();
         })
         .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
     }
 
-    // Buscar con debounce
     if(input){
       input.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=> ajaxLoad(), 300); });
-      input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
+      input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
     }
 
-    // Cambiar "per page" por AJAX
-    if(perPageSelect){
-      perPageSelect.addEventListener('change', ()=> ajaxLoad());
-    }
-
-    // Inicializa paginación (enlaces actuales del SSR)
+    if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
     wirePagination();
   })();
+  </script>
+
+  {{-- 🔸 Modal de historial AJAX --}}
+  <script>
+  async function openUnidadHistorial(id) {
+    try {
+      const res = await fetch(`/unidades/${id}/historial`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+
+      // Elimina modales anteriores
+      const existing = document.querySelector('[data-modal-backdrop]');
+      if (existing) existing.remove();
+
+      // Inserta el nuevo modal
+      document.body.insertAdjacentHTML('beforeend', html);
+
+      // Bloquea scroll de fondo
+      document.body.classList.add('modal-open');
+
+    } catch (error) {
+      console.error("Error al abrir historial:", error);
+      alert("No se pudo abrir el historial de la unidad de servicio.");
+    }
+  }
+
+  // 🔸 Cierre global del modal (clic fuera, ✕, o tecla ESC)
+  document.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('[data-modal-close]');
+    const backdrop = e.target.closest('[data-modal-backdrop]');
+
+    // Si clic en botón cerrar ✕
+    if (closeBtn && backdrop) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+
+    // Si clic fuera del modal (fondo)
+    if (backdrop && !e.target.closest('.colab-modal')) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+  });
+
+  // Cerrar con tecla ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const backdrop = document.querySelector('[data-modal-backdrop]');
+      if (backdrop) {
+        backdrop.remove();
+        document.body.classList.remove('modal-open');
+      }
+    }
+  });
   </script>
 </x-app-layout>
