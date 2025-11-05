@@ -30,6 +30,7 @@ class Colaborador extends Model
         'unidad_servicio_id',
         'area_id',
         'puesto_id',
+        'activo',
     ];
 
     /* ============================

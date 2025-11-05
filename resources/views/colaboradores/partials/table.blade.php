@@ -8,7 +8,8 @@
           <th class="px-4 py-2">Unidad Servicio</th>
           <th class="px-4 py-2">Área</th>
           <th class="px-4 py-2">Puesto</th>
-          <th class="px-4 py-2">Historial</th> {{-- 🔹 Columna igual a OC --}}
+          <th class="px-4 py-2">Estado</th>
+          <th class="px-4 py-2">Historial</th>
           <th class="px-4 py-2">Acciones</th>
         </tr>
       </thead>
@@ -26,6 +27,15 @@
             <td class="px-4 py-2">{{ $c->unidadServicio->nombre ?? '—' }}</td>
             <td class="px-4 py-2">{{ $c->area->nombre ?? '—' }}</td>
             <td class="px-4 py-2">{{ $c->puesto->nombre ?? '—' }}</td>
+
+            {{-- Estado Activo/Inactivo --}}
+            <td class="px-4 py-2">
+              @if($c->activo)
+                <span class="estado-activo">Activo</span>
+              @else
+                <span class="estado-inactivo">Inactivo</span>
+              @endif
+            </td>
 
             {{-- 🔹 Historial --}}
             <td class="text-center">

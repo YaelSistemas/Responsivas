@@ -45,6 +45,42 @@
       .form-buttons{flex-direction:column-reverse;align-items:stretch}
       .btn-cancel,.btn-save{width:100%}
     }
+    
+    /* === Toggle Switch === */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #e5e7eb;
+      border-radius: 26px;
+      transition: .3s;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px; width: 20px;
+      left: 3px; bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: .3s;
+    }
+    input:checked + .slider {
+      background-color: #16a34a; /* verde */
+    }
+    input:checked + .slider:before {
+      transform: translateX(22px);
+    }
   </style>
 
   <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
@@ -130,6 +166,16 @@
                 @endforeach
               </select>
               @error('puesto_id') <div class="hint" style="color:#dc2626">{{ $message }}</div> @enderror
+            </div>
+
+            {{-- Estado (Activo / Inactivo) --}}
+            <div class="form-group">
+              <label for="activo">Estado</label>
+              <label class="switch">
+                <input type="checkbox" id="activo" name="activo" value="1" {{ old('activo', 1) ? 'checked' : '' }}>
+                <span class="slider"></span>
+              </label>
+              <div class="hint">Activa o desactiva el estado del colaborador.</div>
             </div>
 
             <div class="form-buttons">

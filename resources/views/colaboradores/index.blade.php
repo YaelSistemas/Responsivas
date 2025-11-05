@@ -46,6 +46,31 @@
 
     /* Bloqueo de scroll cuando hay modal */
     body.modal-open { overflow: hidden; }
+    
+    /* ====== Estados Activo / Inactivo ====== */
+    .estado-activo {
+      display: inline-block;
+      background-color: #dcfce7;   /* verde pastel */
+      color: #166534;              /* verde oscuro */
+      border: 1px solid #86efac;   /* verde medio */
+      border-radius: 9999px;       /* forma tipo cápsula */
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      text-align: center;
+    }
+
+    .estado-inactivo {
+      display: inline-block;
+      background-color: #fee2e2;   /* rojo pastel */
+      color: #991b1b;              /* rojo oscuro */
+      border: 1px solid #fca5a5;   /* rojo medio */
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      text-align: center;
+    }
   </style>
 
   <!-- ===== Contenido principal ===== -->

@@ -90,6 +90,7 @@ class ColaboradorController extends Controller implements HasMiddleware
             'unidad_servicio_id' => ['nullable', Rule::exists('unidades_servicio','id')->where('empresa_tenant_id',$tenant)],
             'area_id'            => ['nullable', Rule::exists('areas','id')->where('empresa_tenant_id',$tenant)],
             'puesto_id'          => ['nullable', Rule::exists('puestos','id')->where('empresa_tenant_id',$tenant)],
+            'activo' => 'required|boolean',
         ]);
 
         return DB::transaction(function () use ($data, $tenant) {
@@ -135,6 +136,7 @@ class ColaboradorController extends Controller implements HasMiddleware
             'unidad_servicio_id' => ['nullable', Rule::exists('unidades_servicio','id')->where('empresa_tenant_id',$tenant)],
             'area_id'            => ['nullable', Rule::exists('areas','id')->where('empresa_tenant_id',$tenant)],
             'puesto_id'          => ['nullable', Rule::exists('puestos','id')->where('empresa_tenant_id',$tenant)],
+            'activo'             => 'required|boolean',
         ]);
 
         $colaborador->update($data);
