@@ -68,6 +68,9 @@ Route::middleware(['auth'])->group(function () {
     /*
     |----------------------  RH  ----------------------
     */
+
+    // Colaboradores
+
     Route::resource('colaboradores', ColaboradorController::class)
         ->names('colaboradores')
         ->parameters(['colaboradores' => 'colaborador']);
@@ -75,6 +78,13 @@ Route::middleware(['auth'])->group(function () {
     // Buscar colaboradores (para selects, etc.)
     Route::get('/api/colaboradores/buscar', [ColaboradorController::class, 'buscar'])
         ->name('api.colaboradores.buscar');
+    
+    // Historial de colaboradores (modal AJAX)
+    Route::get('/colaboradores/{colaborador}/historial', [ColaboradorController::class, 'historial'])
+        ->whereNumber('colaborador')
+        ->name('colaboradores.historial');
+    
+    // Fin de Colaboradores
 
     Route::resource('unidades', UnidadServicioController::class)
         ->names('unidades')

@@ -9,6 +9,8 @@ use App\Models\Subsidiaria;          // subsidiaria
 use App\Models\UnidadServicio;
 use App\Models\Area;
 use App\Models\Puesto;
+use App\Models\ColaboradorHistorial;
+use Illuminate\Support\Facades\Auth;
 
 class Colaborador extends Model
 {
@@ -86,7 +88,7 @@ class Colaborador extends Model
 
             // Tenant y auditoría
             $model->empresa_tenant_id = $model->empresa_tenant_id ?: ($user->empresa_id ?? null);
-            $model->created_by        = $model->created_by        ?: ($user?->id);
+            $model->created_by        = $model->created_by ?: ($user?->id);
 
             // Folio consecutivo por tenant
             if (empty($model->folio) && !empty($model->empresa_tenant_id)) {
@@ -94,6 +96,82 @@ class Colaborador extends Model
                 $model->folio = ($max ?? 0) + 1;
             }
         });
+
+        // 🟢 CREACIÓN
+        static::created(function (self $colaborador) {
+            \App\Models\ColaboradorHistorial::create([
+                'colaborador_id' => $colaborador->id,
+                'user_id'        => auth()->id(),
+                'accion'         => 'Creación',
+                'cambios'        => self::mapNames([
+                    'nombre'             => $colaborador->nombre,
+                    'apellidos'          => $colaborador->apellidos,
+                    'subsidiaria_id'     => $colaborador->subsidiaria_id,
+                    'unidad_servicio_id' => $colaborador->unidad_servicio_id,
+                    'area_id'            => $colaborador->area_id,
+                    'puesto_id'          => $colaborador->puesto_id,
+                ]),
+            ]);
+        });
+
+        // 🔵 ACTUALIZACIÓN
+        static::updated(function (self $colaborador) {
+            $original = $colaborador->getOriginal();
+            $cambios = [];
+
+            foreach ($colaborador->getChanges() as $campo => $nuevoValor) {
+                if (in_array($campo, ['updated_at', 'created_at'])) continue;
+
+                $anterior = $original[$campo] ?? null;
+
+                if ($anterior != $nuevoValor) {
+                    $cambios[$campo] = [
+                        'de' => $anterior,
+                        'a'  => $nuevoValor,
+                    ];
+                }
+            }
+
+            if (!empty($cambios)) {
+                // 🔹 Traducir IDs a nombres
+                $cambios = self::mapNames($cambios);
+
+                \App\Models\ColaboradorHistorial::create([
+                    'colaborador_id' => $colaborador->id,
+                    'user_id'        => auth()->id(),
+                    'accion'         => 'Actualización',
+                    'cambios'        => $cambios,
+                ]);
+            }
+        });
+    }
+
+    /**
+    * 🔄 Convierte los IDs de relaciones en nombres legibles
+    */
+    protected static function mapNames(array $cambios): array
+    {
+        $map = [
+            'subsidiaria_id'     => Subsidiaria::pluck('nombre', 'id')->toArray(),
+            'unidad_servicio_id' => UnidadServicio::pluck('nombre', 'id')->toArray(),
+            'area_id'            => Area::pluck('nombre', 'id')->toArray(),
+            'puesto_id'          => Puesto::pluck('nombre', 'id')->toArray(),
+        ];
+
+        foreach ($cambios as $campo => &$valor) {
+            if (isset($map[$campo])) {
+                // Si el valor es array (tiene 'de' y 'a')
+                if (is_array($valor)) {
+                    $valor['de'] = $map[$campo][$valor['de']] ?? $valor['de'];
+                    $valor['a']  = $map[$campo][$valor['a']]  ?? $valor['a'];
+                } else {
+                    // Si es creación (valor plano)
+                    $valor = $map[$campo][$valor] ?? $valor;
+                }
+            }
+        }
+
+        return $cambios;
     }
 
     protected $appends = ['nombre_completo'];

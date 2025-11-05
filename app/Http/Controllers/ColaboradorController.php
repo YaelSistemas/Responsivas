@@ -3,16 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\Colaborador;
-use App\Models\Subsidiaria;   // tu modelo de subsidiarias
+use App\Models\Subsidiaria;
 use App\Models\UnidadServicio;
 use App\Models\Area;
 use App\Models\Puesto;
+use App\Models\ColaboradorHistorial; // 👈 para historial
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Routing\Controllers\Middleware;
-use Illuminate\Routing\Controllers\HasMiddleware;   
+use Illuminate\Routing\Controllers\HasMiddleware;
 
 class ColaboradorController extends Controller implements HasMiddleware
 {
@@ -52,10 +53,8 @@ class ColaboradorController extends Controller implements HasMiddleware
                     ->orWhereHas('puesto',      fn($p) => $p->where('nombre','like',"%{$q}%"));
                 });
             })
-            // Orden alfabético: primero apellidos, luego nombre
             ->orderByRaw("COALESCE(nombre,'') ASC")
             ->orderByRaw("COALESCE(apellidos,'') ASC")
-            // Default 50 por página (se puede sobreescribir con ?per_page=...)
             ->paginate((int) request('per_page', 50))
             ->withQueryString();
 
@@ -66,9 +65,8 @@ class ColaboradorController extends Controller implements HasMiddleware
         $perPage = (int) request('per_page', 50);
 
         return view('colaboradores.index', compact('colaboradores', 'q', 'perPage'));
-
     }
-    
+
     public function create()
     {
         $tenant = $this->tenantId();
@@ -101,7 +99,7 @@ class ColaboradorController extends Controller implements HasMiddleware
             $data['created_by']        = Auth::id();
             $data['folio']             = ($maxFolio ?? 0) + 1;
 
-            Colaborador::create($data);
+            $colaborador = Colaborador::create($data);
 
             return redirect()->route('colaboradores.index')->with('created', true);
         });
@@ -128,6 +126,7 @@ class ColaboradorController extends Controller implements HasMiddleware
         $tenant = $this->tenantId();
 
         $colaborador = Colaborador::where('empresa_tenant_id', $tenant)->findOrFail($id);
+        $original = $colaborador->getOriginal();
 
         $data = $request->validate([
             'nombre'             => 'required|string|max:255',
@@ -140,41 +139,90 @@ class ColaboradorController extends Controller implements HasMiddleware
 
         $colaborador->update($data);
 
+        // 🔹 Detectar y guardar cambios en historial
+        $cambios = [];
+        foreach ($data as $campo => $nuevoValor) {
+            $anterior = $original[$campo] ?? null;
+            if ($anterior != $nuevoValor) {
+                $cambios[$campo] = [
+                    'de' => $anterior,
+                    'a'  => $nuevoValor,
+                ];
+            }
+        }
+
         return redirect()->route('colaboradores.index')->with('updated', true);
     }
 
     public function destroy($id)
     {
-        $colaborador = Colaborador::where('empresa_tenant_id', $this->tenantId())->findOrFail($id);
+        $tenant = $this->tenantId();
+
+        $colaborador = Colaborador::where('empresa_tenant_id', $tenant)->findOrFail($id);
+
+        // 🔹 Registrar historial antes de eliminar
+        ColaboradorHistorial::create([
+            'colaborador_id' => $colaborador->id,
+            'user_id'        => Auth::id(), // ✅ corregido
+            'accion'         => 'Eliminación',
+            'cambios'        => [
+                'nombre'    => $colaborador->nombre,
+                'apellidos' => $colaborador->apellidos,
+            ],
+        ]);
+
         $colaborador->delete();
 
         return redirect()->route('colaboradores.index')->with('deleted', true);
     }
 
-    public function buscar(\Illuminate\Http\Request $request)
+    public function buscar(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        $tenant = (int) session('empresa_activa', Auth::user()->empresa_id);
+
+        $items = Colaborador::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->when($q, function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('nombre', 'like', "%{$q}%")
+                      ->orWhere('apellidos', 'like', "%{$q}%");
+                });
+            })
+            ->orderBy('nombre')
+            ->limit(10)
+            ->get(['id','nombre','apellidos']);
+
+        return response()->json(
+            $items->map(fn($c) => [
+                'id'   => $c->id,
+                'text' => trim($c->nombre.' '.$c->apellidos),
+            ])
+        );
+    }
+
+    public function historial($id)
 {
-    $q = trim((string) $request->query('q', ''));
-    $tenant = (int) session('empresa_activa', \Illuminate\Support\Facades\Auth::user()->empresa_id);
+    $tenant = $this->tenantId();
+    $colaborador = Colaborador::where('empresa_tenant_id', $tenant)->findOrFail($id);
 
-    $items = \App\Models\Colaborador::query()
-        ->where('empresa_tenant_id', $tenant)
-        ->when($q, function ($qq) use ($q) {
-            $qq->where(function ($w) use ($q) {
-                $w->where('nombre', 'like', "%{$q}%")
-                  ->orWhere('apellidos', 'like', "%{$q}%");
-            });
-        })
-        ->orderBy('nombre')
-        ->limit(10)
-        ->get(['id','nombre','apellidos']);
+    $historiales = ColaboradorHistorial::where('colaborador_id', $colaborador->id)
+        ->with('usuario:id,name')
+        ->orderBy('created_at', 'asc')
+        ->get()
+        ->map(function ($item) {
+            $item->cambios = is_array($item->cambios) ? $item->cambios : json_decode($item->cambios, true);
+            return $item;
+        });
 
-    // Respuesta compacta para el typeahead
-    return response()->json(
-        $items->map(fn($c) => [
-            'id'   => $c->id,
-            'text' => trim($c->nombre.' '.$c->apellidos),
-        ])
-    );
+    if (request()->ajax()) {
+        return response()->view('colaboradores.historial.modal', compact('colaborador', 'historiales'));
+    }
+
+    return redirect()->route('colaboradores.index');
 }
+
+
+
 
 }

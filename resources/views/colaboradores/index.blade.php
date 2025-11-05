@@ -4,20 +4,18 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    /* ====== Zoom responsivo ====== */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* valor por defecto en desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      /* compensamos el ancho para que visualmente quepa todo sin recortar */
       width: calc(100% / var(--zoom));
     }
-    /* Breakpoints: ajusta los factores según prefieras */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
     /* ====== Estilos originales ====== */
     .page-wrap{max-width:1100px;margin:0 auto}
@@ -29,7 +27,7 @@
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
 
-    /* Toolbar: select con caret consistente */
+    /* Toolbar */
     #colabs-toolbar .select-wrap{position:relative;display:inline-block}
     #colabs-toolbar select[name="per_page"]{
       -webkit-appearance:none; -moz-appearance:none; appearance:none; background-image:none;
@@ -41,21 +39,16 @@
       pointer-events:none; color:#6b7280; font-size:12px;
     }
 
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace}
-
-    /* ===== Centrar texto en la tabla de colaboradores ===== */
+    /* Tabla centrada */
     #tabla-colaboradores th,
-    #tabla-colaboradores td {
-    text-align: center !important;
-    }
+    #tabla-colaboradores td { text-align: center !important; }
+    #tabla-colaboradores tbody td:first-child { text-align: left !important; }
 
-    /* Mantener centrado el encabezado pero alinear a la izquierda los nombres */
-    #tabla-colaboradores tbody td:first-child {
-      text-align: left !important;
-    }
+    /* Bloqueo de scroll cuando hay modal */
+    body.modal-open { overflow: hidden; }
   </style>
 
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
+  <!-- ===== Contenido principal ===== -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6">
@@ -91,7 +84,7 @@
           </div>
         </form>
 
-        {{-- Alerts unificadas --}}
+        {{-- Alerts --}}
         @if (session('success') || session('created') || session('updated') || session('deleted') || session('error'))
           @php
             $msg = session('success') ?: (session('created') ? 'Colaborador creado.' : (session('updated') ? 'Colaborador actualizado.' : (session('deleted') ? 'Colaborador eliminado.' : (session('error') ?: ''))));
@@ -102,7 +95,10 @@
           @endphp
           <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
           <script>
-            setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);
+            setTimeout(()=>{
+              const a=document.getElementById('alert');
+              if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}
+            },2500);
           </script>
         @endif
 
@@ -116,7 +112,10 @@
     </div>
   </div>
 
-  {{-- Búsqueda + paginación + per_page (AJAX con partial HTML) --}}
+  {{-- 🔹 Contenedor global para modales AJAX (fuera del zoom, centrado en pantalla) --}}
+  <div id="ajax-modal-container"></div>
+
+  {{-- 🔸 Búsqueda + paginación + per_page (AJAX con partial HTML) --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -131,15 +130,13 @@
       const per = perPageSelect ? perPageSelect.value : '';
       if(q)  url.searchParams.set('q', q);
       if(per) url.searchParams.set('per_page', per);
-      // pedimos solo el parcial de tabla
       url.searchParams.set('partial', '1');
       return url.toString();
     }
 
     function wirePagination(){
-      // enlaces de paginación SSR dentro del parcial
       wrap.querySelectorAll('.pagination a, nav a').forEach(a=>{
-        a.addEventListener('click', function(ev){
+        a.addEventListener('click', ev=>{
           ev.preventDefault();
           ajaxLoad(a.getAttribute('href'));
         });
@@ -149,10 +146,8 @@
     function ajaxLoad(pageUrl = null){
       if(ctl) ctl.abort();
       ctl = new AbortController();
-
       const url = buildUrl(pageUrl);
 
-      // Actualiza barra de direcciones (sin recargar; quitamos el flag partial)
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
@@ -162,31 +157,81 @@
       fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
         .then(r=>r.text())
         .then(html=>{
-          wrap.innerHTML = html.trim();   // el parcial incluye tabla + paginación
+          wrap.innerHTML = html.trim();
           wirePagination();
         })
-        .catch(err=>{
-          if(err.name!=='AbortError') console.error(err);
-        });
+        .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
     }
 
-    // Buscar con debounce
     if(input){
       input.addEventListener('input', ()=>{
         clearTimeout(t);
         t = setTimeout(()=> ajaxLoad(), 300);
       });
-      // Enter = buscar inmediato
-      input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
+      input.addEventListener('keydown', e=>{
+        if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }
+      });
     }
 
-    // Cambiar "per page" por AJAX
-    if(perPageSelect){
-      perPageSelect.addEventListener('change', ()=> ajaxLoad());
-    }
-
-    // Inicializa paginación (enlaces actuales del SSR)
+    if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
     wirePagination();
   })();
   </script>
+
+  {{-- Modal de historial AJAX --}}
+  <script>
+async function openColabHistorial(id) {
+  try {
+    const res = await fetch(`/colaboradores/${id}/historial`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+
+    // 🔹 Elimina modales anteriores
+    const existing = document.getElementById('colabModalOverlay');
+    if (existing) existing.remove();
+
+    // 🔹 Inserta el nuevo modal
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // 🔹 Bloquea el scroll de fondo
+    document.body.classList.add('modal-open');
+
+  } catch (error) {
+    console.error("Error al abrir historial:", error);
+    alert("No se pudo abrir el historial del colaborador.");
+  }
+}
+
+// 🔸 Cierre global de modales (click en ✕, fuera del modal o tecla ESC)
+document.addEventListener('click', (e) => {
+  const closeBtn = e.target.closest('[data-modal-close]');
+  const backdrop = e.target.closest('[data-modal-backdrop]');
+
+  // Si clic en botón cerrar ✕
+  if (closeBtn && backdrop) {
+    backdrop.remove();
+    document.body.classList.remove('modal-open');
+  }
+
+  // Si clic fuera del modal (fondo)
+  if (backdrop && !e.target.closest('.colab-modal')) {
+    backdrop.remove();
+    document.body.classList.remove('modal-open');
+  }
+});
+
+// Cerrar con tecla ESC
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const backdrop = document.querySelector('[data-modal-backdrop]');
+    if (backdrop) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+  }
+});
+</script>
+
 </x-app-layout>
