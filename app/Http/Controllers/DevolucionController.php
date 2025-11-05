@@ -129,7 +129,11 @@ class DevolucionController extends Controller implements HasMiddleware
             'productos'               => 'required|array|min:1',
         ]);
 
-        DB::transaction(function () use ($validated, $request) {
+        // Declaramos la variable fuera del closure
+        $devolucion = null;
+
+        // Ejecutamos la transacción y devolvemos el modelo
+        $devolucion = DB::transaction(function () use ($validated, $request) {
             $devolucion = Devolucion::create($validated);
 
             foreach ($request->productos as $productoId => $series) {
@@ -155,9 +159,14 @@ class DevolucionController extends Controller implements HasMiddleware
                     $serie->update(['estado' => 'disponible']);
                 }
             }
+
+            // 🔹 Retornar el modelo creado desde la transacción
+            return $devolucion;
         });
 
-        return redirect()->route('devoluciones.index')
+        // 🔹 Redirigir directamente al show
+        return redirect()
+            ->route('devoluciones.show', $devolucion->id)
             ->with('success', 'Devolución registrada correctamente.');
     }
 
@@ -220,6 +229,7 @@ class DevolucionController extends Controller implements HasMiddleware
             $agregadas = array_diff($seriesNuevas, $seriesPrevias);
             $quitadas  = array_diff($seriesPrevias, $seriesNuevas);
 
+            // ➕ Series nuevas
             foreach ($request->productos as $productoId => $series) {
                 $series = is_array($series) ? $series : [$series];
                 foreach ($series as $serieId) {
@@ -235,6 +245,7 @@ class DevolucionController extends Controller implements HasMiddleware
                 }
             }
 
+            // ➖ Series quitadas
             foreach ($quitadas as $serieId) {
                 $serie = ProductoSerie::find($serieId);
                 if ($serie) {
@@ -247,7 +258,9 @@ class DevolucionController extends Controller implements HasMiddleware
             }
         });
 
-        return redirect()->route('devoluciones.index')
+        // ✅ Redirigir directamente al show
+        return redirect()
+            ->route('devoluciones.show', $devolucion->id)
             ->with('success', 'Devolución actualizada correctamente.');
     }
 
