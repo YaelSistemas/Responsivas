@@ -125,19 +125,26 @@ class OrdenCompraController extends Controller implements HasMiddleware
     {
         $tenantId = $this->tenantId();
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenantId)
-            ->orderBy('nombre')->get();
+            ->where('activo', 1) // ← 🔸 filtro agregado
+            ->orderBy('nombre')
+            ->orderBy('apellidos')
+            ->get(['id', 'nombre', 'apellidos']);
 
+        // 🔹 Proveedores del tenant actual
         $proveedores = Proveedor::where('empresa_tenant_id', $tenantId)
-            ->orderBy('nombre')->get(['id','nombre','rfc','ciudad','estado']);
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'rfc', 'ciudad', 'estado']);
 
+        // 🔹 Datos del usuario autenticado y prefijo de folio
         $user   = auth()->user();
         $prefix = $this->makePrefix($user);
 
-        // Alinear contador al tope real (permite bajar el “siguiente” si moviste uno hacia atrás en edit)
+        // 🔹 Alinear contador al máximo actual en base de datos
         $folios->reconcileToDbMax($tenantId);
 
-        // Sugerido visible
+        // 🔹 Sugerir el siguiente folio visible
         $nextSeq        = $folios->peekNext($tenantId);
         $numeroSugerido = sprintf('%s-%04d', $prefix, $nextSeq);
 
@@ -374,11 +381,17 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $this->authorizeCompany($oc);
         $tenantId = $this->tenantId();
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenantId)
-            ->orderBy('nombre')->get();
+            ->where('activo', 1) // ← 🔸 agregado
+            ->orderBy('nombre')
+            ->orderBy('apellidos')
+            ->get(['id', 'nombre', 'apellidos']);
 
+        // 🔹 Proveedores del tenant actual
         $proveedores = Proveedor::where('empresa_tenant_id', $tenantId)
-            ->orderBy('nombre')->get(['id','nombre','rfc','ciudad','estado']);
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'rfc', 'ciudad', 'estado']);
 
         return view('oc.edit', [
             'oc'            => $oc->load('detalles'),

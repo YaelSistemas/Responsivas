@@ -105,10 +105,17 @@ class DevolucionController extends Controller implements HasMiddleware
                 ->values();
         }
 
+        // 🔹 Solo usuarios con rol Administrador
         $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
-        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
-            ->orderBy('nombre')->get(['id', 'nombre', 'apellidos']);
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
+        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
+            ->where('activo', 1) //
+            ->orderBy('nombre')
+            ->orderBy('apellidos')
+            ->get(['id', 'nombre', 'apellidos']);
+
+        // 🔹 Si el usuario autenticado es admin, lo deja como valor por defecto
         $user = auth()->user();
         $adminDefault = ($user && $user->hasRole('Administrador')) ? $user->id : null;
 
@@ -176,12 +183,25 @@ class DevolucionController extends Controller implements HasMiddleware
     {
         $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
 
-        $devolucion = Devolucion::with(['productos', 'responsiva.colaborador', 'psitioColaborador'])->findOrFail($id);
+        $devolucion = Devolucion::with(['productos', 'responsiva.colaborador', 'psitioColaborador'])
+            ->findOrFail($id);
 
+        // 🔹 Solo usuarios con rol Administrador
         $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
-        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)->orderBy('nombre')->get(['id', 'nombre', 'apellidos']);
-        $responsivas = Responsiva::with('colaborador')->where('empresa_tenant_id', $tenant)->get();
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
+        $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
+            ->where('activo', 1)
+            ->orderBy('nombre')
+            ->orderBy('apellidos')
+            ->get(['id', 'nombre', 'apellidos']);
+
+        // 🔹 Responsivas del tenant actual (sin filtrar colaboradores)
+        $responsivas = Responsiva::with('colaborador')
+            ->where('empresa_tenant_id', $tenant)
+            ->get();
+
+        // 🔹 Obtener las series más recientes asociadas a la responsiva
         $ultimaFilaPorSerie = ResponsivaDetalle::query()
             ->where('responsiva_id', $devolucion->responsiva_id)
             ->select('producto_serie_id', DB::raw('MAX(id) as detalle_id'))

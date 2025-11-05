@@ -111,6 +111,7 @@ class Colaborador extends Model
                     'unidad_servicio_id' => $colaborador->unidad_servicio_id,
                     'area_id'            => $colaborador->area_id,
                     'puesto_id'          => $colaborador->puesto_id,
+                    'activo'             => $colaborador->activo,
                 ]),
             ]);
         });

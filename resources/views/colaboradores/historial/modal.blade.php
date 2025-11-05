@@ -48,6 +48,25 @@
   .diff-table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
   .diff-table th,.diff-table td { border: 1px solid #e5e7eb; padding: .35rem .45rem; font-size: .88rem; }
   .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+  }
+  .badge-activo {
+    color: #166534;
+    background-color: #dcfce7;
+    border-color: #86efac;
+  }
+  .badge-inactivo {
+    color: #991b1b;
+    background-color: #fee2e2;
+    border-color: #fecaca;
+  }
 </style>
 
 <div class="colab-modal-backdrop" data-modal-backdrop>
@@ -71,17 +90,63 @@
               $fecha = optional($log->created_at)->format('d-m-Y H:i');
               $accion = strtolower($log->accion ?? 'actualización');
               $cambios = $log->cambios ?? [];
+              $tieneCambioActivo = isset($cambios['activo']) && is_array($cambios['activo']) && isset($cambios['activo']['de'], $cambios['activo']['a']);
+              $esCreacion = in_array($accion, ['creación','creacion']);
             @endphp
+
             <li class="{{ $accion }}">
               <div class="ev-head">
-                <span class="ev-title">
-                  {{ ucfirst($accion) }}
-                </span>
+                @php
+                  $otrosCambios = collect($cambios)->except(['activo']);
+                @endphp
+
+                @if($esCreacion)
+                  <span class="ev-title">Creación</span>
+                @elseif($tieneCambioActivo && $otrosCambios->isEmpty())
+                  <span class="ev-title">Cambio de estado</span>
+                @else
+                  <span class="ev-title">Actualización</span>
+                @endif
+
                 <span class="ev-meta">— {{ $user }} · {{ $fecha }}</span>
               </div>
 
-              {{-- Mostrar cambios en tabla --}}
-              @if(!empty($cambios))
+              {{-- 🔹 Mostrar estado arriba (tanto en creación como actualización) --}}
+              @php
+                if ($esCreacion && isset($cambios['activo'])) {
+                    $valor = $cambios['activo'];
+                    $estadoLabel = ($valor == 1 || $valor === true)
+                        ? '<span class="badge badge-activo">Activo</span>'
+                        : '<span class="badge badge-inactivo">Inactivo</span>';
+                } elseif ($tieneCambioActivo) {
+                    $old = $cambios['activo']['de'];
+                    $new = $cambios['activo']['a'];
+
+                    $oldLabel = $old
+                        ? '<span class="badge badge-activo">Activo</span>'
+                        : '<span class="badge badge-inactivo">Inactivo</span>';
+                    $newLabel = $new
+                        ? '<span class="badge badge-activo">Activo</span>'
+                        : '<span class="badge badge-inactivo">Inactivo</span>';
+
+                    $estadoLabel = $oldLabel . ' → ' . $newLabel;
+                } else {
+                    $estadoLabel = '';
+                }
+              @endphp
+
+              @if($estadoLabel)
+                <div style="margin-top:.6rem; margin-left:.3rem;">
+                  <div class="ev-meta"><strong>Estado:</strong> {!! $estadoLabel !!}</div>
+                </div>
+              @endif
+
+              {{-- 🔸 Mostrar tabla de cambios (sin el campo "activo") --}}
+              @php
+                $otrosCambios = collect($cambios)->except(['activo']);
+              @endphp
+
+              @if($otrosCambios->isNotEmpty())
                 <table class="diff-table">
                   <thead>
                     <tr>
@@ -95,7 +160,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    @foreach($cambios as $campo => $valor)
+                    @foreach($otrosCambios as $campo => $valor)
                       @if(is_array($valor) && isset($valor['de'], $valor['a']))
                         <tr>
                           <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
@@ -111,7 +176,7 @@
                     @endforeach
                   </tbody>
                 </table>
-              @else
+              @elseif(empty($cambios))
                 <div class="ev-meta">Sin datos adicionales.</div>
               @endif
             </li>
@@ -121,4 +186,3 @@
     </div>
   </div>
 </div>
-

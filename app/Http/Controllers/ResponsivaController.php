@@ -121,18 +121,23 @@ class ResponsivaController extends Controller implements HasMiddleware
     {
         $tenantId = $this->tenantId();
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colabQ = Colaborador::query()
+            ->where('activo', 1)
             ->orderBy('nombre')
             ->orderBy('apellidos')
-            ->select(['id','nombre','apellidos']);
-        if (Schema::hasColumn('colaboradores','empresa_id')) {
+            ->select(['id', 'nombre', 'apellidos']);
+
+        // 🔸 Respetar columna de empresa según estructura
+        if (Schema::hasColumn('colaboradores', 'empresa_id')) {
             $colabQ->where('empresa_id', $tenantId);
-        } elseif (Schema::hasColumn('colaboradores','empresa_tenant_id')) {
+        } elseif (Schema::hasColumn('colaboradores', 'empresa_tenant_id')) {
             $colabQ->where('empresa_tenant_id', $tenantId);
         }
+
         $colaboradores = $colabQ->get();
 
-        // ⬇️ Solo series disponibles de productos ACTIVOS
+        // 🔹 Solo series disponibles de productos ACTIVOS
         $series = ProductoSerie::deEmpresa($tenantId)
             ->disponibles()
             ->whereHas('producto', fn($q) => $q->where('activo', true))
@@ -140,15 +145,16 @@ class ResponsivaController extends Controller implements HasMiddleware
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado','especificaciones']);
 
+        // 🔹 Usuarios con rol “Administrador”
         $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
 
-        // ⬇️ Preselección condicional de “Autorizó”
+        // 🔸 Preselección condicional de “Autorizó”
         $erasto = User::where('name', 'Ing. Erasto H. Enriquez Zurita')->first();
-        $autorizaDefaultId = ($erasto && method_exists($erasto,'hasRole') && $erasto->hasRole('Administrador'))
+        $autorizaDefaultId = ($erasto && method_exists($erasto, 'hasRole') && $erasto->hasRole('Administrador'))
             ? $erasto->id
             : null;
 
-        return view('responsivas.create', compact('colaboradores','series','admins','autorizaDefaultId'));
+        return view('responsivas.create', compact('colaboradores', 'series', 'admins', 'autorizaDefaultId'));
     }
 
     /* ===================== STORE ===================== */
@@ -254,21 +260,26 @@ class ResponsivaController extends Controller implements HasMiddleware
     /* ===================== EDIT ===================== */
     public function edit(Responsiva $responsiva)
     {
+        // 🔒 Verifica que la responsiva pertenezca al tenant activo
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         $tenantId = $this->tenantId();
 
-        $responsiva->load(['detalles.producto','detalles.serie','colaborador']);
+        $responsiva->load(['detalles.producto', 'detalles.serie', 'colaborador']);
 
+        // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colabQ = Colaborador::query()
+            ->where('activo', 1)
             ->orderBy('nombre')
             ->orderBy('apellidos')
             ->select(['id','nombre','apellidos']);
+
         if (Schema::hasColumn('colaboradores','empresa_id')) {
             $colabQ->where('empresa_id', $tenantId);
         } elseif (Schema::hasColumn('colaboradores','empresa_tenant_id')) {
             $colabQ->where('empresa_tenant_id', $tenantId);
         }
+
         $colaboradores = $colabQ->get();
 
         // ⬇️ Series disponibles SOLO de productos ACTIVOS
@@ -294,7 +305,7 @@ class ResponsivaController extends Controller implements HasMiddleware
         $selectedSeries = $misSeries->pluck('id')->all();
 
         return view('responsivas.edit', compact(
-            'responsiva','colaboradores','series','admins','selectedSeries'
+            'responsiva', 'colaboradores', 'series', 'admins', 'selectedSeries'
         ));
     }
 
