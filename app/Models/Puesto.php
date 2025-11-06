@@ -35,9 +35,10 @@ class Puesto extends Model
             ->firstOrFail();
     }
 
-    /* -------- Asignaciones automáticas -------- */
+    /* -------- Asignaciones automáticas e historial -------- */
     protected static function booted()
     {
+        // 🔹 Asignaciones automáticas
         static::creating(function (self $m) {
             $user   = auth()->user();
             $tenant = (int) session('empresa_activa', $user?->empresa_id);
@@ -52,5 +53,38 @@ class Puesto extends Model
                 $m->folio = ($max ?? 0) + 1;
             }
         });
+
+        // 🔹 Historial de creación
+        static::created(function ($puesto) {
+            \App\Models\PuestoHistorial::create([
+                'puesto_id' => $puesto->id,
+                'user_id'   => auth()->id(),
+                'accion'    => 'Creación',
+                'cambios'   => [
+                    'nombre'       => $puesto->nombre,
+                    'descripcion'  => $puesto->descripcion,
+                ],
+            ]);
+        });
+
+        // 🔹 Historial de actualización
+        static::updated(function ($puesto) {
+            $cambios = [];
+            foreach ($puesto->getChanges() as $campo => $nuevoValor) {
+                if (in_array($campo, ['updated_at'])) continue; // ignorar timestamps
+                $original = $puesto->getOriginal($campo);
+                $cambios[$campo] = ['de' => $original, 'a' => $nuevoValor];
+            }
+
+            if (!empty($cambios)) {
+                \App\Models\PuestoHistorial::create([
+                    'puesto_id' => $puesto->id,
+                    'user_id'   => auth()->id(),
+                    'accion'    => 'Actualización',
+                    'cambios'   => $cambios,
+                ]);
+            }
+        });
     }
+
 }

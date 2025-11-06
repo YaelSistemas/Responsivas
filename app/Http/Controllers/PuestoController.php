@@ -120,4 +120,17 @@ class PuestoController extends Controller implements HasMiddleware
 
         return redirect()->route('puestos.index')->with('deleted', true);
     }
+
+    public function historial($id)
+    {
+        $puesto = \App\Models\Puesto::findOrFail($id);
+
+        $historial = \App\Models\PuestoHistorial::where('puesto_id', $id)
+            ->with('user')
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        return view('puestos.historial.modal', compact('puesto', 'historial'));
+    }
+
 }

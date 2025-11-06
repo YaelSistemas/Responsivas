@@ -108,14 +108,24 @@ Route::middleware(['auth'])->group(function () {
 
     // Fin de Areas
 
+    // Puestos
+
     Route::resource('puestos', PuestoController::class)
         ->names('puestos')
         ->parameters(['puestos' => 'puesto']);
+    
+    Route::get('/puestos/{puesto}/historial', [PuestoController::class, 'historial'])
+        ->name('puestos.historial');
+
+    // Fin de Puestos
+
+    // Subsidiarias
 
     Route::resource('subsidiarias', SubsidiariaController::class)
         ->names('subsidiarias')
         ->parameters(['subsidiarias' => 'subsidiaria']);
 
+    // Fin de Subsidiarias
 
     /*
     |--------------------  Productos  --------------------
