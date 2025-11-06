@@ -155,7 +155,7 @@ class UnidadServicioController extends Controller implements HasMiddleware
 
         $historial = \App\Models\UnidadServicioHistorial::where('unidad_id', $unidad->id)
             ->with('user')
-            ->orderByDesc('created_at')
+            ->orderBy('created_at', 'asc')
             ->get();
 
         return view('unidades.historial.modal', compact('unidad', 'historial'));

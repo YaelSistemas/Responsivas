@@ -9,6 +9,7 @@
     <tr>
       <th style="width:260px">Nombre</th>
       <th>Descripción</th>
+      <th style="width:110px">Historial</th>
       @if($showActions)
         <th style="width:110px">Acciones</th>
       @endif
@@ -17,14 +18,30 @@
   <tbody>
     @forelse ($areas as $area)
       <tr>
+        {{-- Nombre --}}
         <td class="font-medium">{{ $area->nombre }}</td>
+
+        {{-- Descripción --}}
         <td class="text-gray-600">{{ $area->descripcion ?: '—' }}</td>
 
+        {{-- 🔹 Historial --}}
+        <td class="text-center">
+          <button type="button"
+                  class="text-blue-600 hover:text-blue-800 font-semibold"
+                  onclick="openAreaHistorial({{ $area->id }})"
+                  title="Ver historial">
+            Historial
+          </button>
+        </td>
+
+        {{-- 🔹 Acciones --}}
         @if($showActions)
           <td>
             <div class="flex justify-center items-center gap-4">
               @can('areas.edit')
-                <a href="{{ route('areas.edit', $area) }}" class="text-gray-800 hover:text-gray-900 text-lg" title="Editar">
+                <a href="{{ route('areas.edit', $area) }}" 
+                   class="text-gray-800 hover:text-gray-900 text-lg" 
+                   title="Editar">
                   <i class="fa-solid fa-pen"></i>
                 </a>
               @endcan
@@ -33,7 +50,9 @@
                 <form action="{{ route('areas.destroy', $area) }}" method="POST"
                       onsubmit="return confirm('¿Eliminar esta área?');">
                   @csrf @method('DELETE')
-                  <button type="submit" class="text-red-600 hover:text-red-800 text-lg" title="Eliminar">
+                  <button type="submit" 
+                          class="text-red-600 hover:text-red-800 text-lg" 
+                          title="Eliminar">
                     <i class="fa-solid fa-trash"></i>
                   </button>
                 </form>
@@ -44,8 +63,8 @@
       </tr>
     @empty
       <tr>
-        <td colspan="{{ $showActions ? 3 : 2 }}" class="text-center text-gray-500 py-6">
-          No hay áreas.
+        <td colspan="{{ $showActions ? 4 : 3 }}" class="text-center text-gray-500 py-6">
+          No hay áreas registradas.
         </td>
       </tr>
     @endforelse

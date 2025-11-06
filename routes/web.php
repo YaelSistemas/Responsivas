@@ -97,9 +97,16 @@ Route::middleware(['auth'])->group(function () {
 
     // Fin de Unidades de Servicio
 
+    // Areas
+
     Route::resource('areas', AreaController::class)
         ->names('areas')
         ->parameters(['areas' => 'area']);
+    
+    Route::get('/areas/{area}/historial', [AreaController::class, 'historial'])
+        ->name('areas.historial');
+
+    // Fin de Areas
 
     Route::resource('puestos', PuestoController::class)
         ->names('puestos')
@@ -108,6 +115,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('subsidiarias', SubsidiariaController::class)
         ->names('subsidiarias')
         ->parameters(['subsidiarias' => 'subsidiaria']);
+
 
     /*
     |--------------------  Productos  --------------------

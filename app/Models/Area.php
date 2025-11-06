@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\AreaHistorial;
+use App\Models\User;
 
 class Area extends Model
 {
@@ -38,6 +40,7 @@ class Area extends Model
     /* ---------- Asignaciones automáticas ---------- */
     protected static function booted()
     {
+        // ====== BLOQUE ORIGINAL (NO TOCAR) ======
         static::creating(function (self $m) {
             $user   = auth()->user();
             $tenant = (int) session('empresa_activa', $user?->empresa_id);
@@ -50,6 +53,41 @@ class Area extends Model
             if (empty($m->folio) && !empty($m->empresa_tenant_id)) {
                 $max = static::where('empresa_tenant_id', $m->empresa_tenant_id)->max('folio');
                 $m->folio = ($max ?? 0) + 1;
+            }
+        });
+
+        // ====== NUEVO BLOQUE: REGISTRO DE HISTORIAL ======
+        static::created(function (self $area) {
+            AreaHistorial::create([
+                'area_id' => $area->id,
+                'user_id' => auth()->id(),
+                'accion'  => 'Creación',
+                'cambios' => [
+                    'nombre'      => $area->nombre,
+                    'descripcion' => $area->descripcion,
+                ],
+            ]);
+        });
+
+        static::updated(function (self $area) {
+            $original = $area->getOriginal();
+            $cambios = [];
+
+            foreach ($area->getChanges() as $campo => $nuevo) {
+                if (in_array($campo, ['updated_at', 'created_at'])) continue;
+                $anterior = $original[$campo] ?? null;
+                if ($anterior != $nuevo) {
+                    $cambios[$campo] = ['de' => $anterior, 'a' => $nuevo];
+                }
+            }
+
+            if (!empty($cambios)) {
+                AreaHistorial::create([
+                    'area_id' => $area->id,
+                    'user_id' => auth()->id(),
+                    'accion'  => 'Actualización',
+                    'cambios' => $cambios,
+                ]);
             }
         });
     }

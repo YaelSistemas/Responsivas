@@ -118,4 +118,17 @@ class AreaController extends Controller implements HasMiddleware
         $area->delete();
         return redirect()->route('areas.index')->with('deleted', true);
     }
+
+    public function historial($id)
+    {
+        $area = Area::findOrFail($id);
+
+        $historial = \App\Models\AreaHistorial::where('area_id', $id)
+            ->with('user')
+            ->orderBy('created_at' , 'asc')
+            ->get();
+
+        return view('areas.historial.modal', compact('area', 'historial'));
+    }
+
 }
