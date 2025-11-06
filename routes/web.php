@@ -125,6 +125,9 @@ Route::middleware(['auth'])->group(function () {
         ->names('subsidiarias')
         ->parameters(['subsidiarias' => 'subsidiaria']);
 
+    Route::get('/subsidiarias/{subsidiaria}/historial', [SubsidiariaController::class, 'historial'])
+        ->name('subsidiarias.historial');
+
     // Fin de Subsidiarias
 
     /*

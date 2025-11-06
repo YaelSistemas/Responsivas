@@ -35,9 +35,10 @@ class Subsidiaria extends Model
             ->firstOrFail();
     }
 
-    /* -------- Asignaciones automáticas -------- */
+    /* -------- Asignaciones automáticas + Historial -------- */
     protected static function booted()
     {
+        // 🔹 Asignaciones automáticas
         static::creating(function (self $m) {
             $user   = auth()->user();
             $tenant = (int) session('empresa_activa', $user?->empresa_id);
@@ -52,5 +53,58 @@ class Subsidiaria extends Model
                 $m->folio = ($max ?? 0) + 1;
             }
         });
+
+        // 🔹 Historial: creación
+        static::created(function (self $m) {
+            \App\Models\SubsidiariaHistorial::create([
+                'subsidiaria_id' => $m->id,
+                'user_id'        => auth()->id(),
+                'accion'         => 'Creación',
+                'cambios'        => [
+                    'nombre' => $m->nombre,
+                    'descripcion' => $m->descripcion,
+                ],
+            ]);
+        });
+
+        // 🔹 Historial: actualización (con formato {de, a})
+        static::updated(function (self $m) {
+            $original = $m->getOriginal();
+            $changes  = [];
+
+            foreach ($m->getDirty() as $campo => $nuevoValor) {
+                // Solo registrar campos importantes
+                if (in_array($campo, ['nombre', 'descripcion'])) {
+                    $valorAnterior = $original[$campo] ?? null;
+                    $changes[$campo] = [
+                        'de' => $valorAnterior,
+                        'a'  => $nuevoValor,
+                    ];
+                }
+            }
+
+            if (!empty($changes)) {
+                \App\Models\SubsidiariaHistorial::create([
+                    'subsidiaria_id' => $m->id,
+                    'user_id'        => auth()->id(),
+                    'accion'         => 'Actualización',
+                    'cambios'        => $changes,
+                ]);
+            }
+        });
+
+        // 🔹 Historial: eliminación (antes del delete, para evitar error FK)
+        static::deleting(function (self $m) {
+            \App\Models\SubsidiariaHistorial::create([
+                'subsidiaria_id' => $m->id,
+                'user_id'        => auth()->id(),
+                'accion'         => 'Eliminación',
+                'cambios'        => [
+                    'nombre'      => $m->nombre,
+                    'descripcion' => $m->descripcion,
+                ],
+            ]);
+        });
     }
+
 }

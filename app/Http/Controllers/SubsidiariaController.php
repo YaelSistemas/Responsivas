@@ -124,4 +124,17 @@ class SubsidiariaController extends Controller implements HasMiddleware
                 ->with('error', 'No se puede eliminar: la subsidiaria está en uso.');
         }
     }
+
+    public function historial($id)
+    {
+        $subsidiaria = \App\Models\Subsidiaria::findOrFail($id);
+
+        $historial = \App\Models\SubsidiariaHistorial::where('subsidiaria_id', $id)
+            ->with('user')
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        return view('subsidiarias.historial.modal', compact('subsidiaria', 'historial'));
+    }
+
 }

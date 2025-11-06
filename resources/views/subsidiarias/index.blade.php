@@ -4,27 +4,22 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    /* ====== Zoom responsivo ====== */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* valor por defecto en desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      /* compensamos el ancho para que visualmente quepa todo sin recortar */
       width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (alineado a lo usado en otras vistas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs */
-    @media (max-width: 768px){
-      input, select, textarea{ font-size:16px; }
-    }
+    @media (max-width: 768px){ input, select, textarea{ font-size:16px; } }
 
-    /* ====== Estilos originales ====== */
+    /* ====== Estilos generales ====== */
     .page-wrap{max-width:1100px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
@@ -34,10 +29,10 @@
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
 
-    /* Toolbar: select con caret consistente */
+    /* Toolbar */
     #subs-toolbar .select-wrap{position:relative;display:inline-block}
     #subs-toolbar select[name="per_page"]{
-      -webkit-appearance:none; -moz-appearance:none; appearance:none; background-image:none;
+      -webkit-appearance:none; -moz-appearance:none; appearance:none;
       width:88px; padding:6px 28px 6px 10px; height:34px; line-height:1.25; font-size:14px;
       color:#111827; background:#fff; border:1px solid #d1d5db; border-radius:6px;
     }
@@ -46,14 +41,14 @@
       pointer-events:none; color:#6b7280; font-size:12px;
     }
 
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace}
+    /* Bloqueo scroll cuando el modal está abierto */
+    body.modal-open { overflow: hidden; }
   </style>
 
   @php
     $canCreate = auth()->user()?->can('subsidiarias.create');
   @endphp
 
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6">
@@ -107,7 +102,7 @@
           </script>
         @endif
 
-        {{-- Tabla + paginación (parcial) --}}
+        {{-- Tabla --}}
         <div class="card">
           <div class="overflow-x-auto" id="subs-wrap">
             @include('subsidiarias.partials.table')
@@ -117,7 +112,10 @@
     </div>
   </div>
 
-  {{-- AJAX: búsqueda / per_page / paginación --}}
+  {{-- 🔹 Contenedor global para modales AJAX --}}
+  <div id="ajax-modal-container"></div>
+
+  {{-- 🔸 AJAX búsqueda + paginación --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -138,7 +136,7 @@
 
     function wirePagination(){
       wrap.querySelectorAll('.pagination a, nav a').forEach(a=>{
-        a.addEventListener('click', function(ev){
+        a.addEventListener('click', ev=>{
           ev.preventDefault();
           ajaxLoad(a.getAttribute('href'));
         });
@@ -149,14 +147,11 @@
       if(ctl) ctl.abort();
       ctl = new AbortController();
       const url = buildUrl(pageUrl);
-
-      // Actualiza URL sin el flag 'partial'
       if (history.pushState) {
         const pretty = new URL(url);
         pretty.searchParams.delete('partial');
         history.pushState({}, '', pretty.toString());
       }
-
       fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
         .then(r=>r.text())
         .then(html=>{
@@ -168,11 +163,59 @@
 
     if(input){
       input.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=> ajaxLoad(), 300); });
-      input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
-    }
+      input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }}); }
     if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
 
     wirePagination();
   })();
+  </script>
+
+  {{-- 🔸 Modal de historial AJAX --}}
+  <script>
+  async function openSubsidiariaHistorial(id) {
+    try {
+      const res = await fetch(`/subsidiarias/${id}/historial`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+
+      // Elimina modales previos
+      const existing = document.querySelector('[data-modal-backdrop]');
+      if (existing) existing.remove();
+
+      // Inserta modal
+      document.body.insertAdjacentHTML('beforeend', html);
+      document.body.classList.add('modal-open');
+
+    } catch (error) {
+      console.error("Error al abrir historial:", error);
+      alert("No se pudo abrir el historial de la subsidiaria.");
+    }
+  }
+
+  // 🔹 Cierre global del modal
+  document.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('[data-modal-close]');
+    const backdrop = e.target.closest('[data-modal-backdrop]');
+    if (closeBtn && backdrop) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+    if (backdrop && !e.target.closest('.colab-modal')) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const backdrop = document.querySelector('[data-modal-backdrop]');
+      if (backdrop) {
+        backdrop.remove();
+        document.body.classList.remove('modal-open');
+      }
+    }
+  });
   </script>
 </x-app-layout>
