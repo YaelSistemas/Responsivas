@@ -7,21 +7,18 @@
 
   <style>
     /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* valor por defecto en desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      /* compensamos el ancho para que visualmente quepa todo sin recortar */
       width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (mismos que usaste en otras vistas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width: 768px){
       input, select, textarea{ font-size:16px; }
     }
@@ -31,8 +28,8 @@
     .form-container{max-width:700px;margin:0 auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     .form-group{margin-bottom:16px}
     .form-container label{display:block;margin-bottom:6px;color:#374151;font-weight:600}
-    .form-container input,.form-container textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
-    .form-container input:focus,.form-container textarea:focus{outline:none;border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    .form-container input,.form-container textarea,.form-container select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+    .form-container input:focus,.form-container textarea:focus,.form-container select:focus{outline:none;border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12)}
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
     .err{color:#dc2626;font-size:12px;margin-top:6px}
     .form-buttons{display:flex;gap:12px;justify-content:space-between;padding-top:20px}
@@ -41,18 +38,18 @@
     .btn-save{background:#16a34a;color:#fff;padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer}
     .btn-save:hover{background:#15803d}
 
-    /* En móviles, apilar botones */
     @media (max-width: 480px){
       .form-buttons{flex-direction:column-reverse;align-items:stretch}
       .btn-cancel,.btn-save{width:100%}
     }
+
+    /* 🔹 Evita que se corte el menú del select */
+    select {
+      max-height: 220px;
+      overflow-y: auto;
+    }
   </style>
 
-  @php
-    $responsableTexto = trim(($unidad->responsable->nombre ?? '').' '.($unidad->responsable->apellidos ?? ''));
-  @endphp
-
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6">
@@ -84,25 +81,17 @@
               @error('direccion') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Responsable (typeahead) --}}
-            <div class="form-group" id="responsable-wrap" data-url="{{ route('api.colaboradores.buscar') }}" style="position:relative">
-              <label for="responsable_search">Responsable <span class="hint">(opcional)</span></label>
-
-              <input
-                id="responsable_search"
-                type="text"
-                placeholder="Escribe para buscar…"
-                value="{{ old('responsable_text', $responsableTexto) }}"
-                autocomplete="off"
-              >
-              <input
-                id="responsable_id"
-                type="hidden"
-                name="responsable_id"
-                value="{{ old('responsable_id', $unidad->responsable_id) }}"
-              >
-              <div id="responsable_suggestions"></div>
-
+            {{-- Responsable (select) --}}
+            <div class="form-group">
+              <label for="responsable_id">Responsable <span class="hint">(opcional)</span></label>
+              <select id="responsable_id" name="responsable_id">
+                <option value="">Seleccione un colaborador…</option>
+                @foreach ($colaboradores as $id => $nombre)
+                  <option value="{{ $id }}" {{ old('responsable_id', $unidad->responsable_id) == $id ? 'selected' : '' }}>
+                    {{ $nombre }}
+                  </option>
+                @endforeach
+              </select>
               @error('responsable_id') <div class="err">{{ $message }}</div> @enderror
             </div>
 
@@ -115,109 +104,4 @@
       </div>
     </div>
   </div>
-
-  {{-- Typeahead responsable --}}
-  <script>
-  (function(){
-    const wrap   = document.getElementById('responsable-wrap');
-    const url    = wrap.dataset.url;
-    const box    = document.getElementById('responsable_search');
-    const hid    = document.getElementById('responsable_id');
-    const sug    = document.getElementById('responsable_suggestions');
-    let ctl, t, activeIndex = -1;
-
-    function clearList(){ sug.innerHTML = ''; activeIndex = -1; }
-    function setHidden(id, text){ hid.value = id || ''; box.value = text || ''; clearList(); }
-
-    function render(items){
-      if(!items.length){ clearList(); return; }
-      const ul = document.createElement('ul');
-      ul.style.position = 'absolute';
-      ul.style.left = '0'; ul.style.right = '0';
-      ul.style.background = '#fff';
-      ul.style.border = '1px solid #e5e7eb';
-      ul.style.borderRadius = '6px';
-      ul.style.boxShadow = '0 8px 20px rgba(0,0,0,.12)';
-      ul.style.zIndex = '50';
-      ul.style.listStyle = 'none';
-      ul.style.margin = '0'; ul.style.padding = '4px 0';
-
-      items.forEach((it, i)=>{
-        const li = document.createElement('li');
-        li.textContent = it.text;
-        li.style.padding = '8px 12px';
-        li.style.cursor  = 'pointer';
-        li.addEventListener('mouseenter', ()=> setActive(i, ul));
-        li.addEventListener('mouseleave', ()=> setActive(-1, ul));
-        li.addEventListener('click', ()=> setHidden(it.id, it.text));
-        ul.appendChild(li);
-      });
-
-      clearList();
-      sug.appendChild(ul);
-    }
-
-    function setActive(idx, ul){
-      const lis = ul.querySelectorAll('li');
-      lis.forEach((li,j)=> li.style.background = (j===idx)? '#f3f4f6' : 'transparent');
-      activeIndex = idx;
-    }
-
-    function load(q){
-      if(ctl) ctl.abort();
-      ctl = new AbortController();
-
-      fetch(url + '?q=' + encodeURIComponent(q || ''), {
-        headers: {'X-Requested-With': 'XMLHttpRequest'},
-        signal: ctl.signal
-      })
-      .then(r => r.json())
-      .then(render)
-      .catch(err => { if(err.name !== 'AbortError') console.error(err); });
-    }
-
-    function debouncedLoad(q){
-      clearTimeout(t);
-      t = setTimeout(()=> load(q), 200);
-    }
-
-    // Mostrar lista inicial (top 10) al enfocar o hacer clic, aun si está vacío
-    box.addEventListener('focus', ()=> load(''));
-    box.addEventListener('click', ()=> load(box.value.trim()));
-
-    // Filtrar mientras se escribe (si está vacío, muestra top 10)
-    box.addEventListener('input', ()=>{
-      hid.value = ''; // si escribe, invalidamos selección previa
-      const q = box.value.trim();
-      debouncedLoad(q); // con q=='' cargará top 10
-    });
-
-    // Navegación con teclado
-    box.addEventListener('keydown', (e)=>{
-      const ul = sug.querySelector('ul');
-      if(!ul) return;
-      const lis = ul.querySelectorAll('li');
-
-      if(e.key === 'ArrowDown'){
-        e.preventDefault();
-        setActive((activeIndex+1) % lis.length, ul);
-      } else if(e.key === 'ArrowUp'){
-        e.preventDefault();
-        setActive((activeIndex-1+lis.length) % lis.length, ul);
-      } else if(e.key === 'Enter'){
-        if(activeIndex >= 0){
-          e.preventDefault();
-          lis[activeIndex].click();
-        }
-      } else if(e.key === 'Escape'){
-        clearList();
-      }
-    });
-
-    // Cierra si se hace clic fuera
-    document.addEventListener('click', (e)=>{
-      if(!wrap.contains(e.target)) clearList();
-    });
-  })();
-  </script>
 </x-app-layout>

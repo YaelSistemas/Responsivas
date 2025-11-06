@@ -58,8 +58,9 @@ class UnidadServicioController extends Controller implements HasMiddleware
     {
         $tenant = $this->tenantId();
 
-        // Lista para el <select> de responsable: id => "Nombre Apellidos"
+        // Lista solo de colaboradores activos
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
+            ->where('activo', true) // 🔹 Solo activos
             ->orderBy('nombre')->orderBy('apellidos')
             ->get()
             ->mapWithKeys(fn ($c) => [$c->id => trim($c->nombre.' '.$c->apellidos)]);
@@ -107,7 +108,10 @@ class UnidadServicioController extends Controller implements HasMiddleware
         abort_if($unidad->empresa_tenant_id !== $this->tenantId(), 404);
 
         $tenant = $this->tenantId();
+
+        // Lista solo de colaboradores activos
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
+            ->where('activo', true) // 🔹 Solo activos
             ->orderBy('nombre')->orderBy('apellidos')
             ->get()
             ->mapWithKeys(fn ($c) => [$c->id => trim($c->nombre.' '.$c->apellidos)]);
