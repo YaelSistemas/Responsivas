@@ -9,7 +9,9 @@
     <tr>
       <th style="width:260px">Nombre</th>
       <th>Descripción</th>
-      <th style="width:110px">Historial</th>
+      @role('Administrador')
+        <th style="width:110px">Historial</th>
+      @endrole
       @if($showActions)
         <th style="width:110px">Acciones</th>
       @endif
@@ -24,17 +26,19 @@
         {{-- Descripción --}}
         <td class="text-gray-600">{{ $area->descripcion ?: '—' }}</td>
 
-        {{-- 🔹 Historial --}}
-        <td class="text-center">
-          <button type="button"
-                  class="text-blue-600 hover:text-blue-800 font-semibold"
-                  onclick="openAreaHistorial({{ $area->id }})"
-                  title="Ver historial">
-            Historial
-          </button>
-        </td>
+        {{-- 🔹 Historial (solo Administrador) --}}
+        @role('Administrador')
+          <td class="text-center">
+            <button type="button"
+                    class="text-blue-600 hover:text-blue-800 font-semibold"
+                    onclick="openAreaHistorial({{ $area->id }})"
+                    title="Ver historial">
+              Historial
+            </button>
+          </td>
+        @endrole
 
-        {{-- 🔹 Acciones --}}
+        {{-- 🔹 Acciones (solo si tiene permisos) --}}
         @if($showActions)
           <td>
             <div class="flex justify-center items-center gap-4">
@@ -63,7 +67,8 @@
       </tr>
     @empty
       <tr>
-        <td colspan="{{ $showActions ? 4 : 3 }}" class="text-center text-gray-500 py-6">
+        <td colspan="{{ (auth()->user()->hasRole('Administrador') ? 3 : 2) + ($showActions ? 1 : 0) }}"
+            class="text-center text-gray-500 py-6">
           No hay áreas registradas.
         </td>
       </tr>

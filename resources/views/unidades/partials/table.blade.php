@@ -11,7 +11,9 @@
         <th style="width:260px">Nombre</th>
         <th>Dirección</th>
         <th>Responsable</th>
-        <th style="width:110px">Historial</th>
+        @role('Administrador')
+          <th style="width:110px">Historial</th>
+        @endrole
         @if($showActions)
           <th style="width:110px">Acciones</th>
         @endif
@@ -34,17 +36,19 @@
             {{ $resp ?: '—' }}
           </td>
 
-          {{-- 🔹 Historial --}}
-          <td class="text-center">
-            <button type="button"
-                    class="text-blue-600 hover:text-blue-800 font-semibold"
-                    onclick="openUnidadHistorial({{ $u->id }})"
-                    title="Ver historial">
-              Historial
-            </button>
-          </td>
+          {{-- 🔹 Historial (solo Administrador) --}}
+          @role('Administrador')
+            <td class="text-center">
+              <button type="button"
+                      class="text-blue-600 hover:text-blue-800 font-semibold"
+                      onclick="openUnidadHistorial({{ $u->id }})"
+                      title="Ver historial">
+                Historial
+              </button>
+            </td>
+          @endrole
 
-          {{-- 🔹 Acciones --}}
+          {{-- 🔹 Acciones (si tiene permisos) --}}
           @if($showActions)
             <td>
               <div class="flex justify-center items-center gap-4">
@@ -73,7 +77,8 @@
         </tr>
       @empty
         <tr>
-          <td colspan="{{ $showActions ? 5 : 4 }}" class="text-center text-gray-500 py-6">
+          <td colspan="{{ (auth()->user()->hasRole('Administrador') ? 4 : 3) + ($showActions ? 1 : 0) }}"
+              class="text-center text-gray-500 py-6">
             No hay unidades de servicio.
           </td>
         </tr>

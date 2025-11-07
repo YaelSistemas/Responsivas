@@ -1,4 +1,10 @@
 <div id="tabla-colaboradores">
+  @php
+    $canEdit   = auth()->user()?->can('colaboradores.edit');
+    $canDelete = auth()->user()?->can('colaboradores.delete');
+    $showActions = $canEdit || $canDelete;
+  @endphp
+
   <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg mx-auto w-full max-w-5xl">
     <table class="table-auto w-full text-sm tbl text-center">
       <thead class="bg-gray-100">
@@ -9,8 +15,12 @@
           <th class="px-4 py-2">Área</th>
           <th class="px-4 py-2">Puesto</th>
           <th class="px-4 py-2">Estado</th>
-          <th class="px-4 py-2">Historial</th>
-          <th class="px-4 py-2">Acciones</th>
+          @role('Administrador')
+            <th class="px-4 py-2">Historial</th>
+          @endrole
+          @if($showActions)
+            <th class="px-4 py-2">Acciones</th>
+          @endif
         </tr>
       </thead>
 
@@ -37,46 +47,51 @@
               @endif
             </td>
 
-            {{-- 🔹 Historial --}}
-            <td class="text-center">
+            {{-- 🔹 Historial (solo para Administrador) --}}
+            @role('Administrador')
+              <td class="text-center">
                 <button type="button"
                         class="btn btn-sm"
                         onclick="openColabHistorial({{ $c->id }})"
                         title="Ver historial">
-                    Historial
+                  Historial
                 </button>
-            </td>
+              </td>
+            @endrole
 
-            {{-- 🔹 Acciones --}}
-            <td class="px-4 py-2">
-              <div class="flex justify-center items-center gap-4">
-                @can('colaboradores.edit')
-                  <a href="{{ route('colaboradores.edit', $c) }}"
-                     class="text-yellow-500 hover:text-yellow-700 text-lg"
-                     title="Editar">
-                    <i class="fa-solid fa-pen"></i>
-                  </a>
-                @endcan
+            {{-- 🔹 Acciones (solo si tiene permisos) --}}
+            @if($showActions)
+              <td class="px-4 py-2">
+                <div class="flex justify-center items-center gap-4">
+                  @can('colaboradores.edit')
+                    <a href="{{ route('colaboradores.edit', $c) }}"
+                       class="text-yellow-500 hover:text-yellow-700 text-lg"
+                       title="Editar">
+                      <i class="fa-solid fa-pen"></i>
+                    </a>
+                  @endcan
 
-                @can('colaboradores.delete')
-                  <form action="{{ route('colaboradores.destroy', $c) }}"
-                        method="POST"
-                        onsubmit="return confirm('¿Eliminar este colaborador?');">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit"
-                            class="text-red-600 hover:text-red-800 text-lg"
-                            title="Eliminar">
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                  </form>
-                @endcan
-              </div>
-            </td>
+                  @can('colaboradores.delete')
+                    <form action="{{ route('colaboradores.destroy', $c) }}"
+                          method="POST"
+                          onsubmit="return confirm('¿Eliminar este colaborador?');">
+                      @csrf
+                      @method('DELETE')
+                      <button type="submit"
+                              class="text-red-600 hover:text-red-800 text-lg"
+                              title="Eliminar">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </form>
+                  @endcan
+                </div>
+              </td>
+            @endif
           </tr>
         @empty
           <tr>
-            <td colspan="7" class="px-4 py-6 text-center text-gray-500">
+            <td colspan="{{ (auth()->user()->hasRole('Administrador') ? 7 : 6) + ($showActions ? 1 : 0) }}"
+                class="px-4 py-6 text-center text-gray-500">
               No hay colaboradores.
             </td>
           </tr>
