@@ -219,6 +219,9 @@
           <a href="{{ route('oc.show', $oc) }}" title="Ver">
             <i class="fa-solid fa-eye"></i><span class="sr-only">Ver</span>
           </a>
+          <a href="{{ route('oc.pdf.open', $oc) }}" title="Ver PDF" target="_blank">
+            <i class="fa-solid fa-file-pdf"></i><span class="sr-only">PDF</span>
+          </a>
         @endcan
         @can('oc.edit')
           <a href="{{ route('oc.edit', $oc) }}" title="Editar">

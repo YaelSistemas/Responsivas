@@ -159,6 +159,10 @@ Route::middleware(['auth'])->group(function () {
             ->name('productos.existencia.ajustar');
     });
 
+    Route::get('productos/{producto}/historial', [ProductoController::class, 'historial'])
+        ->name('productos.historial');
+
+
     // Vista directa de series (solo index/show para evitar choques con las rutas anidadas)
     Route::resource('series', ProductoSerieController::class)->only(['index','show']);
 

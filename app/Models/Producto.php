@@ -74,4 +74,10 @@ class Producto extends Model
             }
         });
     }
+
+    public function historial()
+    {
+        return $this->hasMany(\App\Models\ProductoHistorial::class, 'producto_id');
+    }
+
 }

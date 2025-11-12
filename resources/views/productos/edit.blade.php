@@ -34,6 +34,13 @@
     .btn-cancel:hover{background:#b91c1c}
     .btn-save{background:#16a34a;color:#fff;padding:8px 16px;border:none;border-radius:6px;font-weight:600;cursor:pointer}
     .btn-save:hover{background:#15803d}
+
+    /* ===== Toggle Switch ===== */
+    .switch {position: relative;display: inline-block;width: 50px;height: 26px;}
+    .switch input {opacity: 0;width: 0;height: 0;}.slider {position: absolute;cursor: pointer;top: 0; left: 0; right: 0; bottom: 0;background-color: #d1d5db; /* gris apagado */transition: .3s;border-radius: 26px;}
+    .slider:before {position: absolute;content: "";height: 20px; width: 20px;left: 3px; bottom: 3px;background-color: white;transition: .3s;border-radius: 50%;}
+    input:checked + .slider {background-color: #16a34a; /* verde activo */}
+    input:checked + .slider:before {transform: translateX(24px);}
   </style>
 
   <!-- Envoltura de zoom -->
@@ -83,6 +90,7 @@
                   $tipos = [
                     'equipo_pc'  => 'Equipo de Cómputo',
                     'impresora'  => 'Impresora/Multifuncional',
+                    'celular'    => 'Celular/Teléfono',
                     'monitor'    => 'Monitor',
                     'pantalla'   => 'Pantalla/TV',
                     'periferico' => 'Periférico',
@@ -121,7 +129,7 @@
 
             {{-- Descripción (solo impresora / periférico / otro) --}}
             @php
-              $showDesc = in_array(old('tipo', $producto->tipo), ['impresora','periferico','otro'], true);
+              $showDesc = in_array(old('tipo', $producto->tipo), ['impresora', 'celular','monitor','pantalla','periferico','otro'], true);
             @endphp
             <div class="form-group" id="descripcion-wrap" style="{{ $showDesc ? '' : 'display:none' }}">
               <label>Descripción</label>
@@ -139,13 +147,13 @@
               @error('unidad_medida') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Activo --}}
+            {{-- Activo (toggle switch) --}}
             <div class="form-group">
-              <label>Activo</label>
-              <select name="activo">
-                <option value="1" @selected(old('activo', $producto->activo))>Sí</option>
-                <option value="0" @selected(!old('activo', $producto->activo))>No</option>
-              </select>
+              <label for="activo" style="display:block;margin-bottom:6px;">Activo</label>
+              <label class="switch">
+                <input type="checkbox" name="activo" id="activo" value="1" {{ old('activo', $producto->activo) ? 'checked' : '' }}>
+                <span class="slider"></span>
+              </label>
             </div>
 
             <div class="form-buttons">
@@ -170,9 +178,12 @@
     // Defaults por tipo (cuando NO es "otro")
     const defaultTracking = {
       consumible: 'cantidad',
-      periferico: 'cantidad',
+      periferico: 'serial',   
       equipo_pc:  'serial',
-      impresora:  'serial'
+      impresora:  'serial',
+      monitor:    'serial',
+      pantalla:   'serial',
+      celular:    'serial'
     };
 
     function updateSKUVisibility() {
@@ -183,7 +194,7 @@
 
     function updateDescripcionVisibility() {
       const t = (tipo.value || '').toLowerCase();
-      const show = (t === 'impresora' || t === 'periferico' || t === 'otro');
+      const show = (t === 'impresora' || t === 'celular' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
       descWrap.style.display = show ? '' : 'none';
     }
 

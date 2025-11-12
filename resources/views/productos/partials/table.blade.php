@@ -2,28 +2,36 @@
   $tipoLabels = [
     'equipo_pc'  => 'Equipo de Cómputo',
     'impresora'  => 'Impresora/Multifuncional',
+    'celular'    => 'Celular/Teléfono',
+    'monitor'    => 'Monitor',
+    'pantalla'   => 'Pantalla/TV',
     'periferico' => 'Periférico',
     'consumible' => 'Consumible',
     'otro'       => 'Otro',
-    'pantalla'   => 'Pantalla',
-    'monitor'    => 'Monitor',
   ];
 @endphp
 
 <div id="tabla-productos">
   <style>
     #tabla-productos .tbl th,
-    #tabla-productos .tbl td{ text-align:center; vertical-align:middle; }
-    #tabla-productos .tbl td.col-producto{ text-align:left; }
+    #tabla-productos .tbl td { text-align:center; vertical-align:middle; }
+    #tabla-productos .tbl td.col-producto { text-align:left; }
 
     /* chips series/SKU */
-    .chips{display:flex;flex-wrap:wrap;gap:.35rem;justify-content:center}
-    .chip{
-      display:inline-block;font-size:.72rem;padding:.18rem .55rem;border-radius:9999px;
-      background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;white-space:nowrap
+    .chips { display:flex; flex-wrap:wrap; gap:.35rem; justify-content:center }
+    .chip {
+      display:inline-block; font-size:.72rem; padding:.18rem .55rem; border-radius:9999px;
+      background:#f3f4f6; border:1px solid #e5e7eb; color:#374151; white-space:nowrap;
     }
-    .chip--asignado{ background:#dcfce7; border-color:#bbf7d0; color:#166534; } /* verde */
-    .chip--prestamo{ background:#fef3c7; border-color:#fde68a; color:#92400e; } /* amarillo */
+    .chip--asignado { background:#dcfce7; border-color:#bbf7d0; color:#166534; } /* verde */
+    .chip--prestamo { background:#fef3c7; border-color:#fde68a; color:#92400e; } /* amarillo */
+
+    .btn-historial {
+      background:#f3f4f6; border:1px solid #d1d5db; border-radius:8px;
+      padding:.25rem .65rem; font-size:.8rem; color:#1e3a8a; font-weight:500;
+      transition: all .2s ease;
+    }
+    .btn-historial:hover { background:#e0e7ff; border-color:#a5b4fc; color:#1e40af; }
   </style>
 
   <table class="tbl w-full">
@@ -34,6 +42,7 @@
         <th style="width:220px">Series / SKU</th>
         <th style="width:160px">Stock</th>
         <th style="width:150px">Series / Existencia</th>
+        <th style="width:130px">Historial</th> {{-- ✅ Nueva columna --}}
         <th style="width:120px">Acciones</th>
       </tr>
     </thead>
@@ -50,27 +59,25 @@
                 </span>
               @endif
             </div>
+
             @if($p->sku)
               @php
-                // 🔸 Obtener el color desde las especificaciones (JSON) del producto
                 $color = strtolower(trim($p->especificaciones['color'] ?? ''));
-
-                // 🔸 Determinar el color visual según el valor
                 $colorHex = match (true) {
-                  str_contains($color, 'magenta') => '#ff1dce', // Magenta
-                  str_contains($color, 'cian')    => '#06b6d4', // Cian
+                  str_contains($color, 'magenta') => '#ff1dce',
+                  str_contains($color, 'cian')    => '#06b6d4',
                   str_contains($color, 'yellow'),
-                  str_contains($color, 'amarillo')=> '#ca8a04', // Amarillo
+                  str_contains($color, 'amarillo')=> '#ca8a04',
                   str_contains($color, 'black'),
-                  str_contains($color, 'negro')   => '#000000', // Negro
-                  default                         => '#6b7280', // Gris por defecto
+                  str_contains($color, 'negro')   => '#000000',
+                  default                         => '#6b7280',
                 };
               @endphp
-
               <div class="text-xs" style="color: {{ $colorHex }}">
                 SKU: {{ $p->sku }}
               </div>
             @endif
+
             @if($p->descripcion)
               <div class="text-xs text-gray-600 mt-1">{{ Str::limit($p->descripcion, 120) }}</div>
             @endif
@@ -88,7 +95,6 @@
           <td>
             @if($p->tracking === 'serial')
               @php
-                /** @var \Illuminate\Support\Collection $series */
                 $series = ($seriesByProduct[$p->id] ?? collect());
               @endphp
               <div class="chips">
@@ -127,7 +133,7 @@
             @endif
           </td>
 
-          {{-- Serie/Existencia links --}}
+          {{-- Series/Existencia links --}}
           <td>
             @can('productos.view')
               @if($p->tracking === 'serial')
@@ -135,6 +141,18 @@
               @else
                 <a href="{{ route('productos.existencia', $p) }}" class="text-indigo-600 hover:underline">Ver existencia</a>
               @endif
+            @endcan
+          </td>
+
+          {{-- Historial --}}
+          <td>
+            @can('productos.view')
+              <button type="button"
+                      class="text-blue-600 hover:text-blue-800 font-semibold"
+                      onclick="openProductoHistorial('{{ $p->id }}')"
+                      title="Ver historial">
+                Historial
+              </button>
             @endcan
           </td>
 
@@ -146,6 +164,7 @@
                   <i class="fa-solid fa-pen"></i>
                 </a>
               @endcan
+
               @can('productos.delete')
                 <form action="{{ route('productos.destroy', $p) }}" method="POST"
                       onsubmit="return confirm('¿Eliminar este producto?');">
@@ -160,7 +179,7 @@
         </tr>
       @empty
         <tr>
-          <td colspan="7" class="text-center text-gray-500 py-6">No hay productos.</td>
+          <td colspan="8" class="text-center text-gray-500 py-6">No hay productos.</td>
         </tr>
       @endforelse
     </tbody>

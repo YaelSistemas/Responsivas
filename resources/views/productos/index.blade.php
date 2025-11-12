@@ -4,21 +4,19 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    /* ====== Zoom responsivo ====== */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+      width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (ajusta si gustas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.60; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.60; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width: 768px){
       input, select, textarea{ font-size:16px; }
     }
@@ -33,18 +31,26 @@
     .tbl thead th{font-weight:700;color:#374151;background:#f9fafb;border-bottom:1px solid #e5e7eb}
     .tbl tbody tr+tr td{border-top:1px solid #f1f5f9}
 
-    /* Toolbar: select con caret consistente */
+    /* Toolbar */
     #prod-toolbar .select-wrap{position:relative;display:inline-block}
     #prod-toolbar select[name="per_page"]{
-      -webkit-appearance:none;appearance:none;background-image:none;width:88px;padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:6px;
+      -webkit-appearance:none;appearance:none;background-image:none;width:88px;
+      padding:6px 28px 6px 10px;height:34px;line-height:1.25;font-size:14px;
+      color:#111827;background:#fff;border:1px solid #d1d5db;border-radius:6px;
     }
-    #prod-toolbar .select-wrap .caret{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#6b7280;font-size:12px}
+    #prod-toolbar .select-wrap .caret{
+      position:absolute;right:10px;top:50%;transform:translateY(-50%);
+      pointer-events:none;color:#6b7280;font-size:12px;
+    }
+
+    /* Bloqueo de scroll cuando hay modal */
+    body.modal-open { overflow: hidden; }
   </style>
 
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6 page-pad">
+        {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-semibold">Productos</h2>
           @can('productos.create')
@@ -52,6 +58,7 @@
           @endcan
         </div>
 
+        {{-- Toolbar --}}
         <form id="prod-toolbar" method="GET" action="{{ route('productos.index') }}" class="mb-3">
           <div class="flex items-center justify-between gap-3">
             <div class="text-sm text-gray-700 flex items-center gap-2">
@@ -65,15 +72,17 @@
                 <span class="caret">▾</span>
               </div>
             </div>
+
             <div class="text-sm text-gray-700 flex items-center gap-2">
               <label for="q">Buscar:</label>
               <input id="q" name="q" value="{{ $q ?? '' }}" autocomplete="off"
                     class="border rounded px-3 py-1 w-56 focus:outline-none"
-                    placeholder="Nombre, Marca, Modelo o SKU o Serie">
+                    placeholder="Nombre, Marca, Modelo, SKU o Serie">
             </div>
           </div>
         </form>
 
+        {{-- Alertas --}}
         @if (session('created') || session('updated') || session('deleted') || session('error'))
           @php
             $msg = session('created') ? 'Producto creado.'
@@ -86,9 +95,15 @@
                  : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
           @endphp
           <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
-          <script>setTimeout(()=>{const a=document.getElementById('alert'); if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}},2500);</script>
+          <script>
+            setTimeout(()=>{
+              const a=document.getElementById('alert');
+              if(a){a.style.opacity='0';a.style.transition='opacity .4s'; setTimeout(()=>a.remove(),400)}
+            },2500);
+          </script>
         @endif
 
+        {{-- Tabla principal --}}
         <div class="card">
           <div class="overflow-x-auto" id="prod-wrap">
             @include('productos.partials.table')
@@ -98,6 +113,10 @@
     </div>
   </div>
 
+  {{-- 🔹 Contenedor global de modales AJAX --}}
+  <div id="ajax-modal-container"></div>
+
+  {{-- 🔸 Búsqueda, paginación y per_page AJAX --}}
   <script>
   (function(){
     const input = document.getElementById('q');
@@ -110,7 +129,7 @@
       const url = new URL(base, window.location.origin);
       const q = (input?.value || '').trim();
       const per = perPageSelect ? perPageSelect.value : '';
-      if(q)  url.searchParams.set('q', q);
+      if(q) url.searchParams.set('q', q);
       if(per) url.searchParams.set('per_page', per);
       url.searchParams.set('partial', '1');
       return url.toString();
@@ -118,7 +137,7 @@
 
     function wirePagination(){
       wrap.querySelectorAll('.pagination a, nav a').forEach(a=>{
-        a.addEventListener('click', function(ev){
+        a.addEventListener('click', ev=>{
           ev.preventDefault();
           ajaxLoad(a.getAttribute('href'));
         });
@@ -134,18 +153,73 @@
         pretty.searchParams.delete('partial');
         history.pushState({}, '', pretty.toString());
       }
-      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: ctl.signal })
+      fetch(url, { headers:{'X-Requested-With':'XMLHttpRequest'}, signal:ctl.signal })
         .then(r=>r.text())
         .then(html=>{ wrap.innerHTML = html.trim(); wirePagination(); })
         .catch(err=>{ if(err.name!=='AbortError') console.error(err); });
     }
 
     if(input){
-      input.addEventListener('input', ()=>{ clearTimeout(t); t = setTimeout(()=> ajaxLoad(), 300); });
-      input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
+      input.addEventListener('input', ()=>{ clearTimeout(t); t=setTimeout(()=>ajaxLoad(),300); });
+      input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); ajaxLoad(); }});
     }
     if(perPageSelect){ perPageSelect.addEventListener('change', ()=> ajaxLoad()); }
     wirePagination();
   })();
+  </script>
+
+  {{-- 🔸 Modal de historial AJAX (idéntico al de colaboradores, adaptado a productos) --}}
+  <script>
+  async function openProductoHistorial(id) {
+  try {
+    const res = await fetch(`/productos/${id}/historial`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+
+    if (!res.ok) {
+      console.error("Respuesta AJAX:", res);
+      const text = await res.text();
+      console.log("HTML recibido:", text);
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const html = await res.text();
+    const existing = document.getElementById('prodModalOverlay');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.body.classList.add('modal-open');
+
+  } catch (error) {
+    console.error("Error al abrir historial:", error);
+    alert("No se pudo abrir el historial del producto.");
+  }
+}
+
+
+  // 🔸 Cierre global de modales
+  document.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('[data-modal-close]');
+    const backdrop = e.target.closest('[data-modal-backdrop]');
+    if (closeBtn && backdrop) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+    if (backdrop && !e.target.closest('.colab-modal')) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+  });
+
+  // 🔸 Cerrar con tecla ESC
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const backdrop = document.querySelector('[data-modal-backdrop]');
+      if (backdrop) {
+        backdrop.remove();
+        document.body.classList.remove('modal-open');
+      }
+    }
+  });
   </script>
 </x-app-layout>

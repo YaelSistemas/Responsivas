@@ -289,6 +289,7 @@
             $tipos = [
                 'equipo_pc'  => 'Equipo de Cómputo',
                 'impresora'  => 'Impresora/Multifuncional',
+                'celular'   => 'Celular/Teléfono',
                 'monitor'    => 'Monitor',
                 'pantalla'   => 'Pantalla/TV',
                 'periferico' => 'Periférico',

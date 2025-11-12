@@ -77,6 +77,7 @@
                   $tipos = [
                     'equipo_pc'  => 'Equipo de Cómputo',
                     'impresora'  => 'Impresora/Multifuncional',
+                    'celular'   => 'Celular/Teléfono',
                     'monitor'    => 'Monitor',
                     'pantalla'   => 'Pantalla/TV',
                     'periferico' => 'Periférico',
@@ -160,7 +161,7 @@
             </div>
 
             {{-- Descripción (visible impresora | monitor | pantalla | periférico | otro) --}}
-            <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
+            <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora', 'celular','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
               <label>Descripción</label>
               <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
@@ -227,7 +228,8 @@
       equipo_pc:  'serial',
       impresora:  'serial',
       monitor:    'serial',
-      pantalla:   'serial'
+      pantalla:   'serial',
+      celular:    'serial'
     };
 
     function resetAll() {
@@ -281,7 +283,7 @@
       equipoSpecs.style.display = (t === 'equipo_pc') ? '' : 'none';
 
       // Descripción visible para impresora, monitor, pantalla, periférico u "otro"
-      const showDesc = (t === 'impresora' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
+      const showDesc = (t === 'impresora' || t === 'celular' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
       descWrap.style.display = showDesc ? '' : 'none';
 
       // Tracking solo visible si tipo = "otro"

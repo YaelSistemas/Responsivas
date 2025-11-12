@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use App\Models\ProductoHistorial;
 
 class ProductoController extends Controller implements HasMiddleware
 {
@@ -37,7 +38,7 @@ class ProductoController extends Controller implements HasMiddleware
     {
         return match ($tipo) {
             // Periférico ahora es por serie (como PC / impresora / monitor / pantalla)
-            'equipo_pc', 'impresora', 'monitor', 'pantalla', 'periferico' => 'serial',
+            'equipo_pc', 'impresora', 'monitor', 'pantalla', 'periferico', 'celular' => 'serial',
             'consumible' => 'cantidad',
             'otro' => in_array($input, ['serial','cantidad'], true) ? $input : 'serial',
             default => 'cantidad',
@@ -116,6 +117,7 @@ class ProductoController extends Controller implements HasMiddleware
         $tipos = [
             'equipo_pc'  => 'Equipo de Cómputo',
             'impresora'  => 'Impresora/Multifuncional',
+            'celular'    => 'Celular/Teléfono',
             'monitor'    => 'Monitor',
             'pantalla'   => 'Pantalla/TV',
             'periferico' => 'Periférico',
@@ -134,7 +136,7 @@ class ProductoController extends Controller implements HasMiddleware
             'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)],
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','monitor','pantalla','periferico','consumible','otro'])],
+            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','celular','monitor','pantalla','periferico','consumible','otro'])],
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
@@ -237,6 +239,13 @@ class ProductoController extends Controller implements HasMiddleware
                     ]);
                 }
             }
+            // ✅ Registrar en historial
+            ProductoHistorial::create([
+                'producto_id'    => $producto->id,
+                'user_id'        => Auth::id(),
+                'accion'         => 'creado',
+                'datos_nuevos'   => json_encode($producto->toArray(), JSON_UNESCAPED_UNICODE),
+            ]);
         });
 
         return redirect()->route('productos.index')->with('created', true);
@@ -256,6 +265,7 @@ class ProductoController extends Controller implements HasMiddleware
         $tipos = [
             'equipo_pc'  => 'Equipo de Cómputo',
             'impresora'  => 'Impresora/Multifuncional',
+            'celular'    => 'Celular/Teléfono',
             'monitor'    => 'Monitor',
             'pantalla'   => 'Pantalla/TV',
             'periferico' => 'Periférico',
@@ -275,7 +285,7 @@ class ProductoController extends Controller implements HasMiddleware
             'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)->ignore($producto->id)],
             'marca'          => 'nullable|string|max:100',
             'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','monitor','pantalla','periferico','consumible','otro'])],
+            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','celular','monitor','pantalla','periferico','consumible','otro'])],
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
@@ -287,6 +297,12 @@ class ProductoController extends Controller implements HasMiddleware
             'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
             'spec.procesador'                          => ['nullable','string','max:120'],
         ]);
+
+         // ✅ Normalizar valor de 'activo' (checkbox)
+        $data['activo'] = $request->has('activo') ? 1 : 0;
+
+        // ✅ Guardar snapshot antes de actualizar
+        $antes = $producto->toArray();
 
         $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
 
@@ -316,13 +332,26 @@ class ProductoController extends Controller implements HasMiddleware
             'tipo'             => $data['tipo'],
             'unidad'           => $unidad,
             'descripcion'      => $data['descripcion'] ?? null,
-            'activo'           => (bool)($data['activo'] ?? $producto->activo),
+            'activo'           => $data['activo'],
             'especificaciones' => $specs,
         ]);
 
         // tracking virtual
         $producto->tracking = $tracking;
         $producto->save();
+
+        // ✅ Registrar historial solo después de guardar correctamente
+        try {
+            \App\Models\ProductoHistorial::create([
+                'producto_id'      => $producto->id,
+                'user_id'          => auth()->id(),
+                'accion'           => 'actualizado',
+                'datos_anteriores' => json_encode($antes, JSON_UNESCAPED_UNICODE),
+                'datos_nuevos'     => json_encode($producto->fresh()->toArray(), JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error("Error registrando historial de producto: " . $e->getMessage());
+        }
 
         // si quedó como cantidad, aseguramos registro de existencias
         if ($producto->tracking === 'cantidad') {
@@ -596,4 +625,24 @@ class ProductoController extends Controller implements HasMiddleware
 
         return back()->with('updated', true);
     }
+
+    public function historial($id)
+    {
+        \Log::debug("Entró al historial del producto", ['id' => $id]);
+
+        $producto = Producto::with('historial.user')->find($id);
+
+        if (!$producto) {
+            \Log::debug("Producto no encontrado", ['id' => $id]);
+            return response()->json(['error' => 'No encontrado'], 404);
+        }
+
+        $historial = $producto->historial()->latest()->get();
+
+        \Log::debug("Historial count", ['total' => $historial->count()]);
+
+        // Si el request es AJAX o no, devuelve la vista igual
+        return response()->view('productos.historial.modal', compact('producto', 'historial'));
+    }
+
 }
