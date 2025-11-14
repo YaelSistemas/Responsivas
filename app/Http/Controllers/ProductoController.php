@@ -209,13 +209,34 @@ class ProductoController extends Controller implements HasMiddleware
 
                 foreach ($items as $serie) {
                     try {
-                        ProductoSerie::create([
+
+                        $serieModel = ProductoSerie::create([
                             'empresa_tenant_id' => $tenant,
                             'producto_id'       => $producto->id,
                             'serie'             => $serie,
                             'estado'            => 'disponible',
                         ]);
-                    } catch (\Throwable $e) { /* duplicadas: ignorar */ }
+
+                        // =====================================================
+                        // 🟦 REGISTRO AUTOMÁTICO DE HISTORIAL DE LA SERIE
+                        // =====================================================
+                        if (method_exists($serieModel, 'registrarHistorial')) {
+
+                            $serieModel->registrarHistorial([
+                                'accion'          => 'creacion',
+                                'estado_anterior' => null,
+                                'estado_nuevo'    => 'disponible',
+                                'cambios'         => [
+                                    'especificaciones_base' => $producto->especificaciones ?? [],
+                                    'serie' => $serieModel->serie,
+                                ],
+                            ]);
+                        }
+                        // =====================================================
+
+                    } catch (\Throwable $e) {
+                        /* duplicadas: ignorar */
+                    }
                 }
             } else {
                 $stockInicial = (int) ($data['stock_inicial'] ?? 0);
@@ -493,70 +514,106 @@ class ProductoController extends Controller implements HasMiddleware
         ]);
     }
 
+    // ===================== EDITAR UNA SERIE =====================
     public function seriesUpdate(Request $request, Producto $producto, ProductoSerie $serie)
     {
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
         abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
 
-        // Equipo de cómputo: mismo formulario completo
+        // === GUARDAR SNAPSHOT ANTES DEL CAMBIO ===
+        $antes = $serie->especificaciones ? $serie->especificaciones : [];
+
+        // Equipo de cómputo: specs completas
         if ($producto->tipo === 'equipo_pc') {
             $data = $request->validate([
-                'spec.color'                               => ['nullable','string','max:50'],
-                'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
-                'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
-                'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
-                'spec.procesador'                          => ['nullable','string','max:120'],
-                'clear_overrides'                          => ['nullable','boolean'],
+                'spec.color'                       => ['nullable','string','max:50'],
+                'spec.ram_gb'                      => ['nullable','integer','min:1','max:32767'],
+                'spec.almacenamiento.tipo'         => ['nullable','in:ssd,hdd,m2'],
+                'spec.almacenamiento.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
+                'spec.procesador'                  => ['nullable','string','max:120'],
             ]);
 
-            // Limpiar overrides y regresar al listado con alerta
-            if ($request->boolean('clear_overrides')) {
-                $serie->especificaciones = null;
-                $serie->save();
-
-                return redirect()
-                    ->route('productos.series', $producto)
-                    ->with('updated', 'Serie actualizada.');
-            }
-
-            // Guardar solo lo que venga con valor
+            // overrides nuevos
             $over = array_filter([
                 'color' => $request->input('spec.color'),
                 'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
                 'almacenamiento' => array_filter([
-                    'tipo' => $request->input('spec.almacenamiento.tipo'),
-                    'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
-                        ? (int)$request->input('spec.almacenamiento.capacidad_gb') : null,
-                ], fn($v)=>$v!==null && $v!==''),
+                    'tipo'          => $request->input('spec.almacenamiento.tipo'),
+                    'capacidad_gb'  => $request->filled('spec.almacenamiento.capacidad_gb')
+                                            ? (int)$request->input('spec.almacenamiento.capacidad_gb')
+                                            : null,
+                ], fn($v)=>$v!==null),
                 'procesador' => $request->input('spec.procesador'),
-            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+            ], fn($v)=>$v!==null);
 
+            // GUARDAR NUEVAS OVERRIDES
             $serie->especificaciones = $over ?: null;
             $serie->save();
+
+            // === GUARDAR HISTORIAL ===
+            $cambios = [];
+
+            foreach(['color','ram_gb','procesador'] as $campo){
+                $old = data_get($antes, $campo);
+                $new = data_get($over, $campo);
+
+                if($old != $new){
+                    $cambios[$campo] = [
+                        'antes'   => $old,
+                        'despues' => $new,
+                    ];
+                }
+            }
+
+            // almacenamiento (tipo y capacidad)
+            $oldAlm = data_get($antes,'almacenamiento',[]);
+            $newAlm = data_get($over,'almacenamiento',[]);
+            if($oldAlm != $newAlm){
+                $cambios['almacenamiento'] = [
+                    'antes'   => $oldAlm,
+                    'despues' => $newAlm,
+                ];
+            }
+
+            if(!empty($cambios)){
+                $serie->registrarHistorial([
+                    'accion' => 'edicion',
+                    'cambios' => $cambios,
+                ]);
+            }
 
             return redirect()
                 ->route('productos.series', $producto)
                 ->with('updated', 'Serie actualizada.');
         }
 
-        // Otros tipos: solo descripción
+        // === OTROS TIPOS (SOLO DESCRIPCIÓN) ===
+
         $data = $request->validate([
             'descripcion' => ['nullable','string','max:2000'],
         ]);
 
-        $over = (array) ($serie->especificaciones ?? []);
-        if (filled($data['descripcion'] ?? null)) {
-            $over['descripcion'] = $data['descripcion'];
-        } else {
-            unset($over['descripcion']);
-        }
+        $oldDesc = data_get($serie->especificaciones, 'descripcion');
+        $newDesc = $data['descripcion'] ?? null;
 
-        $serie->especificaciones = $over ?: null;
+        $serie->especificaciones = $newDesc ? ['descripcion'=>$newDesc] : null;
         $serie->save();
+
+        if($oldDesc != $newDesc){
+            $serie->registrarHistorial([
+                'accion' => 'edicion',
+                'cambios' => [
+                    'descripcion' => [
+                        'antes'   => $oldDesc,
+                        'despues' => $newDesc,
+                    ]
+                ]
+            ]);
+        }
 
         return redirect()
             ->route('productos.series', $producto)
-            ->with('updated', 'Serie actualizada.');
+            ->with('updated', true);
     }
 
     // ===================== EXISTENCIA (NO SERIAL) =====================

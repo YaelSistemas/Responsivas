@@ -136,21 +136,26 @@ class DevolucionController extends Controller implements HasMiddleware
             'productos'               => 'required|array|min:1',
         ]);
 
-        // Declaramos la variable fuera del closure
         $devolucion = null;
 
-        // Ejecutamos la transacción y devolvemos el modelo
+        // ================================
+        //      TRANSACCIÓN PRINCIPAL
+        // ================================
         $devolucion = DB::transaction(function () use ($validated, $request) {
+
             $devolucion = Devolucion::create($validated);
 
             foreach ($request->productos as $productoId => $series) {
+
                 $series = is_array($series) ? $series : [$series];
+
                 foreach ($series as $serieId) {
                     if (!$serieId) continue;
 
                     $serie = ProductoSerie::find($serieId);
                     if (!$serie) continue;
 
+                    // Verificar si esa serie ya fue devuelta en esa responsiva
                     $yaDevuelta = DB::table('devolucion_producto as dp')
                         ->join('devoluciones as d', 'd.id', '=', 'dp.devolucion_id')
                         ->where('dp.producto_serie_id', $serieId)
@@ -159,19 +164,57 @@ class DevolucionController extends Controller implements HasMiddleware
 
                     if ($yaDevuelta) continue;
 
+                    // Guardar relación
                     $devolucion->productos()->attach($productoId, [
                         'producto_serie_id' => $serieId,
                     ]);
 
+                    // Cambiar estado de la serie
                     $serie->update(['estado' => 'disponible']);
+
+                    // ================================
+                    //  REGISTRAR HISTORIAL DE DEVOLUCIÓN
+                    // ================================
+
+                    // Obtener la última asignación real de esta serie
+                    $ultAsigna = ResponsivaDetalle::with('responsiva.colaborador')
+                        ->where('producto_serie_id', $serie->id)
+                        ->orderBy('id', 'DESC')
+                        ->first();
+
+                    $colAnterior = $ultAsigna?->responsiva?->colaborador;
+
+                    $nombreAnterior = $colAnterior
+                        ? ($colAnterior->nombre . ' ' . $colAnterior->apellidos)
+                        : null;
+
+                    $usuarioRecibio = \App\Models\User::find($validated['recibi_id']);
+
+                    $serie->registrarHistorial([
+                        'accion'          => 'devolucion',
+                        'responsiva_id'   => $validated['responsiva_id'],
+                        'devolucion_id'   => $devolucion->id,
+                        'estado_anterior' => 'Asignado',
+                        'estado_nuevo'    => 'disponible',
+
+                        'cambios' => [
+                            'removido_de' => [
+                                'antes'   => $nombreAnterior,
+                                'despues' => null,
+                            ],
+                            'actualizado_por' => [
+                                'antes'   => null,
+                                'despues' => $usuarioRecibio?->name,
+                            ],
+                        ],
+                    ]);
+                    // ================================
                 }
             }
 
-            // 🔹 Retornar el modelo creado desde la transacción
             return $devolucion;
         });
 
-        // 🔹 Redirigir directamente al show
         return redirect()
             ->route('devoluciones.show', $devolucion->id)
             ->with('success', 'Devolución registrada correctamente.');
@@ -238,10 +281,16 @@ class DevolucionController extends Controller implements HasMiddleware
         $devolucion = Devolucion::with('productos')->findOrFail($id);
 
         DB::transaction(function () use ($devolucion, $validated, $request) {
+
+            // Actualizamos cabecera
             $devolucion->update($validated);
 
-            $seriesPrevias = $devolucion->productos()->pluck('devolucion_producto.producto_serie_id')->toArray();
+            // Series actuales en la BD
+            $seriesPrevias = $devolucion->productos()
+                ->pluck('devolucion_producto.producto_serie_id')
+                ->toArray();
 
+            // Series nuevas enviadas por el form
             $seriesNuevas = collect($request->productos)
                 ->flatMap(fn($series) => is_array($series) ? $series : [$series])
                 ->filter()->unique()->values()->toArray();
@@ -249,36 +298,102 @@ class DevolucionController extends Controller implements HasMiddleware
             $agregadas = array_diff($seriesNuevas, $seriesPrevias);
             $quitadas  = array_diff($seriesPrevias, $seriesNuevas);
 
-            // ➕ Series nuevas
+            $usuarioRecibio = \App\Models\User::find($validated['recibi_id']);
+
+            // ===============================
+            //     ➕ SERIES AGREGADAS
+            // ===============================
             foreach ($request->productos as $productoId => $series) {
+
                 $series = is_array($series) ? $series : [$series];
+
                 foreach ($series as $serieId) {
                     if (in_array($serieId, $agregadas)) {
+
                         $serie = ProductoSerie::find($serieId);
-                        if ($serie) {
-                            $devolucion->productos()->attach($productoId, [
-                                'producto_serie_id' => $serieId,
-                            ]);
-                            $serie->update(['estado' => 'disponible']);
-                        }
+                        if (!$serie) continue;
+
+                        // Adjuntar
+                        $devolucion->productos()->attach($productoId, [
+                            'producto_serie_id' => $serieId,
+                        ]);
+
+                        // Cambiar estado
+                        $serie->update(['estado' => 'disponible']);
+
+                        // Obtener la última responsiva donde estaba asignada la serie
+                        $ultAsigna = ResponsivaDetalle::with('responsiva.colaborador')
+                            ->where('producto_serie_id', $serie->id)
+                            ->orderBy('id', 'DESC')
+                            ->first();
+
+                        $colAnterior = $ultAsigna?->responsiva?->colaborador;
+
+                        $nombreAnterior = $colAnterior
+                            ? ($colAnterior->nombre . ' ' . $colAnterior->apellidos)
+                            : null;
+
+                        // Registrar historial
+                        $serie->registrarHistorial([
+                            'accion'          => 'devolucion',
+                            'responsiva_id'   => $validated['responsiva_id'],
+                            'estado_anterior' => 'Asignado',
+                            'estado_nuevo'    => 'disponible',
+                            'cambios' => [
+                                'removido_de' => [
+                                    'antes'   => $nombreAnterior,
+                                    'despues' => null,
+                                ],
+                                'actualizado_por' => [
+                                    'antes'   => null,
+                                    'despues' => $usuarioRecibio?->name,
+                                ],
+                            ],
+                        ]);
                     }
                 }
             }
 
-            // ➖ Series quitadas
+            // ===============================
+            //     ➖ SERIES REMOVIDAS
+            // ===============================
             foreach ($quitadas as $serieId) {
+
                 $serie = ProductoSerie::find($serieId);
-                if ($serie) {
-                    $devolucion->productos()->wherePivot('producto_serie_id', $serieId)->detach();
-                    $serie->update(['estado' => 'Asignado']);
-                    if ($serie->producto) {
-                        $serie->producto->update(['estado' => 'Asignado']);
-                    }
+                if (!$serie) continue;
+
+                // Detach
+                $devolucion->productos()
+                    ->wherePivot('producto_serie_id', $serieId)
+                    ->detach();
+
+                // Regresar estado
+                $serie->update(['estado' => 'Asignado']);
+                if ($serie->producto) {
+                    $serie->producto->update(['estado' => 'Asignado']);
                 }
+
+                // *** Registrar historial de reversión ***
+                $serie->registrarHistorial([
+                    'accion'          => 'reversion_devolucion',
+                    'responsiva_id'   => $validated['responsiva_id'],
+                    'estado_anterior' => 'disponible',
+                    'estado_nuevo'    => 'Asignado',
+                    'cambios' => [
+                        'asignado_a' => [
+                            'antes'   => null,
+                            'despues' => 'Asignado nuevamente (edición de devolución)',
+                        ],
+                        'actualizado_por' => [
+                            'antes'   => null,
+                            'despues' => auth()->user()->name,
+                        ],
+                    ],
+                ]);
             }
         });
 
-        // ✅ Redirigir directamente al show
+        // Redirigir al show
         return redirect()
             ->route('devoluciones.show', $devolucion->id)
             ->with('success', 'Devolución actualizada correctamente.');

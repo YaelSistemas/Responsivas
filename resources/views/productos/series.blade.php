@@ -140,6 +140,7 @@
                   <th>Serie</th>
                   <th class="text-center" style="width:130px">Fotos</th>
                   <th class="text-center" style="width:200px">Estado</th>
+                  <th class="text-center" style="width:120px">Historial</th>
                   <th class="text-center" style="width:120px">Acciones</th>
                 </tr>
               </thead>
@@ -209,6 +210,15 @@
                       @else
                         <span class="chip">{{ ucfirst($s->estado) }}</span>
                       @endcan
+                    </td>
+
+                    {{-- HISTORIAL --}}
+                    <td class="text-center">
+                      <button type="button"
+                              class="text-blue-600 hover:text-blue-800 font-semibold"
+                              onclick="openSerieHistorial('{{ $s->id }}')">
+                              Historial
+                      </button>
                     </td>
 
                     {{-- Acciones --}}
@@ -317,6 +327,9 @@
       </div>
     </div>
   @endforeach
+
+  {{-- CONTENEDOR GLOBAL PARA MODAL AJAX DE HISTORIAL --}}
+  <div id="ajax-modal-container"></div>
 
   <script>
     (function(){
@@ -432,4 +445,67 @@
 
     })();
   </script>
+
+  <script>
+  /* ===========================
+    ABRIR MODAL DE HISTORIAL
+  =========================== */
+  async function openSerieHistorial(id) {
+      try {
+          const res = await fetch(`/producto-series/${id}/historial`, {
+              headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          const html = await res.text();
+
+          // Si ya existe un modal previo → eliminarlo
+          const existing = document.querySelector('[data-modal-backdrop]');
+          if (existing) existing.remove();
+
+          // Insertar modal recibido desde AJAX
+          document.body.insertAdjacentHTML('beforeend', html);
+
+          // Bloquear scroll del fondo
+          document.body.classList.add('modal-open');
+
+      } catch (error) {
+          console.error("Error al abrir historial:", error);
+          alert("No se pudo abrir el historial de la serie.");
+      }
+  }
+
+  /* ===========================
+    CIERRE GLOBAL DEL MODAL
+  =========================== */
+  document.addEventListener('click', (e) => {
+      const closeBtn = e.target.closest('[data-modal-close]');
+      const backdrop = e.target.closest('[data-modal-backdrop]');
+
+      // Clic en la X
+      if (closeBtn && backdrop) {
+          backdrop.remove();
+          document.body.classList.remove('modal-open');
+      }
+
+      // Clic en fondo oscuro
+      if (backdrop && !e.target.closest('.colab-modal')) {
+          backdrop.remove();
+          document.body.classList.remove('modal-open');
+      }
+  });
+
+  // Cerrar con tecla ESC
+  document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+          const backdrop = document.querySelector('[data-modal-backdrop]');
+          if (backdrop) {
+              backdrop.remove();
+              document.body.classList.remove('modal-open');
+          }
+      }
+  });
+  </script>
+
 </x-app-layout>

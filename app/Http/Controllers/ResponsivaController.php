@@ -236,17 +236,39 @@ class ResponsivaController extends Controller implements HasMiddleware
             }
 
             foreach ($series as $s) {
-                ResponsivaDetalle::create([
-                    'responsiva_id'     => $resp->id,
-                    'producto_id'       => $s->producto_id,
-                    'producto_serie_id' => $s->id,
-                ]);
 
-                $s->update([
-                    'estado'                    => $asignado,
-                    'asignado_en_responsiva_id' => $resp->id,
-                ]);
-            }
+            // Crear detalle
+            ResponsivaDetalle::create([
+                'responsiva_id'     => $resp->id,
+                'producto_id'       => $s->producto_id,
+                'producto_serie_id' => $s->id,
+            ]);
+
+            // Actualizar serie → asignado
+            $s->update([
+                'estado'                    => $asignado,
+                'asignado_en_responsiva_id' => $resp->id,
+            ]);
+
+            // Registrar en historial
+            $s->registrarHistorial([
+                'accion'          => 'asignacion',
+                'responsiva_id'   => $resp->id,
+                'estado_anterior' => $disponible,
+                'estado_nuevo'    => $asignado,
+                'cambios'         => [
+                    'asignado_a' => [
+                        'antes'   => null,
+                        'despues' => $resp->colaborador->nombre . ' ' . $resp->colaborador->apellidos,
+                    ],
+                    'entregado_por' => [
+                        'antes'   => null,
+                        'despues' => User::find($req->entrego_user_id)?->name,
+                    ],
+                ],
+            ]);
+        }
+
         });
 
         $linkFirma = $resp?->sign_token ? route('public.sign.show', $resp->sign_token) : null;
@@ -338,17 +360,21 @@ class ResponsivaController extends Controller implements HasMiddleware
         ]);
 
         DB::transaction(function() use ($req, $responsiva, $tenantId) {
+
             $actuales = $responsiva->detalles()->pluck('producto_serie_id')->all();
             $nuevas   = $req->input('series_ids', []);
 
             $toAdd    = array_values(array_diff($nuevas,   $actuales));
             $toRemove = array_values(array_diff($actuales, $nuevas));
 
-            $disponible = defined(ProductoSerie::class.'::ESTADO_DISPONIBLE') ? ProductoSerie::ESTADO_DISPONIBLE : 'disponible';
-            $asignado   = defined(ProductoSerie::class.'::ESTADO_ASIGNADO')   ? ProductoSerie::ESTADO_ASIGNADO   : 'asignado';
+            $disponible = ProductoSerie::ESTADO_DISPONIBLE ?? 'disponible';
+            $asignado   = ProductoSerie::ESTADO_ASIGNADO   ?? 'asignado';
 
+            /* ===================================
+            🔹 SERIES QUE SE AGREGAN A LA RESPONSIVA
+            =================================== */
             if ($toAdd) {
-                // ⬇️ Verificar producto ACTIVO y estado disponible
+
                 $seriesAdd = ProductoSerie::deEmpresa($tenantId)
                     ->whereIn('id',$toAdd)
                     ->lockForUpdate()
@@ -356,6 +382,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                     ->get(['id','producto_id','serie','estado']);
 
                 foreach ($seriesAdd as $s) {
+
                     if (!$s->producto || !$s->producto->activo) {
                         throw ValidationException::withMessages([
                             'series_ids' => "La serie {$s->serie} pertenece a un producto inactivo.",
@@ -366,29 +393,73 @@ class ResponsivaController extends Controller implements HasMiddleware
                             'series_ids' => "La serie {$s->serie} no está disponible.",
                         ]);
                     }
-                }
 
-                foreach ($seriesAdd as $s) {
                     ResponsivaDetalle::create([
                         'responsiva_id'     => $responsiva->id,
                         'producto_id'       => $s->producto_id,
                         'producto_serie_id' => $s->id,
                     ]);
+
                     $s->update([
                         'estado' => $asignado,
                         'asignado_en_responsiva_id' => $responsiva->id,
                     ]);
+
+                    /* HISTORIAL → registrar por cada serie agregada */
+                    $s->registrarHistorial([
+                        'accion'          => 'asignacion',
+                        'responsiva_id'   => $responsiva->id,
+                        'estado_anterior' => $disponible,
+                        'estado_nuevo'    => $asignado,
+                        'cambios' => [
+                            'asignado_a' => [
+                                'antes'   => null,
+                                'despues' => $responsiva->colaborador->nombre
+                                            . ' ' . $responsiva->colaborador->apellidos,
+                            ],
+                            'actualizado_por' => [
+                                'antes'   => null,
+                                'despues' => User::find($req->entrego_user_id)?->name,
+                            ],
+                        ]
+                    ]);
                 }
             }
 
+            /* ===================================
+            🔹 SERIES QUE SE REMUEVEN DE LA RESPONSIVA
+            =================================== */
             if ($toRemove) {
+
                 $seriesRem = ProductoSerie::deEmpresa($tenantId)
-                    ->whereIn('id',$toRemove)->lockForUpdate()->get(['id']);
+                    ->whereIn('id',$toRemove)
+                    ->lockForUpdate()
+                    ->get(['id','serie','estado','asignado_en_responsiva_id']);
 
                 foreach ($seriesRem as $s) {
+
                     $s->update([
                         'estado' => $disponible,
                         'asignado_en_responsiva_id' => null,
+                    ]);
+
+                    /* HISTORIAL → registrar por cada serie removida */
+                    $s->registrarHistorial([
+                        'accion' => 'removido_edicion',
+                        'responsiva_id'   => $responsiva->id,
+                        'estado_anterior' => $asignado,
+                        'estado_nuevo'    => $disponible,
+                        'cambios' => [
+                            'removido_de' => [
+                                'antes'   => $responsiva->colaborador->nombre
+                                            . ' ' . $responsiva->colaborador->apellidos,
+                                'despues' => null,
+                            ],
+                            'actualizado_por' => [
+                                'antes'   => null,
+                                'despues' => User::find($req->entrego_user_id)?->name,
+                            ]
+                        ]
                     ]);
                 }
 
@@ -397,6 +468,9 @@ class ResponsivaController extends Controller implements HasMiddleware
                     ->delete();
             }
 
+            /* ===================================
+            🔹 ACTUALIZAR RESPONSIVA
+            =================================== */
             $responsiva->update([
                 'motivo_entrega'        => $req->motivo_entrega,
                 'colaborador_id'        => $req->colaborador_id,

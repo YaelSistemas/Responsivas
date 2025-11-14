@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
+use App\Models\Responsiva;
+use App\Models\ProductoSerieHistorial;
 
 class ProductoSerie extends Model
 {
@@ -105,5 +107,45 @@ class ProductoSerie extends Model
     {
         return $this->hasMany(\App\Models\ProductoSerieFoto::class, 'producto_serie_id');
     }
+
+    // Relación
+    public function historial()
+    {
+        return $this->hasMany(ProductoSerieHistorial::class, 'producto_serie_id')
+                    ->orderByDesc('created_at');
+    }
+
+    /**
+ * Registrar un movimiento en el kardex de esta serie.
+ */
+public function registrarHistorial(array $extra = []): void
+{
+    $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id);
+
+    // 1) Intentamos sacar el producto_id del propio modelo o de la relación
+    $productoId = $this->producto_id ?? $this->producto?->id ?? null;
+
+    // 2) Si aun así viene null (porque se cargó la serie con un select limitado),
+    //    lo leemos directo de la base de datos como último recurso.
+    if (!$productoId) {
+        $productoId = \DB::table('producto_series')
+            ->where('id', $this->id)
+            ->value('producto_id');
+    }
+
+    // 3) Valores por defecto que NO deben poder ser pisados
+    $defaults = [
+        'empresa_tenant_id' => $tenant,
+        'producto_serie_id' => $this->id,
+        'producto_id'       => $productoId,
+        'user_id'           => auth()->id(),
+    ];
+
+    // 4) Usamos el operador + para que $extra NO sobrescriba estos campos
+    $data = $defaults + $extra;
+
+    \App\Models\ProductoSerieHistorial::create($data);
+}
+
 
 }

@@ -87,4 +87,3 @@
 <div class="p-3">
   {{ $subsidiarias->links() }}
 </div>
-s

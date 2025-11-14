@@ -90,8 +90,19 @@ class ProductoSerieController extends Controller implements HasMiddleware
     {
         $this->ensureTenant($serie);
 
+        // ======================================================
+        //  1. Guardamos valores anteriores para el HISTORIAL
+        // ======================================================
+        $original = $serie->getOriginal(); // antes de modificar
+
+        $cambios = [];
+        $estadoAnterior = $serie->estado;
+
+        // ======================================================
+        // 2. Edición para equipo de cómputo
+        // ======================================================
         if ($producto->tipo === 'equipo_pc') {
-            // Validación de overrides
+
             $r->validate([
                 'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
                 'spec.color'                               => ['nullable','string','max:50'],
@@ -100,10 +111,9 @@ class ProductoSerieController extends Controller implements HasMiddleware
                 'spec.procesador'                          => ['nullable','string','max:120'],
             ]);
 
-            // Overrides recibidos
             $over = $r->input('spec', []);
 
-            // Normaliza numéricos
+            // Normalización
             if (array_key_exists('ram_gb', $over) && $over['ram_gb'] !== '' && $over['ram_gb'] !== null) {
                 $over['ram_gb'] = (int) $over['ram_gb'];
             }
@@ -113,32 +123,59 @@ class ProductoSerieController extends Controller implements HasMiddleware
                 $over['almacenamiento']['capacidad_gb'] = (int) $over['almacenamiento']['capacidad_gb'];
             }
 
-            // Limpia vacíos y nulls
             $over = $this->clean($over);
 
-            // Guarda solo si hay overrides; si no, deja null
+            // Guardamos lo nuevo
             $serie->especificaciones = $over ?: null;
+
+            // ======================================================
+            // 3. Detectamos cambios en especificaciones para el historial
+            // ======================================================
+            if ($serie->isDirty('especificaciones')) {
+                $cambios['especificaciones'] = [
+                    'antes' => $original['especificaciones'] ?? null,
+                    'despues' => $serie->especificaciones
+                ];
+            }
+
             $serie->save();
-        } else {
-            // Solo descripción
+        }
+
+        // ======================================================
+        // 4. Edición para otros tipos de producto
+        // ======================================================
+        else {
             $data = $r->validate([
                 'descripcion' => ['nullable','string','max:2000'],
             ]);
+
+            // Cambios en descripción (observaciones)
+            if (($data['descripcion'] ?? null) != ($original['observaciones'] ?? null)) {
+                $cambios['descripcion'] = [
+                    'antes'   => $original['observaciones'] ?? '—',
+                    'despues' => $data['descripcion'] ?? '—',
+                ];
+            }
+
             $serie->observaciones = $data['descripcion'] ?? null;
             $serie->save();
+        }
+
+        // ======================================================
+        // 5. Registro en el HISTORIAL (solo si hubo cambios)
+        // ======================================================
+        if (!empty($cambios)) {
+            $serie->registrarHistorial([
+                'accion'          => 'edicion',
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo'    => $serie->estado,
+                'cambios'         => $cambios,
+            ]);
         }
 
         return redirect()
             ->route('productos.series', $producto)
             ->with('updated', 'Serie actualizada.');
-    }
-
-    /* (Opcional) para rutas sueltas tipo /series/{series} */
-    public function show(ProductoSerie $series)
-    {
-        $this->ensureTenant($series);
-        $series->load('producto');
-        return view('series.show', ['s' => $series]);
     }
 
     /* =================== FOTOS =================== */
@@ -176,4 +213,40 @@ class ProductoSerieController extends Controller implements HasMiddleware
 
         return back()->with('updated', 'Foto eliminada.');
     }
+
+    public function historial(ProductoSerie $productoSerie)
+    {
+        $historial = $productoSerie->historial()
+            ->with([
+                'usuario',
+
+                // Para asignación
+                'responsiva:id,folio,fecha_entrega,colaborador_id',
+                'responsiva.colaborador:id,nombre,apellidos,subsidiaria_id',
+                'responsiva.colaborador.subsidiaria:id,nombre,descripcion',
+
+                // Para devolución 
+                'devolucion:id,folio,fecha_devolucion,responsiva_id',
+                'devolucion.responsiva:id,folio,colaborador_id',
+                'devolucion.responsiva.colaborador:id,nombre,apellidos,subsidiaria_id',
+                'devolucion.responsiva.colaborador.subsidiaria:id,nombre,descripcion',
+            ])
+            ->orderBy('id', 'desc')
+            ->get();
+
+        // SI ES AJAX → devolver modal
+        if (request()->ajax()) {
+            return view('productos.historial_series.modal', [
+                'serie' => $productoSerie,
+                'historial' => $historial
+            ]);
+        }
+
+        // SI NO ES AJAX → mostrar vista normal
+        return view('productos.historial_series.index', [
+            'serie' => $productoSerie,
+            'historial' => $historial
+        ]);
+    }
+
 }

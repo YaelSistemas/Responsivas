@@ -162,7 +162,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('productos/{producto}/historial', [ProductoController::class, 'historial'])
         ->name('productos.historial');
 
-
+    Route::get('/producto-series/{productoSerie}/historial', [ProductoSerieController::class, 'historial'])
+    ->name('producto-series.historial');
+    
     // Vista directa de series (solo index/show para evitar choques con las rutas anidadas)
     Route::resource('series', ProductoSerieController::class)->only(['index','show']);
 
