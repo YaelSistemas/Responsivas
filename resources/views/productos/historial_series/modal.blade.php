@@ -67,6 +67,9 @@
   }
   .badge-gray { background: #e5e7eb; color: #374151; }
   .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-yellow { background: #fef9c3; color: #b45309; }
+  .badge-red { background: #fee2e2; color: #b91c1c; }
+  .badge-orange { background: #ffedd5; color: #c2410c; }
 </style>
 
 <div class="colab-modal-backdrop" data-modal-backdrop>
@@ -167,41 +170,115 @@
               @endif
           </div>
 
-          {{-- ====================== ESTADO ESPECIAL PARA ASIGNACIÓN ====================== --}}
-          @if($accion === 'asignacion' && ($log->estado_anterior || $log->estado_nuevo))
+          {{-- ================= ESTADO ESPECIAL DE ASIGNACIÓN ================= --}}
+          @if($accion === 'asignacion')
+
               @php
-                $badge = fn($e) => strtolower(trim($e)) === 'asignado' ? 'badge-green' : 'badge-gray';
+                  // Motivo según responsiva
+                  $motivo = strtolower($log->responsiva?->motivo_entrega ?? '');
+
+                  // Texto visible
+                  $motivoBonito = match($motivo) {
+                      'prestamo_provisional' => 'Préstamo provisional',
+                      'asignacion'           => 'Asignado',
+                      default                => ucfirst($log->estado_nuevo ?? 'Asignado'),
+                  };
+
+                  // COLOR DEL BADGE (solo 3 estados)
+                  $badge = function ($estado) {
+                      $e = strtolower($estado);
+
+                      return match(true) {
+                          str_contains($e, 'asignado') => 'badge-green',      // Verde
+                          str_contains($e, 'préstamo'),
+                          str_contains($e, 'prestamo') => 'badge-yellow',     // Amarillo
+                          default                      => 'badge-gray',       // Gris
+                      };
+                  };
               @endphp
 
               <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
 
-                <span class="badge {{ $badge($log->estado_anterior) }}">
-                    {{ ucfirst($log->estado_anterior) }}
-                </span>
-                →
-                <span class="badge {{ $badge($log->estado_nuevo) }}">
-                    {{ ucfirst($log->estado_nuevo) }}
-                </span>
+                  <span class="badge {{ $badge($log->estado_anterior) }}">
+                      {{ ucfirst($log->estado_anterior ?? '—') }}
+                  </span>
+
+                  →
+
+                  <span class="badge {{ $badge($motivoBonito) }}">
+                      {{ $motivoBonito }}
+                  </span>
               </div>
+
           @endif
 
           {{-- ====================== ESTADO ESPECIAL PARA DEVOLUCIÓN ====================== --}}
-          @if($accion === 'devolucion' && ($log->estado_anterior || $log->estado_nuevo))
+          @if($accion === 'devolucion')
               @php
-                $badge = fn($e) => strtolower(trim($e)) === 'asignado' ? 'badge-green' : 'badge-gray';
+                  // 1. Estado anterior (de la asignación)
+                  $estadoAnterior = strtolower($log->estado_anterior ?? '');
+
+                  $estadoAnteriorBonito = match($estadoAnterior) {
+                      'asignado'              => 'Asignado',
+                      'prestamo_provisional'  => 'Préstamo provisional',
+                      'baja_colaborador'      => 'Baja colaborador',
+                      'renovacion'            => 'Renovación',
+                      default                 => ucfirst($estadoAnterior ?: '—'),
+                  };
+
+
+                  // 2. Motivo de la devolución (tabla devoluciones.motivo)
+                  $motivo = strtolower(
+                      $log->motivo_devolucion
+                      ?? ($log->cambios['motivo_devolucion'] ?? null)
+                      ?? $log->motivo
+                      ?? $log->devolucion?->motivo
+                      ?? ''
+                  );
+
+                  $motivoBonito = match($motivo) {
+                      'baja_colaborador' => 'Baja colaborador',
+                      'renovacion'       => 'Renovación',
+                      default            => ucfirst($motivo ?: '—'),
+                  };
+
+                  // 3. Estado final → SIEMPRE "Disponible"
+                  $estadoFinalBonito = "Disponible";
+
+                  // Badge colors
+                  $badge = fn($txt) => match(true) {
+                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                      str_contains(strtolower($txt), 'préstamo'),
+                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                      str_contains(strtolower($txt), 'renovación'),
+                      str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
+                      str_contains(strtolower($txt), 'baja') => 'badge-red',
+                      default => 'badge-gray',
+                  };
               @endphp
 
               <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
 
-                <span class="badge {{ $badge($log->estado_anterior) }}">
-                    {{ ucfirst($log->estado_anterior) }}
-                </span>
-                →
-                <span class="badge {{ $badge($log->estado_nuevo) }}">
-                    {{ ucfirst($log->estado_nuevo) }}
-                </span>
+                  {{-- Estado anterior --}}
+                  <span class="badge {{ $badge($estadoAnteriorBonito) }}">
+                      {{ $estadoAnteriorBonito }}
+                  </span>
+
+                  →
+
+                  {{-- Motivo de la devolución --}}
+                  <span class="badge {{ $badge($motivoBonito) }}">
+                      {{ $motivoBonito }}
+                  </span>
+
+                  →
+
+                  {{-- Estado final (Disponible) --}}
+                  <span class="badge {{ $badge($estadoFinalBonito) }}">
+                      {{ $estadoFinalBonito }}
+                  </span>
               </div>
           @endif
 

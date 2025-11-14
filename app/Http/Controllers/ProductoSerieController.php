@@ -221,13 +221,13 @@ class ProductoSerieController extends Controller implements HasMiddleware
                 'usuario',
 
                 // Para asignación
-                'responsiva:id,folio,fecha_entrega,colaborador_id',
+                'responsiva:id,folio,motivo_entrega,fecha_entrega,colaborador_id',
                 'responsiva.colaborador:id,nombre,apellidos,subsidiaria_id',
                 'responsiva.colaborador.subsidiaria:id,nombre,descripcion',
 
                 // Para devolución 
-                'devolucion:id,folio,fecha_devolucion,responsiva_id',
-                'devolucion.responsiva:id,folio,colaborador_id',
+                'devolucion:id,folio,fecha_devolucion,responsiva_id,motivo',
+                'devolucion.responsiva:id,folio,colaborador_id,motivo_entrega,fecha_entrega',
                 'devolucion.responsiva.colaborador:id,nombre,apellidos,subsidiaria_id',
                 'devolucion.responsiva.colaborador.subsidiaria:id,nombre,descripcion',
             ])

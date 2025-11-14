@@ -190,12 +190,25 @@ class DevolucionController extends Controller implements HasMiddleware
 
                     $usuarioRecibio = \App\Models\User::find($validated['recibi_id']);
 
+                    // Obtener motivo real según última responsiva
+                    $estadoAnteriorReal = strtolower(
+                        $ultAsigna?->responsiva?->motivo_entrega ?? 'asignacion'
+                    );
+
+                    // Convertir a nombre amigable
+                    $estadoAnteriorReal = match($estadoAnteriorReal) {
+                        'prestamo_provisional' => 'Préstamo provisional',
+                        'asignacion'           => 'Asignado',
+                        default                => ucfirst($estadoAnteriorReal),
+                    };
+
                     $serie->registrarHistorial([
                         'accion'          => 'devolucion',
                         'responsiva_id'   => $validated['responsiva_id'],
                         'devolucion_id'   => $devolucion->id,
-                        'estado_anterior' => 'Asignado',
+                        'estado_anterior' => $estadoAnteriorReal,
                         'estado_nuevo'    => 'disponible',
+                        'motivo_devolucion' => $validated['motivo'],
 
                         'cambios' => [
                             'removido_de' => [
@@ -333,12 +346,24 @@ class DevolucionController extends Controller implements HasMiddleware
                             ? ($colAnterior->nombre . ' ' . $colAnterior->apellidos)
                             : null;
 
+                        $estadoAnteriorReal = strtolower(
+                            $ultAsigna?->responsiva?->motivo_entrega ?? 'asignacion'
+                        );
+
+                        $estadoAnteriorReal = match($estadoAnteriorReal) {
+                            'prestamo_provisional' => 'Préstamo provisional',
+                            'asignacion'           => 'Asignado',
+                            default                => ucfirst($estadoAnteriorReal),
+                        };
+
                         // Registrar historial
                         $serie->registrarHistorial([
                             'accion'          => 'devolucion',
                             'responsiva_id'   => $validated['responsiva_id'],
-                            'estado_anterior' => 'Asignado',
+                            'estado_anterior' => $estadoAnteriorReal,
                             'estado_nuevo'    => 'disponible',
+                            'motivo_devolucion' => $validated['motivo'],
+
                             'cambios' => [
                                 'removido_de' => [
                                     'antes'   => $nombreAnterior,

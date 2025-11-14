@@ -51,14 +51,18 @@
             @csrf @method('PUT')
 
             <p class="hint">
-              Esta serie no maneja especificaciones técnicas como un equipo de cómputo.
-              Aquí puedes registrar una <b>descripción</b> o notas internas (ej. “con cable USB”, “tóner nuevo”, “raspón en tapa”, etc.).
+              Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.
             </p>
 
             <div>
               <label>Descripción / notas</label>
-              <textarea class="inp" name="descripcion" id="descripcion" rows="6"
-                        placeholder="Escribe la descripción o notas…">{{ old('descripcion', $descripcion ?? $serie->observaciones) }}</textarea>
+              <textarea
+                  class="inp"
+                  name="descripcion"
+                  id="descripcion"
+                  rows="6"
+                  placeholder="{{ $descripcion ?? $serie->observaciones ?? $producto->descripcion ?? 'Escribe la descripción o notas…' }}"
+              >{{ old('descripcion') }}</textarea>
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
             </div>
 
@@ -70,13 +74,6 @@
               </div>
             </div>
           </form>
-
-          <div class="hint">
-            <b>Producto:</b> {{ $producto->nombre }} &middot;
-            <b>Serie:</b> {{ $serie->serie }} &middot;
-            <b>Estado:</b> {{ ucfirst($serie->estado) }}
-          </div>
-
         </div>
       </div>
     </div>
