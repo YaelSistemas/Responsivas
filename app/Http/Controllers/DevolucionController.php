@@ -433,34 +433,70 @@ class DevolucionController extends Controller implements HasMiddleware
     }
 
     /* ===================== ELIMINAR ===================== */
-
     public function destroy($id)
     {
         $devolucion = Devolucion::with(['productos', 'responsiva'])->findOrFail($id);
 
         DB::transaction(function () use ($devolucion) {
+
             foreach ($devolucion->productos as $producto) {
                 $pivot = $producto->pivot;
                 $serie = ProductoSerie::find($pivot->producto_serie_id);
 
                 if (!$serie) continue;
 
-                $ultimaDevolucionId = Devolucion::whereHas('productos', fn($q) => 
+                // === IDENTIFICAR SI ES LA ÚLTIMA DEVOLUCIÓN ===
+                $ultimaDevolucionId = Devolucion::whereHas('productos', fn($q) =>
                     $q->where('producto_serie_id', $serie->id)
                 )->max('id');
 
                 $asignadaEnOtra = ResponsivaDetalle::where('producto_serie_id', $serie->id)
-                    ->whereHas('responsiva', fn($q) => 
+                    ->whereHas('responsiva', fn($q) =>
                         $q->whereIn('motivo_entrega', ['asignacion', 'prestamo_provisional'])
                     )
                     ->exists();
 
+                // === ACTUALIZAR ESTADO DE LA SERIE SI PROCEDE ===
                 if ($devolucion->id == $ultimaDevolucionId) {
                     $serie->update(['estado' => 'Asignado']);
                     if ($serie->producto) $serie->producto->update(['estado' => 'Asignado']);
                 }
+
+                // REGISTRAR HISTORIAL: LIBERADO POR ELIMINACIÓN
+                $colaborador = $devolucion->responsiva?->colaborador;
+                $colabNombre = $colaborador
+                    ? $colaborador->nombre . ' ' . $colaborador->apellidos
+                    : 'SIN COLABORADOR';
+
+                $serie->registrarHistorial([
+                    'accion' => 'liberado_eliminacion',
+                    'responsiva_id' => $devolucion->responsiva_id,
+                    'devolucion_id' => $devolucion->id,
+                    'estado_anterior' => 'Asignado',
+                    'estado_nuevo' => 'Disponible',
+                    'cambios' => [
+                        'asignado_a' => [
+                            'antes' => $colabNombre,
+                            'despues' => null
+                        ],
+                        'eliminado_por' => [
+                            'antes' => null,
+                            'despues' => auth()->user()->name
+                        ],
+                        'fecha_eliminacion' => [
+                            'antes' => null,
+                            'despues' => now()->format('d-m-Y H:i')
+                        ],
+                        'devolucion_folio' => [
+                            'antes' => $devolucion->folio ?? 'SIN FOLIO',
+                            'despues' => null
+                        ],
+                    ]
+                ]);
+
             }
 
+            // === ELIMINAR RELACIONES ===
             $devolucion->productos()->detach();
             $devolucion->delete();
         });

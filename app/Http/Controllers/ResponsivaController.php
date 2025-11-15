@@ -417,7 +417,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                                 'despues' => $responsiva->colaborador->nombre
                                             . ' ' . $responsiva->colaborador->apellidos,
                             ],
-                            'actualizado_por' => [
+                            'entregado_por' => [
                                 'antes'   => null,
                                 'despues' => User::find($req->entrego_user_id)?->name,
                             ],
@@ -544,26 +544,61 @@ class ResponsivaController extends Controller implements HasMiddleware
         $tenantId = $this->tenantId();
 
         DB::transaction(function () use ($responsiva, $tenantId) {
+
             $serieIds = $responsiva->detalles()->pluck('producto_serie_id')->all();
 
             if (!empty($serieIds)) {
+
                 $disponible = defined(ProductoSerie::class.'::ESTADO_DISPONIBLE')
                     ? ProductoSerie::ESTADO_DISPONIBLE
                     : 'disponible';
 
+                $asignado = defined(ProductoSerie::class.'::ESTADO_ASIGNADO')
+                    ? ProductoSerie::ESTADO_ASIGNADO
+                    : 'asignado';
+
                 $series = ProductoSerie::deEmpresa($tenantId)
                     ->whereIn('id', $serieIds)
                     ->lockForUpdate()
-                    ->get(['id', 'estado', 'asignado_en_responsiva_id']);
+                    ->get(['id','estado','asignado_en_responsiva_id','producto_id','serie']);
 
                 foreach ($series as $s) {
+
+                    // Guardamos el colaborador ANTES del borrado
+                    $colab = $responsiva->colaborador
+                        ? $responsiva->colaborador->nombre . ' ' . $responsiva->colaborador->apellidos
+                        : 'SIN COLABORADOR';
+
                     $s->update([
                         'estado' => $disponible,
                         'asignado_en_responsiva_id' => null,
                     ]);
+
+                    // Registrar en historial con datos reales
+                    $s->registrarHistorial([
+                        'accion' => 'liberado_eliminacion',
+                        'responsiva_id' => null, // SIN FOLIO
+                        'estado_anterior' => $asignado,
+                        'estado_nuevo' => $disponible,
+                        'cambios' => [
+                            'asignado_a' => [
+                                'antes' => $colab,
+                                'despues' => null,
+                            ],
+                            'eliminado_por' => [
+                                'antes' => null,
+                                'despues' => auth()->user()->name,
+                            ],
+                            'fecha' => [
+                                'antes' => null,
+                                'despues' => now()->format('d-m-Y H:i'),
+                            ]
+                        ]
+                    ]);
                 }
             }
 
+            // 3️⃣ Eliminar detalles y la responsiva
             $responsiva->detalles()->delete();
             $responsiva->delete();
         });

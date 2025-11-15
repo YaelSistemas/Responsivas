@@ -105,6 +105,9 @@
               case 'removido_edicion':
                   $accionMostrar = 'Liberado por edición';
                   break;
+              case 'liberado_eliminacion':
+                  $accionMostrar = 'Liberado por eliminación';
+                  break;
               default:
                   $accionMostrar = ucfirst($accion);
           }
@@ -115,6 +118,7 @@
               'asignacion'       => 'asignacion',
               'devolucion'       => 'devolucion',
               'removido_edicion' => 'removido',
+              'liberado_eliminacion' => 'removido',
               'baja'             => 'baja',
               default            => 'edicion',
           };
@@ -127,47 +131,60 @@
               <span class="ev-title">{{ $accionMostrar }}</span>
               <span class="ev-meta">— {{ $user }} · {{ $fecha }}</span>
 
-              {{-- ORDEN ESPECIAL SOLO PARA DEVOLUCIÓN REAL --}}
-              @if($accion === 'devolucion')
+              {{-- ====================== RESPONSIVA ====================== --}}
+              @if($log->responsiva_id)
+                  <span class="ev-meta">· Responsiva:
+                      <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
+                        class="underline text-indigo-600">
+                          {{ $log->responsiva?->folio ?? 'SIN FOLIO' }}
+                      </a>
+                  </span>
+              @endif
 
-                  @if($log->devolucion_id)
+
+              {{-- ====================== DEVOLUCIÓN NORMAL ====================== --}}
+              @if($accion !== 'liberado_eliminacion')
+                  @if($log->devolucion_id && $log->devolucion?->folio)
                       <span class="ev-meta">· Devolución:
-                        <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
-                           class="underline text-indigo-600">
-                           {{ $log->devolucion?->folio ?? 'SIN FOLIO' }}
-                        </a>
-                      </span>
-                  @endif
-
-                  @if($log->responsiva_id)
-                      <span class="ev-meta">· Responsiva:
-                        <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
-                           class="underline text-indigo-600">
-                           {{ $log->responsiva?->folio ?? 'SIN FOLIO' }}
-                        </a>
-                      </span>
-                  @endif
-
-              @else
-                  {{-- ORDEN NORMAL --}}
-                  @if($log->responsiva_id)
-                      <span class="ev-meta">· Responsiva:
-                        <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
-                           class="underline text-indigo-600">
-                           {{ $log->responsiva?->folio ?? 'SIN FOLIO' }}
-                        </a>
-                      </span>
-                  @endif
-
-                  @if($log->devolucion_id)
-                      <span class="ev-meta">· Devolución:
-                        <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
-                           class="underline text-indigo-600">
-                           {{ $log->devolucion?->folio ?? 'SIN FOLIO' }}
-                        </a>
+                          <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
+                            class="underline text-indigo-600">
+                              {{ $log->devolucion->folio }}
+                          </a>
                       </span>
                   @endif
               @endif
+
+
+              {{-- ====================== DEVOLUCIÓN ELIMINADA (MOSTRAR SIEMPRE) ====================== --}}
+              @if($accion === 'liberado_eliminacion')
+
+                  {{-- Si existe folio eliminado en cambios --}}
+                  @if(isset($cambios['devolucion_folio']['antes']))
+                      <span class="ev-meta">· Devolución:
+                          <span class="text-red-600 font-semibold">
+                              {{ $cambios['devolucion_folio']['antes'] }}
+                          </span>
+                      </span>
+
+                  {{-- Si no existe, mostrar SIN FOLIO pero en rojo --}}
+                  @else
+                      <span class="ev-meta">· Devolución:
+                          <span class="text-red-600 font-semibold">
+                              SIN FOLIO (ELIMINADA)
+                          </span>
+                      </span>
+                  @endif
+
+              @endif
+
+
+              {{-- ====================== CASO SIN DEVOLUCIÓN ====================== --}}
+              @if($accion !== 'liberado_eliminacion' && !$log->devolucion_id)
+                  <span class="ev-meta">· Devolución:
+                      <span class="text-gray-500">SIN FOLIO</span>
+                  </span>
+              @endif
+
           </div>
 
           {{-- ================= ESTADO ESPECIAL DE ASIGNACIÓN ================= --}}
@@ -285,7 +302,7 @@
           {{-- ====================== TABLA DE CAMBIOS ====================== --}}
           @if(!empty($cambios))
 
-          {{-- === NUEVA VISTA PARA "removido_edicion" === --}}
+          {{-- === "removido_edicion" === --}}
           @if($accion === 'removido_edicion')
 
               <table class="diff-table">
@@ -309,6 +326,39 @@
                           <td>Actualizado por</td>
                           <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
                         </tr>
+                      @endif
+
+                  </tbody>
+              </table>
+
+              @continue
+          @endif
+          {{-- ============================================================= --}}
+
+          {{-- "liberado_eliminacion" --}}
+          @if($accion === 'liberado_eliminacion')
+
+              <table class="diff-table">
+                  <thead>
+                      <tr>
+                          <th>Campo</th>
+                          <th>Valor anterior</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+
+                      @if(isset($cambios['asignado_a']))
+                      <tr>
+                          <td>Removido de</td>
+                          <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
+                      </tr>
+                      @endif
+
+                      @if(isset($cambios['eliminado_por']))
+                      <tr>
+                          <td>Eliminado por</td>
+                          <td class="mono">{{ $cambios['eliminado_por']['despues'] ?? '—' }}</td>
+                      </tr>
                       @endif
 
                   </tbody>
