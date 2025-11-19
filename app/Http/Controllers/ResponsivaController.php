@@ -553,6 +553,71 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'fecha_entrega'         => $req->fecha_entrega,
                 'observaciones'         => $req->observaciones,
             ]);
+
+            /* ===================================
+            🔹 REGISTRAR EDICIÓN DE ASIGNACIÓN
+            =================================== */
+
+            $original = $responsiva->getOriginal();
+
+            $camposAsignacion = [
+                'colaborador_id',
+                'user_id',
+                'fecha_entrega',
+            ];
+
+            $cambiosAsignacion = [];
+
+            // 🟦 Comparar cada campo
+            foreach ($camposAsignacion as $campo) {
+                if ($responsiva->$campo != $original[$campo]) {
+
+                    // Formatear valores bonitos
+                    $antes = $original[$campo];
+                    $despues = $responsiva->$campo;
+
+                    if ($campo === 'colaborador_id') {
+                        $antes = optional(\App\Models\Colaborador::find($antes))->nombre . ' ' . optional(\App\Models\Colaborador::find($antes))->apellidos ?? '—';
+                        $despues = optional(\App\Models\Colaborador::find($despues))->nombre . ' ' . optional(\App\Models\Colaborador::find($despues))->apellidos ?? '—';
+                    }
+
+                    if ($campo === 'user_id') {
+                        $antes = optional(\App\Models\User::find($antes))->name ?? '—';
+                        $despues = optional(\App\Models\User::find($despues))->name ?? '—';
+                    }
+
+                    if ($campo === 'fecha_entrega') {
+                        $antes = $antes ? \Carbon\Carbon::parse($antes)->format('d-m-Y') : 'SIN FECHA';
+                        $despues = $despues ? \Carbon\Carbon::parse($despues)->format('d-m-Y') : 'SIN FECHA';
+                    }
+
+                    $cambiosAsignacion[$campo] = [
+                        'antes'   => $antes,
+                        'despues' => $despues,
+                    ];
+                }
+            }
+
+            // 🟩 Si hay cambios → registrar un historial por cada serie
+            if (!empty($cambiosAsignacion)) {
+
+                foreach ($responsiva->detalles as $det) {
+
+                    $serie = $det->serie;
+
+                    $serie->registrarHistorial([
+                        'accion'        => 'edicion_asignacion',
+                        'responsiva_id' => $responsiva->id,
+                        'estado_anterior' => $original['motivo_entrega'] === 'prestamo_provisional'
+                                                ? 'préstamo provisional'
+                                                : 'asignado',
+                        'estado_nuevo'    => $responsiva->motivo_entrega === 'prestamo_provisional'
+                                                ? 'préstamo provisional'
+                                                : 'asignado',
+                        'cambios'       => $cambiosAsignacion,
+                    ]);
+                }
+            }
         });
 
         return redirect()->route('responsivas.show', $responsiva)->with('updated', 'Responsiva actualizada.');

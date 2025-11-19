@@ -441,13 +441,12 @@
                   );
 
                   $estadoAnteriorBonito = match($estadoAnterior) {
-    'asignacion', 'asignado' => 'Asignado',
-    'prestamo_provisional'   => 'Préstamo provisional',
-    'baja_colaborador'       => 'Baja colaborador',
-    'renovacion'             => 'Renovación',
-    default                  => ucfirst($estadoAnterior ?: '—'),
-};
-
+                      'asignacion', 'asignado' => 'Asignado',
+                      'prestamo_provisional'   => 'Préstamo provisional',
+                      'baja_colaborador'       => 'Baja colaborador',
+                      'renovacion'             => 'Renovación',
+                      default                  => ucfirst($estadoAnterior ?: '—'),
+                  };
 
                   // Badge helper
                   $badge = fn($txt) => match(true) {
@@ -460,7 +459,6 @@
                       default => 'badge-gray',
                   };
               @endphp
-
 
               {{-- ========================================================= --}}
               {{--   CASO 1: Eliminación de DEVOLUCIÓN → 3 pasos             --}}
