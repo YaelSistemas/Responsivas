@@ -436,16 +436,18 @@
                   $estadoAnterior = strtolower(
                       $cambios['estado_anterior']['antes']
                       ?? $log->estado_anterior
+                      ?? ($cambios['motivo_entrega']['antes'] ?? '')   // <-- NUEVO (necesario)
                       ?? ''
                   );
 
                   $estadoAnteriorBonito = match($estadoAnterior) {
-                      'asignado'             => 'Asignado',
-                      'prestamo_provisional' => 'Préstamo provisional',
-                      'baja_colaborador'     => 'Baja colaborador',
-                      'renovacion'           => 'Renovación',
-                      default                => ucfirst($estadoAnterior ?: '—'),
-                  };
+    'asignacion', 'asignado' => 'Asignado',
+    'prestamo_provisional'   => 'Préstamo provisional',
+    'baja_colaborador'       => 'Baja colaborador',
+    'renovacion'             => 'Renovación',
+    default                  => ucfirst($estadoAnterior ?: '—'),
+};
+
 
                   // Badge helper
                   $badge = fn($txt) => match(true) {
