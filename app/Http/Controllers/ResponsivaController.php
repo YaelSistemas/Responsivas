@@ -237,38 +237,64 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             foreach ($series as $s) {
 
-            // Crear detalle
-            ResponsivaDetalle::create([
-                'responsiva_id'     => $resp->id,
-                'producto_id'       => $s->producto_id,
-                'producto_serie_id' => $s->id,
-            ]);
+                // Crear detalle
+                ResponsivaDetalle::create([
+                    'responsiva_id'     => $resp->id,
+                    'producto_id'       => $s->producto_id,
+                    'producto_serie_id' => $s->id,
+                ]);
 
-            // Actualizar serie → asignado
-            $s->update([
-                'estado'                    => $asignado,
-                'asignado_en_responsiva_id' => $resp->id,
-            ]);
+                // Actualizar serie → asignado (estado real de la serie)
+                $s->update([
+                    'estado'                    => $asignado,
+                    'asignado_en_responsiva_id' => $resp->id,
+                ]);
 
-            // Registrar en historial
-            $s->registrarHistorial([
-                'accion'          => 'asignacion',
-                'responsiva_id'   => $resp->id,
-                'estado_anterior' => $disponible,
-                'estado_nuevo'    => $asignado,
-                'cambios'         => [
-                    'asignado_a' => [
-                        'antes'   => null,
-                        'despues' => $resp->colaborador->nombre . ' ' . $resp->colaborador->apellidos,
+                // 👉 Estado lógico de la asignación según motivo
+                $estadoNuevo = $req->motivo_entrega === 'prestamo_provisional'
+                    ? 'prestamo_provisional'
+                    : 'asignado';
+
+                // Registrar en historial
+                $s->registrarHistorial([
+                    'accion'          => 'asignacion',
+                    'responsiva_id'   => $resp->id,
+                    'estado_anterior' => $disponible,
+                    'estado_nuevo'    => $estadoNuevo,   // ✅ ahora guarda el motivo
+                    'cambios'         => [
+
+                        'asignado_a' => [
+                            'antes'   => null,
+                            'despues' => $resp->colaborador->nombre . ' ' . $resp->colaborador->apellidos,
+                        ],
+
+                        'entregado_por' => [
+                            'antes'   => null,
+                            'despues' => User::find($req->entrego_user_id)?->name,
+                        ],
+
+                        'fecha_entrega' => [
+                            'antes'   => $req->fecha_entrega
+                                ? \Carbon\Carbon::parse($req->fecha_entrega)->format('d-m-Y')
+                                : 'SIN FECHA',
+                            'despues' => $req->fecha_entrega
+                                ? \Carbon\Carbon::parse($req->fecha_entrega)->format('d-m-Y')
+                                : 'SIN FECHA',
+                        ],
+
+                        'subsidiaria' => [
+                            'antes'   => $resp->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                            'despues' => $resp->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                        ],
+
+                        // 🟢 opcional pero útil: guardar explícito el motivo
+                        'motivo_entrega' => [
+                            'antes'   => null,
+                            'despues' => $estadoNuevo,
+                        ],
                     ],
-                    'entregado_por' => [
-                        'antes'   => null,
-                        'despues' => User::find($req->entrego_user_id)?->name,
-                    ],
-                ],
-            ]);
-        }
-
+                ]);
+            }
         });
 
         $linkFirma = $resp?->sign_token ? route('public.sign.show', $resp->sign_token) : null;
@@ -405,21 +431,47 @@ class ResponsivaController extends Controller implements HasMiddleware
                         'asignado_en_responsiva_id' => $responsiva->id,
                     ]);
 
+                    // 👉 Estado lógico según motivo que viene en el formulario de edición
+                    $estadoNuevo = $req->motivo_entrega === 'prestamo_provisional'
+                        ? 'prestamo_provisional'
+                        : 'asignado';
+
                     /* HISTORIAL → registrar por cada serie agregada */
                     $s->registrarHistorial([
                         'accion'          => 'asignacion',
                         'responsiva_id'   => $responsiva->id,
                         'estado_anterior' => $disponible,
-                        'estado_nuevo'    => $asignado,
-                        'cambios' => [
+                        'estado_nuevo'    => $estadoNuevo,   // ✅ aquí también
+                        'cambios'         => [
+
                             'asignado_a' => [
                                 'antes'   => null,
                                 'despues' => $responsiva->colaborador->nombre
                                             . ' ' . $responsiva->colaborador->apellidos,
                             ],
+
                             'entregado_por' => [
                                 'antes'   => null,
                                 'despues' => User::find($req->entrego_user_id)?->name,
+                            ],
+
+                            'fecha_entrega' => [
+                                'antes'   => $responsiva->fecha_entrega
+                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                    : 'SIN FECHA',
+                                'despues' => $responsiva->fecha_entrega
+                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                    : 'SIN FECHA',
+                            ],
+
+                            'subsidiaria' => [
+                                'antes'   => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                                'despues' => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                            ],
+
+                            'motivo_entrega' => [
+                                'antes'   => null,
+                                'despues' => $estadoNuevo,
                             ],
                         ]
                     ]);
@@ -447,18 +499,38 @@ class ResponsivaController extends Controller implements HasMiddleware
                     $s->registrarHistorial([
                         'accion' => 'removido_edicion',
                         'responsiva_id'   => $responsiva->id,
-                        'estado_anterior' => $asignado,
+                        'estado_anterior' => $responsiva->motivo_entrega, // ⭐ AHORA ES CORRECTO
                         'estado_nuevo'    => $disponible,
                         'cambios' => [
+                            
                             'removido_de' => [
                                 'antes'   => $responsiva->colaborador->nombre
                                             . ' ' . $responsiva->colaborador->apellidos,
                                 'despues' => null,
                             ],
+
                             'actualizado_por' => [
                                 'antes'   => null,
                                 'despues' => User::find($req->entrego_user_id)?->name,
-                            ]
+                            ],
+
+                            // 🟢 CAMBIO IMPORTANTE
+                            'motivo_entrega' => [
+                                'antes'   => $responsiva->motivo_entrega,  // prestamo_provisional o asignacion
+                                'despues' => null,
+                            ],
+
+                            'fecha_entrega' => [
+                                'antes' => $responsiva->fecha_entrega
+                                            ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                            : 'SIN FECHA',
+                                'despues' => null,
+                            ],
+
+                            'subsidiaria' => [
+                                'antes' => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                                'despues' => null,
+                            ],
                         ]
                     ]);
                 }
@@ -547,6 +619,9 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             $serieIds = $responsiva->detalles()->pluck('producto_serie_id')->all();
 
+            // 👉 Guardamos el folio ANTES de eliminar
+            $folioResponsiva = $responsiva->folio;
+
             if (!empty($serieIds)) {
 
                 $disponible = defined(ProductoSerie::class.'::ESTADO_DISPONIBLE')
@@ -578,21 +653,51 @@ class ResponsivaController extends Controller implements HasMiddleware
                     $s->registrarHistorial([
                         'accion' => 'liberado_eliminacion',
                         'responsiva_id' => null, // SIN FOLIO
-                        'estado_anterior' => $asignado,
+                        'estado_anterior' => $responsiva->motivo_entrega,
                         'estado_nuevo' => $disponible,
+
                         'cambios' => [
+
+                            // 🔷 Folio original de la responsiva
+                            'responsiva_folio' => [
+                                'antes' => $folioResponsiva,
+                                'despues' => null,
+                            ],
+
+                            // 🔷 Colaborador asignado antes de la eliminación
                             'asignado_a' => [
                                 'antes' => $colab,
                                 'despues' => null,
                             ],
+
+                            // 🔷 Usuario que eliminó
                             'eliminado_por' => [
                                 'antes' => null,
                                 'despues' => auth()->user()->name,
                             ],
+
+                            // 🔷 Fecha de eliminación
                             'fecha' => [
                                 'antes' => null,
                                 'despues' => now()->format('d-m-Y H:i'),
-                            ]
+                            ],
+
+                            'motivo_entrega' => [
+                                'antes'   => $responsiva->motivo_entrega, // "prestamo_provisional" o "asignacion"
+                                'despues' => null,
+                            ],
+
+                            'fecha_entrega' => [
+                                'antes' => $responsiva->fecha_entrega
+                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                    : 'SIN FECHA',
+                                'despues' => null,
+                            ],
+
+                            'subsidiaria' => [
+                                'antes' => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                                'despues' => null,
+                            ],
                         ]
                     ]);
                 }

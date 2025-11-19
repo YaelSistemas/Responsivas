@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\ResponsivaDetalle;
 use App\Models\User;
 use App\Models\Colaborador;
+use App\Models\ProductoSerieHistorial;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
@@ -435,68 +436,150 @@ class DevolucionController extends Controller implements HasMiddleware
     /* ===================== ELIMINAR ===================== */
     public function destroy($id)
     {
-        $devolucion = Devolucion::with(['productos', 'responsiva'])->findOrFail($id);
+        $devolucion = Devolucion::with(['productos', 'responsiva.colaborador.subsidiaria'])
+            ->findOrFail($id);
 
-        DB::transaction(function () use ($devolucion) {
+        // 📌 Guardar datos antes del borrado
+        $folioDevolucion = $devolucion->folio ?? 'SIN FOLIO';
+        $motivoOriginal  = $devolucion->motivo ?? '—';
+        $fechaOriginal   = $devolucion->fecha_devolucion ?? null;
+        $subsidiariaOrg  = $devolucion->responsiva?->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
+
+        DB::transaction(function () use ($devolucion, $folioDevolucion, $motivoOriginal, $fechaOriginal, $subsidiariaOrg) {
 
             foreach ($devolucion->productos as $producto) {
+
                 $pivot = $producto->pivot;
                 $serie = ProductoSerie::find($pivot->producto_serie_id);
-
                 if (!$serie) continue;
 
-                // === IDENTIFICAR SI ES LA ÚLTIMA DEVOLUCIÓN ===
+                /* ============================================================
+                ⭐ A. GUARDAR EL FOLIO EN EL HISTORIAL ORIGINAL DE LA DEVOLUCIÓN
+                ============================================================ */
+                $logOriginal = ProductoSerieHistorial::where('producto_serie_id', $serie->id)
+                    ->where('accion', 'devolucion')
+                    ->where('devolucion_id', $devolucion->id)
+                    ->first();
+
+                if ($logOriginal) {
+                    $cambios = $logOriginal->cambios;
+
+                    // Guardamos el folio de la devolución
+                    $cambios['devolucion_folio'] = [
+                        'antes' => $folioDevolucion,
+                        'despues' => null
+                    ];
+
+                    // Guardamos el folio de la responsiva asociada
+                    $cambios['responsiva_folio'] = [
+                        'antes' => $devolucion->responsiva?->folio ?? 'SIN FOLIO',
+                        'despues' => null
+                    ];
+
+                    $logOriginal->update(['cambios' => $cambios]);
+                }
+
+
+                /* ============================================================
+                1. RECUPERAR EL ESTADO ANTERIOR REAL
+                ============================================================ */
+                $ultAsigna = ResponsivaDetalle::with('responsiva')
+                    ->where('producto_serie_id', $serie->id)
+                    ->orderBy('id', 'DESC')
+                    ->first();
+
+                $estadoAnteriorReal = strtolower($ultAsigna?->responsiva?->motivo_entrega ?? 'asignacion');
+
+                $estadoAnteriorReal = match ($estadoAnteriorReal) {
+                    'prestamo_provisional' => 'Préstamo provisional',
+                    'asignacion'           => 'Asignado',
+                    'renovacion'           => 'Renovación',
+                    'baja_colaborador'     => 'Baja colaborador',
+                    default                => ucfirst($estadoAnteriorReal),
+                };
+
+                /* ============================================================
+                2. Cambiar estado de la serie si es la última devolución
+                ============================================================ */
                 $ultimaDevolucionId = Devolucion::whereHas('productos', fn($q) =>
                     $q->where('producto_serie_id', $serie->id)
                 )->max('id');
 
-                $asignadaEnOtra = ResponsivaDetalle::where('producto_serie_id', $serie->id)
-                    ->whereHas('responsiva', fn($q) =>
-                        $q->whereIn('motivo_entrega', ['asignacion', 'prestamo_provisional'])
-                    )
-                    ->exists();
-
-                // === ACTUALIZAR ESTADO DE LA SERIE SI PROCEDE ===
                 if ($devolucion->id == $ultimaDevolucionId) {
                     $serie->update(['estado' => 'Asignado']);
-                    if ($serie->producto) $serie->producto->update(['estado' => 'Asignado']);
+
+                    if ($serie->producto)
+                        $serie->producto->update(['estado' => 'Asignado']);
                 }
 
-                // REGISTRAR HISTORIAL: LIBERADO POR ELIMINACIÓN
+                /* ============================================================
+                3. Nombre del colaborador original
+                ============================================================ */
                 $colaborador = $devolucion->responsiva?->colaborador;
                 $colabNombre = $colaborador
                     ? $colaborador->nombre . ' ' . $colaborador->apellidos
                     : 'SIN COLABORADOR';
 
+                /* ============================================================
+                4. REGISTRAR HISTORIAL DE ELIMINACIÓN
+                ============================================================ */
                 $serie->registrarHistorial([
-                    'accion' => 'liberado_eliminacion',
-                    'responsiva_id' => $devolucion->responsiva_id,
-                    'devolucion_id' => $devolucion->id,
-                    'estado_anterior' => 'Asignado',
-                    'estado_nuevo' => 'Disponible',
+                    'accion'          => 'liberado_eliminacion',
+                    'responsiva_id'   => $devolucion->responsiva_id,
+                    'devolucion_id'   => null,
+                    'estado_anterior' => $estadoAnteriorReal,
+                    'estado_nuevo'    => 'Disponible',
+
                     'cambios' => [
+
                         'asignado_a' => [
-                            'antes' => $colabNombre,
+                            'antes'   => $colabNombre,
                             'despues' => null
                         ],
+
                         'eliminado_por' => [
-                            'antes' => null,
+                            'antes'   => null,
                             'despues' => auth()->user()->name
                         ],
+
                         'fecha_eliminacion' => [
-                            'antes' => null,
+                            'antes'   => null,
                             'despues' => now()->format('d-m-Y H:i')
                         ],
+
+                        'motivo_devolucion' => [
+                            'antes'   => $motivoOriginal,
+                            'despues' => null
+                        ],
+
+                        'fecha_devolucion' => [
+                            'antes'   => $fechaOriginal
+                                ? \Carbon\Carbon::parse($fechaOriginal)->format('d-m-Y')
+                                : 'SIN FECHA',
+                            'despues' => null
+                        ],
+
+                        'subsidiaria' => [
+                            'antes'   => $subsidiariaOrg,
+                            'despues' => null
+                        ],
+
+                        'responsiva_folio' => [
+                            'antes'   => $devolucion->responsiva?->folio ?? null,
+                            'despues' => null
+                        ],
+
                         'devolucion_folio' => [
-                            'antes' => $devolucion->folio ?? 'SIN FOLIO',
+                            'antes'   => $folioDevolucion,
                             'despues' => null
                         ],
                     ]
                 ]);
-
             }
 
-            // === ELIMINAR RELACIONES ===
+            /* ============================================================
+            5. LIMPIAR RELACIONES Y ELIMINAR DEVOLUCIÓN
+            ============================================================ */
             $devolucion->productos()->detach();
             $devolucion->delete();
         });

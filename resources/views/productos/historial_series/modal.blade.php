@@ -126,6 +126,19 @@
           $cambios = $log->cambios ?? [];
         @endphp
 
+        @php
+            $folioEliminadoGlobal = null;
+
+            foreach ($historial as $h) {
+                if (
+                    $h->accion === 'liberado_eliminacion' &&
+                    isset($h->cambios['responsiva_folio']['antes'])
+                ) {
+                    $folioEliminadoGlobal = $h->cambios['responsiva_folio']['antes'];
+                }
+            }
+        @endphp
+
         <li class="{{ $accionClass }}">
           <div class="ev-head">
               <span class="ev-title">{{ $accionMostrar }}</span>
@@ -133,53 +146,85 @@
 
               {{-- ====================== RESPONSIVA ====================== --}}
               @if($log->responsiva_id)
+
                   <span class="ev-meta">· Responsiva:
-                      <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
-                        class="underline text-indigo-600">
-                          {{ $log->responsiva?->folio ?? 'SIN FOLIO' }}
-                      </a>
+
+                      {{-- Caso 1: La responsiva ya no existe y sí tenemos folio eliminado global --}}
+                      @if(!$log->responsiva && $folioEliminadoGlobal)
+                          <span class="text-red-600 font-semibold">
+                              {{ $folioEliminadoGlobal }}
+                          </span>
+
+                      {{-- Caso 2: Responsiva existe normalmente --}}
+                      @elseif($log->responsiva)
+                          <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
+                            class="underline text-indigo-600">
+                              {{ $log->responsiva->folio }}
+                          </a>
+
+                      {{-- Caso 3: No tenemos responsiva ni historial (muy raro) --}}
+                      @else
+                          <span class="text-gray-500">SIN FOLIO</span>
+                      @endif
+
                   </span>
               @endif
 
+              {{-- ====================== DEVOLUCIÓN (SIEMPRE MOSTRAR FOLIO) ====================== --}}
+              @if($accion === 'devolucion')
 
-              {{-- ====================== DEVOLUCIÓN NORMAL ====================== --}}
-              @if($accion !== 'liberado_eliminacion')
-                  @if($log->devolucion_id && $log->devolucion?->folio)
-                      <span class="ev-meta">· Devolución:
+                  @php
+                      // Folio de devolución: buscar en todos los lugares posibles
+                      $folioDev =
+                          ($log->devolucion?->folio ?? null)                           // Existe en la BD
+                          ?? ($cambios['devolucion_folio']['antes'] ?? null)          // Guardado en destroy()
+                          ?? ($cambios['devolucion_folio'] ?? null)                   // Guardado directo
+                          ?? ($cambios['folio_devolucion']['antes'] ?? null)          // Variante
+                          ?? ($cambios['folio']['antes'] ?? null)                     // Otra variante
+                          ?? null;
+                  @endphp
+
+                  <span class="ev-meta">· Devolución:
+
+                      {{-- Caso 1: Si existe en BD --}}
+                      @if($log->devolucion_id && $log->devolucion?->folio)
                           <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
                             class="underline text-indigo-600">
                               {{ $log->devolucion->folio }}
                           </a>
-                      </span>
-                  @endif
+
+                      {{-- Caso 2: Eliminada pero SÍ tenemos folio --}}
+                      @elseif($folioDev)
+                          <span class="text-red-600 font-semibold">
+                              {{ $folioDev }} (ELIMINADA)
+                          </span>
+
+                      {{-- Caso 3: Nunca tuvo folio --}}
+                      @else
+                          <span class="text-gray-500">SIN FOLIO</span>
+                      @endif
+
+                  </span>
+
               @endif
 
-
-              {{-- ====================== DEVOLUCIÓN ELIMINADA (MOSTRAR SIEMPRE) ====================== --}}
+              {{-- ==================== SI SE ELIMINA UNA RESPONSIVA ==================== --}}
               @if($accion === 'liberado_eliminacion')
 
-                  {{-- Si existe folio eliminado en cambios --}}
-                  @if(isset($cambios['devolucion_folio']['antes']))
-                      <span class="ev-meta">· Devolución:
+                  {{-- Mostrar el folio anterior de la responsiva --}}
+                  @if(isset($cambios['responsiva_folio']['antes']))
+                      <span class="ev-meta">· Responsiva:
                           <span class="text-red-600 font-semibold">
-                              {{ $cambios['devolucion_folio']['antes'] }}
-                          </span>
-                      </span>
-
-                  {{-- Si no existe, mostrar SIN FOLIO pero en rojo --}}
-                  @else
-                      <span class="ev-meta">· Devolución:
-                          <span class="text-red-600 font-semibold">
-                              SIN FOLIO (ELIMINADA)
+                              {{ $cambios['responsiva_folio']['antes'] }} (ELIMINADA)
                           </span>
                       </span>
                   @endif
-
+                  {{-- NO mostrar devolución --}}
+                  @php $omitDevolucion = true; @endphp
               @endif
 
-
-              {{-- ====================== CASO SIN DEVOLUCIÓN ====================== --}}
-              @if($accion !== 'liberado_eliminacion' && !$log->devolucion_id)
+              {{-- Mostrar SIN FOLIO solo cuando la acción es "devolucion" --}}
+              @if($accion === 'devolucion' && !$log->devolucion_id)
                   <span class="ev-meta">· Devolución:
                       <span class="text-gray-500">SIN FOLIO</span>
                   </span>
@@ -191,14 +236,22 @@
           @if($accion === 'asignacion')
 
               @php
-                  // Motivo según responsiva
-                  $motivo = strtolower($log->responsiva?->motivo_entrega ?? '');
+                  // Motivo entregado REAL desde historial
+                  $motivo = strtolower(
+                      $cambios['motivo_entrega']['despues']
+                      ?? $cambios['motivo_entrega']['antes']
+                      ?? ''
+                  );
 
-                  // Texto visible
+                  // Si por alguna razón no se guardó, tomar del objeto responsiva (solo si existe)
+                  if (!$motivo && $log->responsiva?->motivo_entrega) {
+                      $motivo = strtolower($log->responsiva->motivo_entrega);
+                  }
+
                   $motivoBonito = match($motivo) {
                       'prestamo_provisional' => 'Préstamo provisional',
                       'asignacion'           => 'Asignado',
-                      default                => ucfirst($log->estado_nuevo ?? 'Asignado'),
+                      default                => 'Asignado', // fallback seguro
                   };
 
                   // COLOR DEL BADGE (solo 3 estados)
@@ -233,7 +286,13 @@
           {{-- ====================== ESTADO ESPECIAL PARA DEVOLUCIÓN ====================== --}}
           @if($accion === 'devolucion')
               @php
-                  // 1. Estado anterior (de la asignación)
+                  // Siempre debemos declararlo ANTES de usarlo
+                  $logEliminacion = $historial->first(function($h) use ($log) {
+                      return $h->accion === 'liberado_eliminacion'
+                          && $h->responsiva_id === $log->responsiva_id;
+                  });
+
+                  // 1. Estado anterior
                   $estadoAnterior = strtolower($log->estado_anterior ?? '');
 
                   $estadoAnteriorBonito = match($estadoAnterior) {
@@ -244,13 +303,12 @@
                       default                 => ucfirst($estadoAnterior ?: '—'),
                   };
 
-
-                  // 2. Motivo de la devolución (tabla devoluciones.motivo)
+                  // 2. Motivo de la devolución — SOLO desde devolución
                   $motivo = strtolower(
-                      $log->motivo_devolucion
-                      ?? ($log->cambios['motivo_devolucion'] ?? null)
+                      $cambios['motivo_devolucion']['antes']
                       ?? $log->motivo
                       ?? $log->devolucion?->motivo
+                      ?? ($logEliminacion->cambios['motivo_devolucion']['antes'] ?? null)
                       ?? ''
                   );
 
@@ -260,10 +318,10 @@
                       default            => ucfirst($motivo ?: '—'),
                   };
 
-                  // 3. Estado final → SIEMPRE "Disponible"
+                  // 3. Estado final
                   $estadoFinalBonito = "Disponible";
 
-                  // Badge colors
+                  // Badge color
                   $badge = fn($txt) => match(true) {
                       str_contains(strtolower($txt), 'asignado') => 'badge-green',
                       str_contains(strtolower($txt), 'préstamo'),
@@ -292,7 +350,7 @@
 
                   →
 
-                  {{-- Estado final (Disponible) --}}
+                  {{-- Estado final --}}
                   <span class="badge {{ $badge($estadoFinalBonito) }}">
                       {{ $estadoFinalBonito }}
                   </span>
@@ -305,38 +363,38 @@
           {{-- === "removido_edicion" === --}}
           @if($accion === 'removido_edicion')
 
-              <table class="diff-table">
-                  <thead>
-                      <tr>
-                          <th>Campo</th>
-                          <th>Valor anterior</th>
-                      </tr>
-                  </thead>
-                  <tbody>
+              {{-- === ESTADO LÓGICO INVERTIDO PARA LIBERADO POR EDICIÓN === --}}
+              @php
+                  // Motivo original antes de la edición
+                  $motivoOriginal = strtolower($cambios['motivo_entrega']['antes'] ?? '');
 
-                      @if(isset($cambios['removido_de']))
-                        <tr>
-                          <td>Removido de</td>
-                          <td class="mono">{{ $cambios['removido_de']['antes'] ?? '—' }}</td>
-                        </tr>
-                      @endif
+                  $estadoBonito = match($motivoOriginal) {
+                      'prestamo_provisional' => 'Préstamo provisional',
+                      'asignacion'           => 'Asignado',
+                      default                => 'Asignado', // fallback
+                  };
 
-                      @if(isset($cambios['actualizado_por']))
-                        <tr>
-                          <td>Actualizado por</td>
-                          <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
-                        </tr>
-                      @endif
+                  $badge = fn($txt) => match(true) {
+                      str_contains(strtolower($txt), 'préstamo'),
+                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                      default => 'badge-gray',
+                  };
+              @endphp
 
-                  </tbody>
-              </table>
+              <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
 
-              @continue
-          @endif
-          {{-- ============================================================= --}}
+                  {{-- Estado ORIGINAL --}}
+                  <span class="badge {{ $badge($estadoBonito) }}">
+                      {{ $estadoBonito }}
+                  </span>
 
-          {{-- "liberado_eliminacion" --}}
-          @if($accion === 'liberado_eliminacion')
+                  →
+
+                  {{-- Estado FINAL --}}
+                  <span class="badge badge-gray">Disponible</span>
+              </div>
 
               <table class="diff-table">
                   <thead>
@@ -354,10 +412,10 @@
                       </tr>
                       @endif
 
-                      @if(isset($cambios['eliminado_por']))
+                      @if(isset($cambios['actualizado_por']))
                       <tr>
-                          <td>Eliminado por</td>
-                          <td class="mono">{{ $cambios['eliminado_por']['despues'] ?? '—' }}</td>
+                          <td>Actualizado por</td>
+                          <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
                       </tr>
                       @endif
 
@@ -368,8 +426,140 @@
           @endif
           {{-- ============================================================= --}}
 
+          {{-- "liberado_eliminacion" --}}
+          @if($accion === 'liberado_eliminacion')
+
+              @php
+                  $esDevolucionEliminada = isset($cambios['devolucion_folio']); // <-- Detecta si fue devolución
+
+                  // Buscar estado anterior
+                  $estadoAnterior = strtolower(
+                      $cambios['estado_anterior']['antes']
+                      ?? $log->estado_anterior
+                      ?? ''
+                  );
+
+                  $estadoAnteriorBonito = match($estadoAnterior) {
+                      'asignado'             => 'Asignado',
+                      'prestamo_provisional' => 'Préstamo provisional',
+                      'baja_colaborador'     => 'Baja colaborador',
+                      'renovacion'           => 'Renovación',
+                      default                => ucfirst($estadoAnterior ?: '—'),
+                  };
+
+                  // Badge helper
+                  $badge = fn($txt) => match(true) {
+                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                      str_contains(strtolower($txt), 'préstamo'),
+                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                      str_contains(strtolower($txt), 'renovación'),
+                      str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
+                      str_contains(strtolower($txt), 'baja') => 'badge-red',
+                      default => 'badge-gray',
+                  };
+              @endphp
+
+
+              {{-- ========================================================= --}}
+              {{--   CASO 1: Eliminación de DEVOLUCIÓN → 3 pasos             --}}
+              {{-- ========================================================= --}}
+              @if($esDevolucionEliminada)
+
+                  @php
+                      $motivoDev = $cambios['motivo_devolucion']['antes'] ?? '';
+                      $motivoBonito = match($motivoDev) {
+                          'baja_colaborador' => 'Baja colaborador',
+                          'renovacion'       => 'Renovación',
+                          default            => ucfirst($motivoDev ?: '—'),
+                      };
+                  @endphp
+
+                  <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                      <span class="ev-meta" style="font-weight:600;">Estado:</span>
+
+                      <span class="badge {{ $badge('Disponible') }}">Disponible</span>
+                      →
+                      <span class="badge {{ $badge($motivoBonito) }}">{{ $motivoBonito }}</span>
+                      →
+                      <span class="badge {{ $badge($estadoAnteriorBonito) }}">{{ $estadoAnteriorBonito }}</span>
+                  </div>
+
+              {{-- ========================================================= --}}
+              {{--   CASO 2: Eliminación de RESPONSIVA → SOLO 2 pasos         --}}
+              {{-- ========================================================= --}}
+              @else
+                  <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                      <span class="ev-meta" style="font-weight:600;">Estado:</span>
+
+                      {{-- Estado anterior (Asignado / Prestamo provisional) --}}
+                      <span class="badge {{ $badge($estadoAnteriorBonito) }}">
+                          {{ $estadoAnteriorBonito }}
+                      </span>
+
+                      →
+
+                      {{-- Estado final --}}
+                      <span class="badge badge-gray">Disponible</span>
+                  </div>
+              @endif
+
+
+              {{-- ===== Tablas de cambios (se deja igual) ===== --}}
+              <table class="diff-table">
+                  <thead>
+                      <tr><th>Campo</th><th>Valor anterior</th></tr>
+                  </thead>
+                  <tbody>
+                      @if(isset($cambios['asignado_a']))
+                      <tr>
+                          <td>Removido de</td>
+                          <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
+                      </tr>
+                      @endif
+
+                      @if(isset($cambios['eliminado_por']))
+                      <tr>
+                          <td>Eliminado por</td>
+                          <td class="mono">{{ $cambios['eliminado_por']['despues'] ?? '—' }}</td>
+                      </tr>
+                      @endif
+                  </tbody>
+              </table>
+
+              @continue
+          @endif
+          {{-- ============================================================= --}}
+
           {{-- === VISTA ESPECIAL PARA DEVOLUCIÓN REAL === --}}
           @if($accion === 'devolucion')
+              @php
+                  // Buscar si existe un registro de eliminación relacionado para recuperar datos
+                  $logEliminacion = $historial->first(function($h) use ($log) {
+                      return $h->accion === 'liberado_eliminacion'
+                          && $h->responsiva_id === $log->responsiva_id;
+                  });
+
+                  // Fecha devolución: primero cambios del propio log, luego relación, luego log de eliminación
+                  $fechaDev = $cambios['fecha_devolucion']['antes']
+                      ?? ($log->devolucion?->fecha_devolucion
+                          ? \Carbon\Carbon::parse($log->devolucion->fecha_devolucion)->format('d-m-Y')
+                          : (
+                              $logEliminacion->cambios['fecha_devolucion']['antes']
+                                  ?? 'SIN FECHA'
+                          ));
+
+                  // Subsidiaria: primero cambios del propio log, luego relación, luego log eliminación
+                  $subsidiariaDev = $cambios['subsidiaria']['antes']
+                      ?? ($log->devolucion?->responsiva?->colaborador?->subsidiaria?->descripcion
+                          ?? (
+                              $logEliminacion->cambios['subsidiaria']['antes']
+                                  ?? 'SIN SUBSIDIARIA'
+                          ));
+
+                  // Actualizado por: viene del propio log de devolución
+                  $actualizadoPor = $cambios['actualizado_por']['despues'] ?? '—';
+              @endphp
+
               <table class="diff-table">
                   <thead>
                       <tr>
@@ -378,38 +568,29 @@
                       </tr>
                   </thead>
                   <tbody>
-
                       @if(isset($cambios['removido_de']))
-                        <tr>
-                          <td>Removido de</td>
-                          <td class="mono">{{ $cambios['removido_de']['antes'] ?? '—' }}</td>
-                        </tr>
+                          <tr>
+                              <td>Removido de</td>
+                              <td class="mono">{{ $cambios['removido_de']['antes'] ?? '—' }}</td>
+                          </tr>
                       @endif
 
                       @if(isset($cambios['actualizado_por']))
-                        <tr>
-                          <td>Actualizado por</td>
-                          <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
-                        </tr>
+                          <tr>
+                              <td>Actualizado por</td>
+                              <td class="mono">{{ $actualizadoPor }}</td>
+                          </tr>
                       @endif
 
                       <tr>
-                        <td>Fecha devolución</td>
-                        <td class="mono">
-                          {{ $log->devolucion?->fecha_devolucion
-                                ? \Carbon\Carbon::parse($log->devolucion->fecha_devolucion)->format('d-m-Y')
-                                : 'SIN FECHA' }}
-                        </td>
+                          <td>Fecha devolución</td>
+                          <td class="mono">{{ $fechaDev }}</td>
                       </tr>
 
                       <tr>
-                        <td>Subsidiaria</td>
-                        <td class="mono">
-                          {{ $log->devolucion?->responsiva?->colaborador?->subsidiaria?->descripcion
-                                ?? 'SIN SUBSIDIARIA' }}
-                        </td>
+                          <td>Subsidiaria</td>
+                          <td class="mono">{{ $subsidiariaDev }}</td>
                       </tr>
-
                   </tbody>
               </table>
 
@@ -493,16 +674,23 @@
                 <tr>
                   <td>Fecha entrega</td>
                   <td class="mono">
-                    {{ $log->responsiva?->fecha_entrega
-                        ? \Carbon\Carbon::parse($log->responsiva->fecha_entrega)->format('d-m-Y')
-                        : 'SIN FECHA' }}
+                      {{
+                          $cambios['fecha_entrega']['antes']
+                          ?? ($log->responsiva?->fecha_entrega
+                                  ? \Carbon\Carbon::parse($log->responsiva->fecha_entrega)->format('d-m-Y')
+                                  : 'SIN FECHA')
+                      }}
                   </td>
                 </tr>
 
                 <tr>
                   <td>Subsidiaria</td>
                   <td class="mono">
-                    {{ $log->responsiva?->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA' }}
+                      {{
+                          $cambios['subsidiaria']['antes']
+                          ?? ($log->responsiva?->colaborador?->subsidiaria?->descripcion
+                                  ?? 'SIN SUBSIDIARIA')
+                      }}
                   </td>
                 </tr>
             @endif
