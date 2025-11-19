@@ -283,6 +283,122 @@
 
           @endif
 
+          {{-- ================= ESTADO ESPECIAL PARA EDICIÓN DE ASIGNACIÓN ================= --}}
+          @if($accion === 'edicion_asignacion')  
+  
+              @php
+                  // 1. Recuperar el motivo ANTERIOR y NUEVO si existen
+                  $motivoAntes  = strtolower($cambios['motivo_entrega']['antes']   ?? '');
+                  $motivoDespues = strtolower($cambios['motivo_entrega']['despues'] ?? '');
+  
+                  // 2. Si NO existían en cambios, usar estado_anterior / estado_nuevo reales
+                  $estadoAnterior = $motivoAntes ?: strtolower(trim($log->estado_anterior ?? 'asignado'));
+                  $estadoNuevo    = $motivoDespues ?: strtolower(trim($log->estado_nuevo ?? 'asignado'));
+  
+                  // 3. Mapeo bonito
+                  $map = [
+                      'prestamo_provisional' => 'Préstamo provisional',
+                      'préstamo_provisional' => 'Préstamo provisional',
+                      'prestamo'             => 'Préstamo provisional',
+                      'asignacion'           => 'Asignado',
+                      'asignado'             => 'Asignado',
+                  ];
+  
+                  $textoAnterior = $map[$estadoAnterior] ?? ucfirst($estadoAnterior);
+                  $textoNuevo    = $map[$estadoNuevo]    ?? ucfirst($estadoNuevo);
+  
+                  // 4. Badges
+                  $badge = function($txt) {
+                      $t = strtolower($txt);
+                      return match(true) {
+                          str_contains($t, 'préstamo'),
+                          str_contains($t, 'prestamo') => 'badge-yellow',
+  
+                          str_contains($t, 'asignado') => 'badge-green',
+  
+                          default => 'badge-gray',
+                      };
+                  };
+  
+                  // 5. Detectar si se editaron campos extra
+                  $cambioAsignadoA    = isset($cambios['asignado_a']);
+                  $cambioEntregadoPor = isset($cambios['entregado_por']);
+                  $cambioFecha        = isset($cambios['fecha_entrega']);
+  
+                  $mostrarTabla = $cambioAsignadoA || $cambioEntregadoPor || $cambioFecha;
+              @endphp  
+  
+  
+              {{-- === SIEMPRE mostrar estado arriba === --}}
+              <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
+  
+                  {{-- Si NO cambió el estado, mostrar solo 1 --}}
+                  @if($textoAnterior === $textoNuevo)
+                      <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
+  
+                  {{-- Si SÍ cambió, mostrar ambos --}}
+                  @else
+                      <span class="badge {{ $badge($textoAnterior) }}">{{ $textoAnterior }}</span>
+                      →
+                      <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
+                  @endif
+              </div>
+  
+              {{-- === TABLA === --}}
+            @if($mostrarTabla)
+                <table class="diff-table">
+                    <thead>
+                        <tr>
+                            <th>Campo</th>
+                            <th>Antes</th>
+                            <th>Después</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        {{-- 1. ASIGNADO A --}}
+                        @if($cambioAsignadoA)
+                            <tr>
+                                <td>Asignado a</td>
+                                <td class="mono">{{ $cambios['asignado_a']['antes'] }}</td>
+                                <td class="mono">{{ $cambios['asignado_a']['despues'] }}</td>
+                            </tr>
+                        @endif
+
+                        {{-- 2. ENTREGADO POR --}}
+                        @if($cambioEntregadoPor)
+                            <tr>
+                                <td>Entregado por</td>
+                                <td class="mono">{{ $cambios['entregado_por']['antes'] }}</td>
+                                <td class="mono">{{ $cambios['entregado_por']['despues'] }}</td>
+                            </tr>
+                        @endif
+
+                        {{-- 3. FECHA ENTREGA --}}
+                        @if($cambioFecha)
+                            <tr>
+                                <td>Fecha entrega</td>
+                                <td class="mono">{{ $cambios['fecha_entrega']['antes'] }}</td>
+                                <td class="mono">{{ $cambios['fecha_entrega']['despues'] }}</td>
+                            </tr>
+                        @endif
+
+                        {{-- 4. SUBSIDIARIA — SOLO SI SE EDITÓ ASIGNADO A --}}
+                        @if($cambioAsignadoA)
+                            <tr>
+                                <td>Subsidiaria</td>
+                                <td class="mono">{{ $cambios['subsidiaria']['antes'] ?? '—' }}</td>
+                                <td class="mono">{{ $cambios['subsidiaria']['despues'] ?? '—' }}</td>
+                            </tr>
+                        @endif
+
+                    </tbody>
+                </table>
+            @endif
+              @continue
+          @endif
+
           {{-- ====================== ESTADO ESPECIAL PARA DEVOLUCIÓN ====================== --}}
           @if($accion === 'devolucion')
               @php

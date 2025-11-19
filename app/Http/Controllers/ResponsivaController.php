@@ -387,6 +387,11 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         DB::transaction(function() use ($req, $responsiva, $tenantId) {
 
+            /* ===================================
+            🔹 PRIMERO OBTENEMOS LOS VALORES ORIGINALES
+            =================================== */
+            $original = $responsiva->getOriginal();
+
             $actuales = $responsiva->detalles()->pluck('producto_serie_id')->all();
             $nuevas   = $req->input('series_ids', []);
 
@@ -397,7 +402,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             $asignado   = ProductoSerie::ESTADO_ASIGNADO   ?? 'asignado';
 
             /* ===================================
-            🔹 SERIES QUE SE AGREGAN A LA RESPONSIVA
+            🔹 SERIES QUE SE AGREGAN
             =================================== */
             if ($toAdd) {
 
@@ -431,17 +436,15 @@ class ResponsivaController extends Controller implements HasMiddleware
                         'asignado_en_responsiva_id' => $responsiva->id,
                     ]);
 
-                    // 👉 Estado lógico según motivo que viene en el formulario de edición
                     $estadoNuevo = $req->motivo_entrega === 'prestamo_provisional'
                         ? 'prestamo_provisional'
                         : 'asignado';
 
-                    /* HISTORIAL → registrar por cada serie agregada */
                     $s->registrarHistorial([
                         'accion'          => 'asignacion',
                         'responsiva_id'   => $responsiva->id,
                         'estado_anterior' => $disponible,
-                        'estado_nuevo'    => $estadoNuevo,   // ✅ aquí también
+                        'estado_nuevo'    => $estadoNuevo,
                         'cambios'         => [
 
                             'asignado_a' => [
@@ -457,11 +460,11 @@ class ResponsivaController extends Controller implements HasMiddleware
 
                             'fecha_entrega' => [
                                 'antes'   => $responsiva->fecha_entrega
-                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
-                                    : 'SIN FECHA',
+                                                ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                                : 'SIN FECHA',
                                 'despues' => $responsiva->fecha_entrega
-                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
-                                    : 'SIN FECHA',
+                                                ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                                : 'SIN FECHA',
                             ],
 
                             'subsidiaria' => [
@@ -479,7 +482,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             }
 
             /* ===================================
-            🔹 SERIES QUE SE REMUEVEN DE LA RESPONSIVA
+            🔹 SERIES REMOVIDAS
             =================================== */
             if ($toRemove) {
 
@@ -495,14 +498,13 @@ class ResponsivaController extends Controller implements HasMiddleware
                         'asignado_en_responsiva_id' => null,
                     ]);
 
-                    /* HISTORIAL → registrar por cada serie removida */
                     $s->registrarHistorial([
                         'accion' => 'removido_edicion',
                         'responsiva_id'   => $responsiva->id,
-                        'estado_anterior' => $responsiva->motivo_entrega, // ⭐ AHORA ES CORRECTO
+                        'estado_anterior' => $original['motivo_entrega'],
                         'estado_nuevo'    => $disponible,
                         'cambios' => [
-                            
+
                             'removido_de' => [
                                 'antes'   => $responsiva->colaborador->nombre
                                             . ' ' . $responsiva->colaborador->apellidos,
@@ -514,15 +516,14 @@ class ResponsivaController extends Controller implements HasMiddleware
                                 'despues' => User::find($req->entrego_user_id)?->name,
                             ],
 
-                            // 🟢 CAMBIO IMPORTANTE
                             'motivo_entrega' => [
-                                'antes'   => $responsiva->motivo_entrega,  // prestamo_provisional o asignacion
+                                'antes'   => $original['motivo_entrega'],
                                 'despues' => null,
                             ],
 
                             'fecha_entrega' => [
-                                'antes' => $responsiva->fecha_entrega
-                                            ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                'antes' => $original['fecha_entrega']
+                                            ? \Carbon\Carbon::parse($original['fecha_entrega'])->format('d-m-Y')
                                             : 'SIN FECHA',
                                 'despues' => null,
                             ],
@@ -555,66 +556,145 @@ class ResponsivaController extends Controller implements HasMiddleware
             ]);
 
             /* ===================================
-            🔹 REGISTRAR EDICIÓN DE ASIGNACIÓN
+            🔹 DETECTAR CAMBIOS DE EDICIÓN
             =================================== */
-
-            $original = $responsiva->getOriginal();
 
             $camposAsignacion = [
                 'colaborador_id',
                 'user_id',
                 'fecha_entrega',
+                'motivo_entrega',
             ];
 
             $cambiosAsignacion = [];
 
-            // 🟦 Comparar cada campo
+            $antesC = optional(\App\Models\Colaborador::find($original['colaborador_id']));
+            $despuesC = optional(\App\Models\Colaborador::find($responsiva->colaborador_id));
+
             foreach ($camposAsignacion as $campo) {
+
                 if ($responsiva->$campo != $original[$campo]) {
 
-                    // Formatear valores bonitos
                     $antes = $original[$campo];
                     $despues = $responsiva->$campo;
 
+                    /* ===== CAMBIO DE COLABORADOR ===== */
                     if ($campo === 'colaborador_id') {
-                        $antes = optional(\App\Models\Colaborador::find($antes))->nombre . ' ' . optional(\App\Models\Colaborador::find($antes))->apellidos ?? '—';
-                        $despues = optional(\App\Models\Colaborador::find($despues))->nombre . ' ' . optional(\App\Models\Colaborador::find($despues))->apellidos ?? '—';
+
+                        $cambiosAsignacion['asignado_a'] = [
+                            'antes'   => ($antesC->nombre ?? '—') . ' ' . ($antesC->apellidos ?? ''),
+                            'despues' => ($despuesC->nombre ?? '—') . ' ' . ($despuesC->apellidos ?? ''),
+                        ];
+
+                        continue;
                     }
 
+                    /* ===== CAMBIO EN ENTREGADO POR ===== */
                     if ($campo === 'user_id') {
-                        $antes = optional(\App\Models\User::find($antes))->name ?? '—';
-                        $despues = optional(\App\Models\User::find($despues))->name ?? '—';
+
+                        $cambiosAsignacion['entregado_por'] = [
+                            'antes'   => optional(\App\Models\User::find($antes))->name ?? '—',
+                            'despues' => optional(\App\Models\User::find($despues))->name ?? '—',
+                        ];
+
+                        continue;
                     }
 
+                    /* ===== CAMBIO EN FECHA ===== */
                     if ($campo === 'fecha_entrega') {
-                        $antes = $antes ? \Carbon\Carbon::parse($antes)->format('d-m-Y') : 'SIN FECHA';
-                        $despues = $despues ? \Carbon\Carbon::parse($despues)->format('d-m-Y') : 'SIN FECHA';
+
+                        $cambiosAsignacion['fecha_entrega'] = [
+                            'antes'   => $antes ? \Carbon\Carbon::parse($antes)->format('d-m-Y') : 'SIN FECHA',
+                            'despues' => $despues ? \Carbon\Carbon::parse($despues)->format('d-m-Y') : 'SIN FECHA',
+                        ];
+
+                        continue;
                     }
 
-                    $cambiosAsignacion[$campo] = [
-                        'antes'   => $antes,
-                        'despues' => $despues,
-                    ];
+                    /* ===== CAMBIO EN MOTIVO DE ENTREGA (estado) ===== */
+                    if ($campo === 'motivo_entrega') {
+
+                        $antesTxt = $antes === 'prestamo_provisional'
+                            ? 'Préstamo provisional'
+                            : 'Asignado';
+
+                        $despuesTxt = $despues === 'prestamo_provisional'
+                            ? 'Préstamo provisional'
+                            : 'Asignado';
+
+                        $cambiosAsignacion['estado'] = [
+                            'antes'   => $antesTxt,
+                            'despues' => $despuesTxt,
+                        ];
+
+                        continue;
+                    }
                 }
             }
 
-            // 🟩 Si hay cambios → registrar un historial por cada serie
+            /* ===================================
+            🔹 AGREGAR SUBSIDIARIA SI HAY CUALQUIER CAMBIO
+            Y SIEMPRE HASTA ABAJO
+            =================================== */
+            $antesSub = $antesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
+            $despuesSub = $despuesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
+
+            // SIEMPRE agregar subsidiaria si cambió asignado_a
+            if (isset($cambiosAsignacion['asignado_a'])) {
+
+                $cambiosAsignacion['subsidiaria'] = [
+                    'antes'   => $antesSub ?? 'SIN SUBSIDIARIA',
+                    'despues' => $despuesSub ?? 'SIN SUBSIDIARIA',
+                ];
+            }
+
+            /* ===================================
+            🔹 SI HAY CAMBIOS, REGISTRAR HISTORIAL POR CADA SERIE
+            =================================== */
             if (!empty($cambiosAsignacion)) {
 
                 foreach ($responsiva->detalles as $det) {
 
                     $serie = $det->serie;
 
+                    // ===============================================
+                    // OBTENER ESTADO REAL DE ASIGNACIÓN (el primero)
+                    // ===============================================
+                    $historialAsignacion = $serie->historial()
+                        ->where('accion', 'asignacion')
+                        ->orderBy('id', 'asc')
+                        ->first();
+
+                    $estadoOriginalAsignacion = $original['motivo_entrega'];
+
+                    // Por defecto ambos iguales
+                    $estadoAnteriorSerie = $estadoOriginalAsignacion;
+                    $estadoNuevoSerie    = $estadoOriginalAsignacion;
+
+                    // ===============================================
+                    // SI CAMBIÓ EL MOTIVO → actualizamos el estado
+                    // ===============================================
+                    if ($original['motivo_entrega'] !== $responsiva->motivo_entrega) {
+
+                        // Estado anterior = original de asignación REAL
+                        $estadoAnteriorSerie = $estadoOriginalAsignacion;
+
+                        // Estado nuevo = motivo nuevo
+                        $estadoNuevoSerie =
+                            $responsiva->motivo_entrega === 'prestamo_provisional'
+                                ? 'prestamo_provisional'
+                                : 'asignado';
+                    }
+
+                    // ===============================================
+                    // REGISTRAR HISTORIAL
+                    // ===============================================
                     $serie->registrarHistorial([
-                        'accion'        => 'edicion_asignacion',
-                        'responsiva_id' => $responsiva->id,
-                        'estado_anterior' => $original['motivo_entrega'] === 'prestamo_provisional'
-                                                ? 'préstamo provisional'
-                                                : 'asignado',
-                        'estado_nuevo'    => $responsiva->motivo_entrega === 'prestamo_provisional'
-                                                ? 'préstamo provisional'
-                                                : 'asignado',
-                        'cambios'       => $cambiosAsignacion,
+                        'accion'          => 'edicion_asignacion',
+                        'responsiva_id'   => $responsiva->id,
+                        'estado_anterior' => $estadoAnteriorSerie,
+                        'estado_nuevo'    => $estadoNuevoSerie,
+                        'cambios'         => $cambiosAsignacion,
                     ]);
                 }
             }
