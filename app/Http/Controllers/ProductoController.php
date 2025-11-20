@@ -439,16 +439,35 @@ class ProductoController extends Controller implements HasMiddleware
             return back()->with('error','No se detectaron series.');
         }
 
-        $creadas = 0; $duplicadas = 0;
+        $creadas = 0; 
+        $duplicadas = 0;
+
         foreach ($items as $serie) {
             try {
-                ProductoSerie::create([
+
+                $serieModel = ProductoSerie::create([
                     'empresa_tenant_id' => $tenant,
                     'producto_id'       => $producto->id,
                     'serie'             => $serie,
                     'estado'            => 'disponible',
                 ]);
+
                 $creadas++;
+
+                /** 🔵 REGISTRO DE HISTORIAL DE LA SERIE */
+                if (method_exists($serieModel, 'registrarHistorial')) {
+
+                    $serieModel->registrarHistorial([
+                        'accion'          => 'creacion',
+                        'estado_anterior' => null,
+                        'estado_nuevo'    => 'disponible',
+                        'cambios'         => [
+                            'serie'                 => $serieModel->serie,
+                            'especificaciones_base' => $producto->especificaciones ?? [],
+                        ],
+                    ]);
+                }
+
             } catch (\Throwable $e) {
                 $duplicadas++;
             }
