@@ -113,4 +113,9 @@ class Responsiva extends Model
         return $this->hasMany(\App\Models\Devolucion::class, 'responsiva_id');
     }
 
+    public function series()
+    {
+        return $this->hasMany(\App\Models\ProductoSerie::class, 'asignado_en_responsiva_id', 'id');
+    }
+
 }

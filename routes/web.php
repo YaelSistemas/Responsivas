@@ -178,6 +178,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/responsivas/{responsiva}/pdf', [ResponsivaController::class, 'pdf'])
         ->middleware('permission:responsivas.view')
         ->name('responsivas.pdf');
+    
+    // Historial de Responsivas (modal AJAX)
+    Route::get('/responsivas/{responsiva}/historial', [ResponsivaController::class, 'historial'])
+        ->whereNumber('responsiva')
+        ->name('responsivas.historial');
 
     // Generar / renovar link de firma
     Route::post('/responsivas/{responsiva}/link', [ResponsivaController::class, 'emitirFirma'])

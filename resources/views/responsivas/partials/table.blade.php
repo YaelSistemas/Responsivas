@@ -37,7 +37,7 @@
     <col class="c-equipo">  {{-- 20% --}}
     <col class="c-entrega"> {{-- 7%  --}}
     <col class="c-fent">    {{-- 9%  --}}
-    <col class="c-items">   {{-- 4%  --}}
+    <col class="c-hist">   {{-- 4%  --}}
     <col class="c-acc">     {{-- 4%  --}}
   </colgroup>
 
@@ -51,7 +51,7 @@
       <th>Equipo</th>
       <th>Entrega por</th>
       <th>Fecha entrega</th>
-      <th>Items</th>
+      <th>Historial</th>
       <th>Acciones</th>
     </tr>
   </thead>
@@ -142,7 +142,14 @@
         <td title="{{ $equipoTxt }}">{{ $equipoTxt }}</td>
         <td title="{{ $entregoNombre }}">{{ $entregoNombre }}</td>
         <td title="{{ $fechaEnt }}">{{ $fechaEnt }}</td>
-        <td>{{ $nItems }}</td>
+        <td class="text-center">
+          <button type="button"
+                  class="btn btn-sm"
+                  onclick="openHistorialResponsiva({{ $r->id }})"
+                  title="Ver historial">
+            Historial
+          </button>
+        </td>
         <td class="actions">
           <a href="{{ route('responsivas.show', $r) }}" title="Ver">
             <i class="fa-solid fa-eye"></i><span class="sr-only">Ver</span>

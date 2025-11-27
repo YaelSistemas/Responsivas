@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Responsiva;
 use App\Models\ResponsivaDetalle;
+use App\Models\ResponsivaHistorial;
 use App\Models\ProductoSerie;
 use App\Models\Colaborador;
 use App\Models\User;
@@ -204,6 +205,26 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'sign_token_expires_at' => (int) config('app.responsiva_sign_days', 7) > 0
                                             ? now()->addDays((int) config('app.responsiva_sign_days', 7))
                                             : null,
+            ]);
+
+            // ==========================================================
+            // 📘 Registrar historial de CREACIÓN de la responsiva
+            // ==========================================================
+            ResponsivaHistorial::create([
+                'responsiva_id' => $resp->id,
+                'user_id'       => auth()->id(),
+                'accion'        => 'Creación',
+                'cambios'       => [
+                    'folio'                 => $resp->folio,
+                    'colaborador_id'        => $resp->colaborador_id,
+                    'recibi_colaborador_id' => $resp->recibi_colaborador_id,
+                    'user_id'               => $resp->user_id,
+                    'autoriza_user_id'      => $resp->autoriza_user_id,
+                    'motivo_entrega'        => $resp->motivo_entrega,
+                    'fecha_solicitud'       => $resp->fecha_solicitud,
+                    'fecha_entrega'         => $resp->fecha_entrega,
+                    'observaciones'         => $resp->observaciones,
+                ],
             ]);
 
             // ⬇️ Traer series y verificar que su producto esté ACTIVO
@@ -555,6 +576,68 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'observaciones'         => $req->observaciones,
             ]);
 
+            // ==========================================================
+            // 📘 Historial de la RESPONSIVA (sin tocar series)
+            // ==========================================================
+            $cambiosResp = [];
+            $camposResp = [
+                'motivo_entrega',
+                'colaborador_id',
+                'recibi_colaborador_id',
+                'user_id',
+                'autoriza_user_id',
+                'fecha_solicitud',
+                'fecha_entrega',
+                'observaciones',
+            ];
+
+            // AGREGAR SUBSIDIARIA Y UNIDAD AL HISTORIAL DE RESPONSIVA
+            $antesCol = Colaborador::find($original['colaborador_id']);
+            $despuesCol = Colaborador::find($responsiva->colaborador_id);
+
+            // SUBSIDIARIA
+            $subAntes = $antesCol?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
+            $subDesp = $despuesCol?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
+
+            if ($subAntes !== $subDesp) {
+                $cambiosResp['subsidiaria'] = [
+                    'antes'   => $subAntes,
+                    'despues' => $subDesp,
+                ];
+            }
+
+            // UNIDAD
+            $uniAntes = $antesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
+            $uniDesp = $despuesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
+
+            if ($uniAntes !== $uniDesp) {
+                $cambiosResp['unidad'] = [
+                    'antes'   => $uniAntes,
+                    'despues' => $uniDesp,
+                ];
+            }
+                
+            foreach ($camposResp as $campo) {
+                $antes = $original[$campo] ?? null;
+                $despues = $responsiva->$campo;
+    
+                if ($antes != $despues) {
+                    $cambiosResp[$campo] = [
+                        'antes'   => $antes,       // 🔵 CAMBIO APLICADO
+                        'despues' => $despues      // 🔵 CAMBIO APLICADO
+                    ];
+                }
+            }
+    
+            if (!empty($cambiosResp)) {
+                \App\Models\ResponsivaHistorial::create([
+                    'responsiva_id' => $responsiva->id,
+                    'user_id'       => auth()->id(),
+                    'accion'        => 'Actualización',
+                    'cambios'       => $cambiosResp,
+                ]);
+            }
+
             /* ===================================
             🔹 DETECTAR CAMBIOS DE EDICIÓN
             =================================== */
@@ -567,6 +650,33 @@ class ResponsivaController extends Controller implements HasMiddleware
             ];
 
             $cambiosAsignacion = [];
+
+            /* ===================================
+            🔹 CAMBIOS DE PRODUCTOS (SERIES)
+            =================================== */
+            if ($toAdd) {
+                foreach ($toAdd as $serieId) {
+                    $serieObj = ProductoSerie::find($serieId);
+                    if ($serieObj) {
+                        $cambiosAsignacion['productos'][] = [
+                            'serie'  => $serieObj->serie,
+                            'accion' => 'Agregado'
+                        ];
+                    }
+                }
+            }
+
+            if ($toRemove) {
+                foreach ($toRemove as $serieId) {
+                    $serieObj = ProductoSerie::find($serieId);
+                    if ($serieObj) {
+                        $cambiosAsignacion['productos'][] = [
+                            'serie'  => $serieObj->serie,
+                            'accion' => 'Removido'
+                        ];
+                    }
+                }
+            }
 
             $antesC = optional(\App\Models\Colaborador::find($original['colaborador_id']));
             $despuesC = optional(\App\Models\Colaborador::find($responsiva->colaborador_id));
@@ -633,18 +743,48 @@ class ResponsivaController extends Controller implements HasMiddleware
             }
 
             /* ===================================
-            🔹 AGREGAR SUBSIDIARIA SI HAY CUALQUIER CAMBIO
-            Y SIEMPRE HASTA ABAJO
+            🔹 SI CAMBIÓ EL COLABORADOR → SIEMPRE mostrar Subsidiaria y Unidad
             =================================== */
             $antesSub = $antesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
             $despuesSub = $despuesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
 
-            // SIEMPRE agregar subsidiaria si cambió asignado_a
-            if (isset($cambiosAsignacion['asignado_a'])) {
+            $antesUnidad = $antesC->unidadServicio->nombre ?? 'SIN UNIDAD';
+            $despuesUnidad = $despuesC->unidadServicio->nombre ?? 'SIN UNIDAD';
+
+            if ($original['colaborador_id'] != $responsiva->colaborador_id) {
 
                 $cambiosAsignacion['subsidiaria'] = [
-                    'antes'   => $antesSub ?? 'SIN SUBSIDIARIA',
-                    'despues' => $despuesSub ?? 'SIN SUBSIDIARIA',
+                    'antes'   => $antesSub,
+                    'despues' => $despuesSub,
+                ];
+
+                $cambiosAsignacion['unidad'] = [
+                    'antes'   => $antesUnidad,
+                    'despues' => $despuesUnidad,
+                ];
+            }
+
+            /* ======================================================
+            🔵 FIX: FORZAR REGISTRO SI SOLO CAMBIÓ COLABORADOR
+            ====================================================== */
+            if (
+                empty($cambiosAsignacion) &&
+                $original['colaborador_id'] != $responsiva->colaborador_id
+            ) {
+
+                $cambiosAsignacion['asignado_a'] = [
+                    'antes'   => ($antesC->nombre ?? '—') . ' ' . ($antesC->apellidos ?? ''),
+                    'despues' => ($despuesC->nombre ?? '—') . ' ' . ($despuesC->apellidos ?? ''),
+                ];
+
+                $cambiosAsignacion['subsidiaria'] = [
+                    'antes'   => $antesSub,
+                    'despues' => $despuesSub,
+                ];
+
+                $cambiosAsignacion['unidad'] = [
+                    'antes'   => $antesUnidad,
+                    'despues' => $despuesUnidad,
                 ];
             }
 
@@ -979,4 +1119,35 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         return back()->with('status', 'Firma del colaborador eliminada correctamente.');
     }
+
+    public function historial(Responsiva $responsiva)
+{
+    $tenant = $this->tenantId();
+
+    if ($responsiva->empresa_tenant_id != $tenant) {
+        abort(404);
+    }
+
+    $historial = ResponsivaHistorial::where('responsiva_id', $responsiva->id)
+        ->with('usuario:id,name')
+        ->orderBy('created_at', 'asc')
+        ->get()
+        ->map(function ($item) {
+            $item->cambios = is_array($item->cambios)
+                ? $item->cambios
+                : json_decode($item->cambios, true);
+            return $item;
+        });
+    
+    $responsiva->load('series.producto');
+
+    // ✔️ ARREGLADO: Detectar correctamente llamadas AJAX vía Fetch API
+    if (request()->ajax() || request()->header('X-Requested-With') === 'XMLHttpRequest') {
+        return response()->view('responsivas.historial.modal', compact('responsiva', 'historial'));
+    }
+
+    return redirect()->route('responsivas.index');
+}
+
+
 }

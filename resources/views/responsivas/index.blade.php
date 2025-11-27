@@ -63,7 +63,7 @@
     .tbl col.c-equipo  { width:20% }
     .tbl col.c-entrega { width:7%  }
     .tbl col.c-fent    { width:9%  }
-    .tbl col.c-items   { width:4%  }
+    .tbl col.c-hist   { width:4%  }
     .tbl col.c-acc     { width:4%  }
 
     /* Toolbar */
@@ -200,4 +200,65 @@
     wirePagination();
   })();
   </script>
+
+  <script>
+async function openHistorialResponsiva(id) {
+  try {
+    const res = await fetch(`/responsivas/${id}/historial`, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const html = await res.text();
+
+    // 🔹 Eliminar modal previo si existe
+    const existing = document.getElementById('respModalOverlay');
+    if (existing) existing.remove();
+
+    // 🔹 Insertar modal nuevo
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // 🔹 Bloquear scroll
+    document.body.classList.add('modal-open');
+
+  } catch (error) {
+    console.error("Error al abrir historial:", error);
+    alert("No se pudo abrir el historial de la responsiva.");
+  }
+}
+
+// 🔸 Cerrar modal: botón cerrar, clic fuera del modal o tecla ESC
+document.addEventListener('click', (e) => {
+    const isCloseButton = e.target.matches('[data-modal-close]');
+    const backdrop = document.getElementById('respModalOverlay');
+
+    if (!backdrop) return;
+
+    // CLIC EN BOTÓN ✕
+    if (isCloseButton) {
+        backdrop.remove();
+        document.body.classList.remove('modal-open');
+        return;
+    }
+
+    // CLIC AFUERA DEL CUADRO (solo cuando el clic NO es dentro del modal)
+    if (!e.target.closest('.resp-modal')) {
+        backdrop.remove();
+        document.body.classList.remove('modal-open');
+    }
+});
+
+// tecla ESC
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const backdrop = document.querySelector('[data-modal-backdrop]');
+    if (backdrop) {
+      backdrop.remove();
+      document.body.classList.remove('modal-open');
+    }
+  }
+});
+</script>
+
 </x-app-layout>
