@@ -314,6 +314,59 @@
     })();
   </script>
 
+  {{-- AJAX: cambiar recepción --}}
+<script>
+    (function(){
+        const wrap = document.getElementById('oc-wrap');
+
+        function flash(msg, ok=true){
+            const el = document.createElement('div');
+            el.textContent = msg;
+            el.style.cssText = "position:fixed;right:16px;bottom:16px;padding:.6rem .9rem;border-radius:8px;font-weight:600;z-index:9999;"
+              + (ok ? "background:#dcfce7;color:#166534;border:1px solid #bbf7d0"
+                    : "background:#fee2e2;color:#991b1b;border:1px solid #fecaca");
+            document.body.appendChild(el);
+            setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .4s'; setTimeout(()=>el.remove(),400)}, 1800);
+        }
+
+        wrap.addEventListener('change', async (ev)=>{
+            const sel = ev.target.closest('select[data-recepcion]');
+            if(!sel) return;
+
+            const url = sel.getAttribute('data-url');
+            const val = sel.value;
+
+            try{
+                const r = await fetch(url, {
+                    method: 'PATCH',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ recepcion: val })
+                });
+
+                if(!r.ok){
+                    const t = await r.text();
+                    throw new Error(t || ('HTTP '+r.status));
+                }
+
+                const data = await r.json();
+                const colorClass = data.class;
+
+                sel.className = 'tag-select ' + colorClass;
+
+                flash(data.msg || 'Recepción actualizada.', true);
+            }catch(err){
+                console.error(err);
+                flash('No se pudo actualizar la recepción.', false);
+            }
+        });
+    })();
+</script>
+
   {{-- Abrir MODAL de adjuntos (wrapper .oc-mount) --}}
   <script>
   (function(){

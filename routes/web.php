@@ -250,6 +250,12 @@ Route::middleware(['auth'])->group(function () {
         ->middleware(['auth'])
         ->whereNumber('oc')
         ->name('oc.estado');
+    
+    // Recepción  🟢 NUEVO
+    Route::patch('/oc/{oc}/recepcion', [OrdenCompraController::class, 'updateRecepcion'])
+        ->middleware(['auth'])
+        ->whereNumber('oc')
+        ->name('oc.recepcion');
 
     /*
     |--------------------  Adjuntos OC --------------------

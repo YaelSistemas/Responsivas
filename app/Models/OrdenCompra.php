@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
 class OrdenCompra extends Model
 {
     protected $table = 'ordenes_compra';
@@ -19,13 +20,19 @@ class OrdenCompra extends Model
         'monto',
         'factura',
         'estado',
-        'created_by','updated_by',
+        'recepcion',   // ✅ NUEVO
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
         'fecha' => 'date',
         'monto' => 'decimal:2',
     ];
+
+    /* =====================
+       RELACIONES
+    ======================*/
 
     public function empresa()
     {
@@ -44,17 +51,35 @@ class OrdenCompra extends Model
 
     public function detalles()
     {
-    return $this->hasMany(\App\Models\OrdenCompraDetalle::class, 'orden_compra_id');
+        return $this->hasMany(\App\Models\OrdenCompraDetalle::class, 'orden_compra_id');
     }
+
+    public function adjuntos()
+    {
+        return $this->hasMany(\App\Models\OcAdjunto::class, 'orden_compra_id');
+    }
+
+    public function logs()
+    {
+        return $this->hasMany(\App\Models\OcLog::class, 'orden_compra_id')->latest();
+    }
+
+    /* =====================
+       CONTROL DE USUARIO
+    ======================*/
 
     protected static function booted()
     {
         static::creating(function ($oc) {
-            if (auth()->check()) $oc->created_by = $oc->created_by ?: auth()->id();
+            if (auth()->check()) {
+                $oc->created_by = $oc->created_by ?: auth()->id();
+            }
         });
 
         static::updating(function ($oc) {
-            if (auth()->check()) $oc->updated_by = auth()->id();
+            if (auth()->check()) {
+                $oc->updated_by = auth()->id();
+            }
         });
     }
 
@@ -68,6 +93,10 @@ class OrdenCompra extends Model
         return $this->belongsTo(\App\Models\User::class, 'updated_by');
     }
 
+    /* =====================
+       ESTADOS
+    ======================*/
+
     public const EST_ABIERTA   = 'abierta';
     public const EST_PAGADA    = 'pagada';
     public const EST_CANCELADA = 'cancelada';
@@ -78,13 +107,34 @@ class OrdenCompra extends Model
         self::EST_CANCELADA,
     ];
 
-    protected $attributes = [
-        'estado' => self::EST_ABIERTA,
+    /* =====================
+       RECEPCIÓN
+    ======================*/
+
+    public const REC_SIN_RECEPCION = 'sin_recepcion';
+    public const REC_RECIBIDO      = 'recibido';
+
+    public const RECEPCIONES = [
+        self::REC_SIN_RECEPCION,
+        self::REC_RECIBIDO,
     ];
+
+    /* =====================
+       DEFAULT ATTRIBUTES
+    ======================*/
+
+    protected $attributes = [
+        'estado'    => self::EST_ABIERTA,
+        'recepcion' => self::REC_SIN_RECEPCION,  // ✅ NUEVO DEFAULT
+    ];
+
+    /* =====================
+       ACCESSORS (LABELS)
+    ======================*/
 
     public function getEstadoLabelAttribute(): string
     {
-        return match($this->estado) {
+        return match ($this->estado) {
             self::EST_PAGADA    => 'Pagada',
             self::EST_CANCELADA => 'Cancelada',
             default             => 'Abierta',
@@ -93,22 +143,26 @@ class OrdenCompra extends Model
 
     public function getEstadoClassAttribute(): string
     {
-        // Usamos clases "tag-*" que definimos en CSS
-        return match($this->estado) {
+        return match ($this->estado) {
             self::EST_PAGADA    => 'tag-green',
             self::EST_CANCELADA => 'tag-red',
             default             => 'tag-blue',
         };
     }
 
-    public function adjuntos()
+    public function getRecepcionLabelAttribute(): string
     {
-        return $this->hasMany(\App\Models\OcAdjunto::class, 'orden_compra_id');
+        return match ($this->recepcion) {
+            self::REC_RECIBIDO  => 'Recibido',
+            default             => 'Sin recepcion',
+        };
     }
 
-    public function logs()
+    public function getRecepcionClassAttribute(): string
     {
-        return $this->hasMany(\App\Models\OcLog::class, 'orden_compra_id')->latest();
+        return match ($this->recepcion) {
+            self::REC_RECIBIDO  => 'tag-green',
+            default             => 'tag-gray',
+        };
     }
-
 }

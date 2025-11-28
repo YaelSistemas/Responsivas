@@ -53,8 +53,15 @@
 
   .tag-select:focus{ outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.25); }
 
+  .tag-gray{
+    background:#f3f4f6;
+    color:#6b7280;
+    border:1px solid #e5e7eb;
+  }
+
   /* Columna Estado compacta y centrada */
   .tbl col.c-estado { width:7% }
+  .tbl col.c-recepcion { width:10% !important; }
   .tbl td.estado{
     text-align:center; padding-left:.35rem; padding-right:.35rem;
     padding-top:.4rem; padding-bottom:.4rem;
@@ -75,6 +82,19 @@
   }
   .clip-btn.has-adj:hover{ background:#e0e7ff; }
   .clip-btn.no-adj{ /* gris */ }
+
+  /* === FIX para que no se corte "Sin recepcion" === */
+  .tbl td.estado {
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: initial !important;
+  }
+  /* Aumentar espacio para que quepa “Sin recepcion” */
+  .tag-select, .tag-readonly {
+      padding-left: .80rem !important;
+      padding-right: 1.40rem !important;
+      width: 120px !important;   /* <- un poco más ancho */
+  }
 </style>
 
 <table class="tbl">
@@ -88,6 +108,7 @@
     <col class="c-monto">
     <col class="c-fact">
     <col class="c-estado">
+    <col class="c-recepcion">
     @if($isAdmin)
       <col class="c-hist">
     @endif
@@ -103,8 +124,9 @@
       <th>Conceptos</th>
       <th>Descripción</th>
       <th>Monto</th>
-      <th>Factura</th>
+      <th>Adjuntos</th>
       <th>Estado</th>
+      <th>Recepción</th>
       @if($isAdmin)
         <th>Historial</th>
       @endif
@@ -199,6 +221,26 @@
           </select>
         @else
           <span class="tag-readonly {{ $oc->estado_class }}">{{ $oc->estado_label }}</span>
+        @endif
+      </td>
+
+      {{-- ===== Recepción ===== --}}
+      <td class="estado">
+        @if ($puedeCambiar)
+          <select data-recepcion
+                  class="tag-select {{ $oc->recepcion_class }}"
+                  data-url="{{ route('oc.recepcion', $oc) }}"
+                  title="Cambiar recepción">
+            @foreach (\App\Models\OrdenCompra::RECEPCIONES as $opt)
+              <option value="{{ $opt }}" {{ $oc->recepcion === $opt ? 'selected' : '' }}>
+                {{ ucfirst(str_replace('_', ' ', $opt)) }}
+              </option>
+            @endforeach
+          </select>
+        @else
+          <span class="tag-readonly {{ $oc->recepcion_class }}">
+            {{ $oc->recepcion_label }}
+          </span>
         @endif
       </td>
 

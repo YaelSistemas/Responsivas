@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use App\Services\OrdenCompraFolioService;
+use App\Models\OcLog;
 
 class OrdenCompraController extends Controller implements HasMiddleware
 {
@@ -584,6 +585,19 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 $oc->saveQuietly(); // no registrar log si realmente no cambió nada
             }
 
+            // === LOG: cambio de recepción ===
+            if ($oc->wasChanged('recepcion')) {
+                OcLog::create([
+                    'orden_compra_id' => $oc->id,
+                    'type'            => 'recepcion_changed',
+                    'data' => [
+                        'from' => $oc->getOriginal('recepcion'),
+                        'to'   => $oc->recepcion,
+                    ],
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
             // 5) Si moviste el folio hacia atrás, baja el contador al tope real (MAX(seq) en BD)
             if ($mueveAtras) {
                 $folios->reconcileToDbMax($tenantId);
@@ -780,4 +794,53 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
         return back()->with('updated', true);
     }
+
+    public function updateRecepcion(Request $request, OrdenCompra $oc)
+    {
+        $user = Auth::user();
+
+        // Solo Administrador o Compras Superior pueden cambiar recepción
+        if (!$user->hasAnyRole(['Administrador', 'Compras Superior'])) {
+            abort(403, 'No tienes permisos para cambiar la recepción de una orden.');
+        }
+
+        $data = $request->validate([
+            'recepcion' => ['required', Rule::in(OrdenCompra::RECEPCIONES)],
+        ]);
+
+        $old = $oc->recepcion;   // ← Guardamos valor ANTERIOR
+
+        $oc->recepcion = $data['recepcion'];
+
+        if (Schema::hasColumn($oc->getTable(), 'updated_by')) {
+            $oc->updated_by = $user->id;
+        }
+
+        $oc->save();
+
+        // === LOG DE CAMBIO DE RECEPCIÓN ===
+        OcLog::create([
+            'orden_compra_id' => $oc->id,
+            'type'            => 'recepcion_changed',
+            'data' => [
+                'from' => $old,
+                'to'   => $oc->recepcion,
+            ],
+            'user_id' => auth()->id(),
+        ]);
+
+        // Respuesta AJAX
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'ok'        => true,
+                'recepcion' => $oc->recepcion,
+                'label'     => $oc->recepcion_label,
+                'class'     => $oc->recepcion_class,
+                'msg'       => 'Recepción actualizada correctamente.',
+            ]);
+        }
+
+        return back()->with('updated', true);
+    }
+
 }

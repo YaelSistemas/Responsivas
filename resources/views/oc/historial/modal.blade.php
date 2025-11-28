@@ -9,6 +9,7 @@
           'created'             => 'Creación de la OC',
           'updated'             => 'Edición de la OC',
           'state_changed', 'status_changed' => 'Cambio de estado',
+          'recepcion_changed' => 'Cambio de recepción',
           'item_added'          => 'Partida agregada',
           'item_updated'        => 'Partida actualizada',
           'item_removed'        => 'Partida eliminada',
@@ -57,6 +58,7 @@
   .b-green{ background:#dcfce7; color:#166534; border:1px solid #bbf7d0 }
   .b-red{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca }
   .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+  .b-gray{ background:#f3f4f6; color:#374151; border:1px solid #d1d5db; }
 </style>
 
 <div class="oc-modal-backdrop" data-modal-backdrop>
@@ -74,7 +76,7 @@
         <p class="ev-meta">Sin eventos.</p>
       @else
         <ul class="timeline">
-          @foreach($logs as $log)
+          @foreach($logs->sortBy('id') as $log)
             @php
               $d = $log->data ?? [];
               $userName = $log->user->nombre ?? $log->user->name ?? 'Sistema';
@@ -203,6 +205,31 @@
                     <span class="badge {{ $clsFrom }}">{{ ucfirst($from) }}</span>
                     → <span class="badge {{ $clsTo }}">{{ ucfirst($to) }}</span>
                   </div>
+                @break
+
+                @case('recepcion_changed')
+                    @php
+                        $from = strtolower($d['from'] ?? '');
+                        $to   = strtolower($d['to'] ?? '');
+
+                        $color = function ($v) {
+                            return match ($v) {
+                                'recibido'      => 'b-green',
+                                'sin recepcion' => 'b-gray',
+                                default         => 'b-gray',
+                            };
+                        };
+
+                        $clsFrom = $color($from);
+                        $clsTo   = $color($to);
+                    @endphp
+
+                    <div class="ev-meta">
+                        Recepción:
+                        <span class="badge {{ $clsFrom }}">{{ ucfirst($from) }}</span>
+                        →
+                        <span class="badge {{ $clsTo }}">{{ ucfirst($to) }}</span>
+                    </div>
                 @break
 
                 @case('item_added')
