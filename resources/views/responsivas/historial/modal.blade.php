@@ -110,6 +110,10 @@
       @else
         <ul class="timeline">
 
+          @php
+              $motivoAcumulado = null;
+          @endphp
+
           @foreach($historial as $log)
 
             @php
@@ -184,13 +188,63 @@
                   }
               }
 
-              /* Badge motivo */
-              $motivo = strtolower(str_replace(['_','-'],' ',$responsiva->motivo_entrega));
-              $badgeClass = match($motivo){
-                'asignacion' => 'badge-asignacion',
-                'prestamo provisional','préstamo provisional' => 'badge-prestamo',
-                'fallo' => 'badge-fallo',
-                default => 'badge-default'
+              /* ===================== MOTIVO HISTÓRICO ===================== */
+
+              /**
+               * Reglas:
+               * - Recorremos el historial en orden ASC (más viejo → más nuevo).
+               * - $motivoAcumulado guarda el motivo vigente hasta ese log.
+               * - Si el log trae motivo_entrega, actualizamos el acumulado.
+               * - Si no lo trae, usamos el acumulado anterior (no el motivo actual de la BD).
+               */
+
+              // 1) Inicializar el acumulado solo una vez
+              if ($motivoAcumulado === null) {
+
+                  // Si este log ya trae motivo_entrega, lo usamos como arranque
+                  if (isset($cambios['motivo_entrega'])) {
+                      $mot = $cambios['motivo_entrega'];
+
+                      if (is_array($mot)) {
+                          // creación o actualización con ['antes','despues']
+                          $motivoAcumulado = $mot['despues']
+                                          ?? $mot['antes']
+                                          ?? $responsiva->motivo_entrega;
+                      } else {
+                          // logs viejos donde guardaste solo string
+                          $motivoAcumulado = $mot;
+                      }
+                  } else {
+                      // fallback: motivo actual de la responsiva
+                      $motivoAcumulado = $responsiva->motivo_entrega;
+                  }
+              }
+
+              // 2) Por defecto, el motivo mostrado es el acumulado que traíamos
+              $motivoLog = $motivoAcumulado;
+
+              // 3) Si ESTE log trae motivo_entrega, lo aplicamos como nuevo estado
+              if (isset($cambios['motivo_entrega'])) {
+                  $mot = $cambios['motivo_entrega'];
+
+                  if (is_array($mot)) {
+                      $motivoLog = $mot['despues'] ?? $mot['antes'] ?? $motivoLog;
+                  } else {
+                      $motivoLog = $mot;
+                  }
+              }
+
+              // 4) Actualizamos acumulado para los logs siguientes
+              $motivoAcumulado = $motivoLog;
+
+              // 5) Normalizamos para la badge
+              $motivoNormalizado = strtolower(str_replace(['_','-'],' ',$motivoLog));
+
+              $badgeClass = match($motivoNormalizado){
+                  'asignacion' => 'badge-asignacion',
+                  'prestamo provisional','préstamo provisional','prestamo_provisional' => 'badge-prestamo',
+                  'fallo' => 'badge-fallo',
+                  default => 'badge-default'
               };
             @endphp
 
@@ -206,7 +260,7 @@
               <div style="margin: 6px 0 10px 0;">
                 <strong class="ev-meta">Motivo: </strong>
                 <span class="badge {{ $badgeClass }}">
-                  {{ ucfirst($responsiva->motivo_entrega ?? '—') }}
+                  {{ ucfirst($motivoLog ?? '—') }}
                 </span>
               </div>
 
@@ -236,27 +290,46 @@
                   @php
                     $tieneCambio = isset($cambiosGeneral[$campo]);
 
-                    if($esCreacion){
-                        $valorBase = match($campo){
-                            'colaborador_id' => colabNameLocal($responsiva->colaborador_id),
-                            'subsidiaria'    => optional(optional($responsiva->colaborador)->subsidiaria)->descripcion ?? $responsiva->subsidiaria,
-                            'unidad'         => optional(optional($responsiva->colaborador)->unidadServicio)->nombre ?? $responsiva->unidad,
-                            'fecha_solicitud'=> mostrarFechaLocal($responsiva->fecha_solicitud),
-                            'fecha_entrega'  => mostrarFechaLocal($responsiva->fecha_entrega),
-                            default => '—'
-                        };
+                    // 👉 Para CREACIÓN, intentamos usar SIEMPRE el valor guardado en el LOG
+                    if ($esCreacion) {
+
+                        if (isset($cambiosGeneral[$campo])) {
+                            // En creación nos interesa el snapshot "despues" (o "antes" si solo viene ese)
+                            $valorBase = $cambiosGeneral[$campo]['despues']
+                                      ?? $cambiosGeneral[$campo]['antes']
+                                      ?? '—';
+                        } else {
+                            // Fallback para logs viejos que no tengan snapshot
+                            $valorBase = match($campo){
+                                'colaborador_id' => colabNameLocal($responsiva->colaborador_id),
+                                'subsidiaria'    => optional(optional($responsiva->colaborador)->subsidiaria)->descripcion ?? $responsiva->subsidiaria,
+                                'unidad'         => optional(optional($responsiva->colaborador)->unidadServicio)->nombre ?? $responsiva->unidad,
+                                'fecha_solicitud'=> mostrarFechaLocal($responsiva->fecha_solicitud),
+                                'fecha_entrega'  => mostrarFechaLocal($responsiva->fecha_entrega),
+                                default => '—'
+                            };
+                        }
+
+                        if ($campo === 'colaborador_id') {
+                            $valorBase = colabNameLocal($valorBase);
+                        }
+
+                        if (in_array($campo, ['fecha_solicitud','fecha_entrega'])) {
+                            $valorBase = mostrarFechaLocal($valorBase);
+                        }
                     }
 
-                    if($tieneCambio){
+                    // 👉 Para EDICIONES, seguimos usando ANTES / DESPUÉS
+                    if ($tieneCambio && !$esCreacion) {
                         $antes   = $cambiosGeneral[$campo]['antes'];
                         $despues = $cambiosGeneral[$campo]['despues'];
 
-                        if($campo === 'colaborador_id'){
-                            $antes = colabNameLocal($antes);
+                        if ($campo === 'colaborador_id') {
+                            $antes   = colabNameLocal($antes);
                             $despues = colabNameLocal($despues);
                         }
 
-                        if(in_array($campo,['fecha_solicitud','fecha_entrega'])){
+                        if (in_array($campo, ['fecha_solicitud','fecha_entrega'])) {
                             $antes   = mostrarFechaLocal($antes);
                             $despues = mostrarFechaLocal($despues);
                         }
@@ -277,15 +350,12 @@
                   @endif
                 @endforeach
 
-
-
                 {{-- ========== PRODUCTOS ========== --}}
                 @if($esCreacion || count($cambiosProductos))
                     <tr>
                       <td colspan="{{ $esCreacion ? 2 : 3 }}" class="diff-section-title">Productos</td>
                     </tr>
 
-                    {{-- LISTA DE PRODUCTOS ACTUALES --}}
                     <tr>
                       <td colspan="{{ $esCreacion ? 2 : 3 }}">
                         <table class="diff-table" style="margin:0">
@@ -296,21 +366,89 @@
                             <th>Serie</th>
                           </tr>
 
-                          @foreach($responsiva->detalles as $d)
-                            @php $p = $d->producto; @endphp
-                            <tr>
-                              <td class="mono">{{ $p->nombre ?? '—' }}</td>
-                              <td class="mono">{{ $p->marca ?? '—' }}</td>
-                              <td class="mono">{{ $p->modelo ?? '—' }}</td>
-                              <td class="mono">{{ $d->serie->serie ?? '—' }}</td>
-                            </tr>
-                          @endforeach
+                          @if($esCreacion)
+                              {{-- MOSTRAR SNAPSHOT DEL LOG (NO EL ESTADO ACTUAL) --}}
+                              @if(isset($cambios['detalles_productos']) && is_array($cambios['detalles_productos']))
+                                  @foreach($cambios['detalles_productos'] as $p)
+                                      <tr>
+                                          <td class="mono">{{ $p['nombre'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['marca'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['modelo'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['serie'] ?? '—' }}</td>
+                                      </tr>
+                                  @endforeach
+                              @endif
+                          @else
+                              {{-- USAR SNAPSHOT SI EXISTE --}}
+                              @if(isset($cambios['detalles_productos']) && is_array($cambios['detalles_productos']))
+                                  @foreach($cambios['detalles_productos'] as $p)
+                                      <tr>
+                                          <td class="mono">{{ $p['nombre'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['marca'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['modelo'] ?? '—' }}</td>
+                                          <td class="mono">{{ $p['serie'] ?? '—' }}</td>
+                                      </tr>
+                                  @endforeach
+
+                              @else
+                                  {{-- BACKUP: PRODUCTOS ACTUALES --}}
+                                  @foreach($responsiva->detalles as $d)
+                                      @php $p = $d->producto; @endphp
+                                      <tr>
+                                          <td class="mono">{{ $p->nombre ?? '—' }}</td>
+                                          <td class="mono">{{ $p->marca ?? '—' }}</td>
+                                          <td class="mono">{{ $p->modelo ?? '—' }}</td>
+                                          <td class="mono">{{ $d->serie->serie ?? '—' }}</td>
+                                      </tr>
+                                  @endforeach
+                              @endif
+                          @endif
                         </table>
                       </td>
                     </tr>
                 @endif
 
+                {{-- ================= CAMBIOS EN PRODUCTOS (AGREGADOS / REMOVIDOS) ================= --}}
+                @if(isset($cambios['productos']) && is_array($cambios['productos']) && count($cambios['productos']))
+                    <tr>
+                        <td colspan="{{ $esCreacion ? 2 : 3 }}" class="diff-section-title">Cambios en series</td>
+                    </tr>
 
+                    <tr>
+                        <td colspan="{{ $esCreacion ? 2 : 3 }}">
+                            <table class="diff-table" style="margin:0">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Marca</th>
+                                    <th>Modelo</th>
+                                    <th>Serie</th>
+                                    <th>Acción</th>
+                                </tr>
+
+                                @foreach($cambios['productos'] as $prod)
+                                    @php
+                                        $accionSerie = strtolower($prod['accion'] ?? '');
+                                    @endphp
+                                    <tr>
+                                        <td class="mono">{{ $prod['nombre'] ?? '—' }}</td>
+                                        <td class="mono">{{ $prod['marca']  ?? '—' }}</td>
+                                        <td class="mono">{{ $prod['modelo'] ?? '—' }}</td>
+                                        <td class="mono">{{ $prod['serie']  ?? '—' }}</td>
+                                        <td>
+                                            @if($accionSerie === 'agregado')
+                                                <span class="badge badge-asignacion">AGREGADO</span>
+                                            @elseif($accionSerie === 'removido')
+                                                <span class="badge badge-fallo">REMOVIDO</span>
+                                            @else
+                                                <span class="badge badge-default">{{ strtoupper($prod['accion'] ?? '-') }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </table>
+                        </td>
+                    </tr>
+                @endif
 
                 {{-- ========== FIRMAS ========== --}}
                 @if($esCreacion || count($cambiosFirmas))

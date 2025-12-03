@@ -208,6 +208,24 @@ class ResponsivaController extends Controller implements HasMiddleware
             ]);
 
             // ==========================================================
+            // SNAPSHOT de productos y series al momento de la creación
+            // ==========================================================
+            $productosSnapshot = [];
+
+            foreach ($req->series_ids as $serieId) {
+                $serie = ProductoSerie::with('producto')->find($serieId);
+
+                if ($serie && $serie->producto) {
+                    $productosSnapshot[] = [
+                        'nombre' => $serie->producto->nombre ?? '—',
+                        'marca'  => $serie->producto->marca ?? '—',
+                        'modelo' => $serie->producto->modelo ?? '—',
+                        'serie'  => $serie->serie ?? '—',
+                    ];
+                }
+            }
+
+            // ==========================================================
             // 📘 Registrar historial de CREACIÓN de la responsiva
             // ==========================================================
             ResponsivaHistorial::create([
@@ -224,6 +242,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                     'fecha_solicitud'       => $resp->fecha_solicitud,
                     'fecha_entrega'         => $resp->fecha_entrega,
                     'observaciones'         => $resp->observaciones,
+                    'detalles_productos'    => $productosSnapshot,
                 ],
             ]);
 
@@ -576,6 +595,52 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'observaciones'         => $req->observaciones,
             ]);
 
+            /* ===================================
+            🔹 CAMBIOS DE PRODUCTOS (SERIES)
+            =================================== */
+            $cambiosProductos = [];
+
+            if ($toAdd) {
+                foreach ($toAdd as $serieId) {
+                    $serieObj = ProductoSerie::with('producto')->find($serieId);
+                    if ($serieObj) {
+                        $cambiosProductos[] = [
+                            'serie'  => $serieObj->serie,
+                            'accion' => 'Agregado',
+                            'nombre' => $serieObj->producto->nombre ?? null,
+                            'marca'  => $serieObj->producto->marca ?? null,
+                            'modelo' => $serieObj->producto->modelo ?? null,
+                        ];
+                    }
+                }
+            }
+
+            if ($toRemove) {
+                foreach ($toRemove as $serieId) {
+                    $serieObj = ProductoSerie::with('producto')->find($serieId);
+                    if ($serieObj) {
+                        $cambiosProductos[] = [
+                            'serie'  => $serieObj->serie,
+                            'accion' => 'Removido',
+                            'nombre' => $serieObj->producto->nombre ?? null,
+                            'marca'  => $serieObj->producto->marca ?? null,
+                            'modelo' => $serieObj->producto->modelo ?? null,
+                        ];
+                    }
+                }
+            }
+
+            // 🔄 Si quitó TODAS las que existían y puso otras → cambio total
+            $removioTodas = count($toRemove) === count($actuales);
+            $agregoNuevas = count($toAdd) > 0;
+
+            if ($removioTodas && $agregoNuevas) {
+                $cambiosProductos[] = [
+                    'serie'  => 'Todas las series',
+                    'accion' => 'Reemplazo total',
+                ];
+            }
+
             // ==========================================================
             // 📘 Historial de la RESPONSIVA (sin tocar series)
             // ==========================================================
@@ -592,44 +657,66 @@ class ResponsivaController extends Controller implements HasMiddleware
             ];
 
             // AGREGAR SUBSIDIARIA Y UNIDAD AL HISTORIAL DE RESPONSIVA
-            $antesCol = Colaborador::find($original['colaborador_id']);
-            $despuesCol = Colaborador::find($responsiva->colaborador_id);
+            $antesCol   = Colaborador::find($original['colaborador_id'] ?? null);
+            $despuesCol = Colaborador::find($responsiva->colaborador_id ?? null);
 
-            // SUBSIDIARIA
             $subAntes = $antesCol?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
-            $subDesp = $despuesCol?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
+            $subDesp  = $despuesCol?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA';
 
-            if ($subAntes !== $subDesp) {
+            $uniAntes = $antesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
+            $uniDesp  = $despuesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
+
+            if (($original['colaborador_id'] ?? null) != $responsiva->colaborador_id) {
                 $cambiosResp['subsidiaria'] = [
                     'antes'   => $subAntes,
                     'despues' => $subDesp,
                 ];
-            }
 
-            // UNIDAD
-            $uniAntes = $antesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
-            $uniDesp = $despuesCol?->unidadServicio?->nombre ?? 'SIN UNIDAD';
-
-            if ($uniAntes !== $uniDesp) {
                 $cambiosResp['unidad'] = [
                     'antes'   => $uniAntes,
                     'despues' => $uniDesp,
                 ];
             }
-                
+
             foreach ($camposResp as $campo) {
-                $antes = $original[$campo] ?? null;
+                $antes   = $original[$campo] ?? null;
                 $despues = $responsiva->$campo;
-    
+
                 if ($antes != $despues) {
                     $cambiosResp[$campo] = [
-                        'antes'   => $antes,       // 🔵 CAMBIO APLICADO
-                        'despues' => $despues      // 🔵 CAMBIO APLICADO
+                        'antes'   => $antes,
+                        'despues' => $despues,
                     ];
                 }
             }
-    
+
+            // 👉 AÑADIR TAMBIÉN LOS CAMBIOS DE PRODUCTOS AL HISTORIAL DE LA RESPONSIVA
+            if (!empty($cambiosProductos)) {
+                $cambiosResp['productos'] = $cambiosProductos;
+            }
+
             if (!empty($cambiosResp)) {
+
+                /* ==========================================================
+                SNAPSHOT REAL DE LOS PRODUCTOS AL MOMENTO DE ESTA EDICIÓN
+                ========================================================== */
+
+                $productosSnapshot = [];
+
+                $responsiva->load('detalles.producto','detalles.serie');
+
+                foreach ($responsiva->detalles as $d) {
+                    $productosSnapshot[] = [
+                        'nombre' => $d->producto->nombre ?? '—',
+                        'marca'  => $d->producto->marca ?? '—',
+                        'modelo' => $d->producto->modelo ?? '—',
+                        'serie'  => $d->serie->serie ?? '—',
+                    ];
+                }
+
+                // 👉 AGREGAR el snapshot al historial principal de la responsiva
+                $cambiosResp['detalles_productos'] = $productosSnapshot;
+
                 \App\Models\ResponsivaHistorial::create([
                     'responsiva_id' => $responsiva->id,
                     'user_id'       => auth()->id(),
@@ -651,31 +738,9 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             $cambiosAsignacion = [];
 
-            /* ===================================
-            🔹 CAMBIOS DE PRODUCTOS (SERIES)
-            =================================== */
-            if ($toAdd) {
-                foreach ($toAdd as $serieId) {
-                    $serieObj = ProductoSerie::find($serieId);
-                    if ($serieObj) {
-                        $cambiosAsignacion['productos'][] = [
-                            'serie'  => $serieObj->serie,
-                            'accion' => 'Agregado'
-                        ];
-                    }
-                }
-            }
-
-            if ($toRemove) {
-                foreach ($toRemove as $serieId) {
-                    $serieObj = ProductoSerie::find($serieId);
-                    if ($serieObj) {
-                        $cambiosAsignacion['productos'][] = [
-                            'serie'  => $serieObj->serie,
-                            'accion' => 'Removido'
-                        ];
-                    }
-                }
+            // 🔵 Reusar los mismos cambios de productos también en la parte de asignación
+            if (!empty($cambiosProductos)) {
+                $cambiosAsignacion['productos'] = $cambiosProductos;
             }
 
             $antesC = optional(\App\Models\Colaborador::find($original['colaborador_id']));
