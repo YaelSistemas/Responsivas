@@ -285,10 +285,25 @@ class OrdenCompraController extends Controller implements HasMiddleware
            NUEVA LÓGICA CORREGIDA PARA PARTIDAS + IVA MANUAL
         ============================================================ */
 
-        $ivaPctOC = (float) ($data['iva_porcentaje'] ?? 16);
+        // Normalización IVA%
+        $ivaPctOC = $data['iva_porcentaje'] === null || $data['iva_porcentaje'] === ''
+            ? 0
+            : (float)$data['iva_porcentaje'];
+
+        // Tomar IVA manual enviado
         $ivaManual = $request->input('iva_manual');
 
-        $usarIvaManual = ($ivaPctOC == 0 && $ivaManual !== null && $ivaManual !== '');
+        // Verificar permisos
+        $canManual = auth()->user()->hasRole('Administrador') 
+                || auth()->user()->hasRole('Compras IVA');
+
+        // Si no puede usar IVA manual → forzar a 0
+        if (!$canManual) {
+            $ivaManual = 0;
+        }
+
+        // Usar IVA manual solo si IVA% = 0 y el valor es numérico
+        $usarIvaManual = ($ivaPctOC == 0 && is_numeric($ivaManual));
 
         // 1) Generar subtotales
         $subtotalOC = 0;
@@ -430,7 +445,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
     DB::transaction(function () use ($request, $oc, $tabla, $data, $tenantId, $puedeCambiarFolio, $folios) {
 
-        /* ================== FOLIO ========== */
+        /* ========== FOLIO ========== */
         $mueveAtras = false;
 
         if ($puedeCambiarFolio && !empty($data['numero_orden'])) {
@@ -452,40 +467,84 @@ class OrdenCompraController extends Controller implements HasMiddleware
             unset($data['numero_orden']);
         }
 
-        /* ================== PROVEEDOR ========== */
+        /* ========== PROVEEDOR ========== */
         if (\Schema::hasColumn($tabla, 'proveedor')) {
             $prov = Proveedor::find($data['proveedor_id']);
             $data['proveedor'] = $prov?->nombre ?? '';
         }
 
-        // Normalización correcta del IVA
+        /* ========== Normalizar IVA% ========== */
         $rawIva = $request->input('iva_porcentaje');
 
         if ($rawIva === null || $rawIva === '') {
-            // Usuario dejó campo vacío → IVA manual
             $data['iva_porcentaje'] = null;
         } else {
             $data['iva_porcentaje'] = (float)$rawIva;
         }
 
-        // Necesario para cálculos posteriores
-        $ivaPctOC = $data['iva_porcentaje']; 
+        $ivaPctOC = $data['iva_porcentaje'];
 
         /* ============================================================
-           NUEVA LÓGICA COMPLETA PARA PARTIDAS + IVA MANUAL
+           VALIDACIÓN DE PERMISOS PARA IVA MANUAL  (ÚNICO BLOQUE)
+        ============================================================ */
+        $canManual = auth()->user()->hasRole('Administrador')
+                    || auth()->user()->hasRole('Compras IVA');
+
+        $ivaManualMonto = (float)$request->input('iva'); 
+        $ivaManualFlag  = $request->input('iva_manual'); 
+
+        $usuarioQuiereManual = ($ivaManualFlag !== null && $ivaManualFlag !== '' && $ivaPctOC == 0);
+
+        if (!$canManual) {
+
+            // Si el usuario NO tiene permiso y coloca IVA% = 0:
+            // Debe ser un IVA completamente CERO.
+            if ($ivaPctOC == 0) {
+
+                $ivaPctOC = 0;           // IVA% permitido = 0
+                $ivaManualMonto = 0;     // IVA monto debe ser CERO
+
+                // Forzar en request para que no arrastre valores anteriores
+                $request->merge([
+                    'iva_porcentaje' => 0,
+                    'iva'            => 0,
+                    'iva_manual'     => null,
+                ]);
+
+                $usarIvaManual = false;  // No puede ser modo manual
+            }
+            else {
+
+                // IVA automático normal (casos IVA% > 0)
+                $subtotalTmp = 0;
+                foreach ($request->items as $r) {
+                    $subtotalTmp += ((float)$r['cantidad'] * (float)$r['precio']);
+                }
+
+                $ivaManualMonto = round($subtotalTmp * ($ivaPctOC / 100), 4);
+
+                // Asegurar valores correctos en request
+                $request->merge([
+                    'iva_porcentaje' => $ivaPctOC,
+                    'iva'            => $ivaManualMonto,
+                    'iva_manual'     => null,
+                ]);
+
+                $usarIvaManual = false;
+            }
+        }
+        else {
+            // Usuarios autorizados SÍ pueden editar manualmente
+            $usarIvaManual = ($ivaPctOC == 0);
+        }
+
+        /* ============================================================
+           PROCESAR PARTIDAS (YA CON PERMISOS)
         ============================================================ */
 
-        // IVA manual enviado desde la vista
-        $ivaManualMonto = (float) $request->input('iva');   // IVA real escrito por el usuario
-
-        // NUEVA REGLA: IVA MANUAL SIEMPRE QUE IVA% == 0
-        $usarIvaManual = ($ivaPctOC == 0);
-
-        // Obtener partidas actuales
         $existentes = $oc->detalles()->get()->keyBy('id');
         $vistos = [];
 
-        // 1) Calcular subtotales
         $subtotalOC = 0;
         $temp = [];
 
@@ -509,12 +568,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $subtotalOC += $subtotal;
         }
 
-        // 2) Insertar/Actualizar filas
         foreach ($temp as $d) {
 
             if ($usarIvaManual) {
-
-                // Distribuir el IVA manual proporcionalmente
                 $ivaMonto = $subtotalOC > 0
                     ? round(($d['subtotal'] / $subtotalOC) * (float)$ivaManualMonto, 4)
                     : 0;
@@ -523,10 +579,8 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
             } else {
 
-                // IVA automático
-                $ivaPctFila = $ivaPctOC ?? 16;   // POR SI ES NULL, USAMOS 16%
+                $ivaPctFila = $ivaPctOC ?? 16;
                 $ivaMonto   = round($d['subtotal'] * ($ivaPctFila / 100), 4);
-
             }
 
             $totalFila = round($d['subtotal'] + $ivaMonto, 4);
@@ -545,33 +599,26 @@ class OrdenCompraController extends Controller implements HasMiddleware
             ];
 
             if ($d['id'] && $existentes->has($d['id'])) {
-                // UPDATE
                 $existentes[$d['id']]->update($payload);
                 $vistos[] = $d['id'];
             } else {
-                // CREATE
                 $oc->detalles()->create($payload);
             }
         }
 
-        // 3) Eliminar partidas faltantes
         $toDelete = $existentes->keys()->diff($vistos);
         foreach ($toDelete as $delId) {
             $existentes[$delId]->delete();
         }
 
-        // 4) Calcular IVA cabecera
         if ($usarIvaManual) {
-            // Respetar el IVA escrito por el usuario tal cual
             $ivaMontoOC = (float)$ivaManualMonto;
         } else {
-            // IVA automático
             $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
         }
 
         $totalOC = round($subtotalOC + $ivaMontoOC, 4);
 
-        // 5) Guardar cabecera
         if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotalOC;
         if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $ivaMontoOC;
 
@@ -581,7 +628,6 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $oc->fill($data);
         $oc->save();
 
-        // Ajustar contador si se movió folio hacia atrás
         if ($mueveAtras) {
             $folios->reconcileToDbMax($tenantId);
         }
@@ -589,7 +635,6 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
     return redirect()->route('oc.show', $oc)->with('updated', true);
 }
-
 
     /* ===================== Vistas y PDF ===================== */
 

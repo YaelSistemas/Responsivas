@@ -69,6 +69,8 @@
     // Solo admin puede editar No. de orden
     $isAdmin = Auth::user()->hasRole('Administrador');
 
+    $canManual = Auth::user()->hasRole('Administrador') || Auth::user()->hasRole('Compras IVA');
+
     // Viene del controlador leyendo oc_counters.last_seq + 1
     $numeroSugerido = $numeroSugerido ?? '';
     $numeroInicial  = old('numero_orden', $numeroSugerido);
@@ -386,80 +388,72 @@
     });
   </script>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-
-        let ivaManual = false;
-        const ivaPct = document.getElementById('ivaPct');
-        const ivaInput = document.getElementById('iva');
-        const totalInput = document.getElementById('total');
-        const subtotalInput = document.getElementById('subtotal');
-
-        // --- Detecta si IVA% pasa a 0 → activar modo manual
-        ivaPct.addEventListener("input", () => {
-            const pct = parseFloat(ivaPct.value || 0);
-
-            if (pct === 0) {
-                ivaManual = true;
-                ivaInput.removeAttribute("readonly");
-
-                // Reiniciar IVA manual a 0 si estaba vacío
-                if (ivaInput.value === "") ivaInput.value = "0.00";
-
-                recalcManual();
-            } else {
-                ivaManual = false;
-                ivaInput.setAttribute("readonly", true);
-                recalc(); // usar cálculo automático
-            }
-        });
-
-        // --- Cuando el usuario edita IVA manual, recalcula total
-        ivaInput.addEventListener("input", () => {
-            if (ivaManual) recalcManual();
-        });
-
-        // --- Función de cálculo manual
-        function recalcManual() {
-            const subtotal = parseFloat(subtotalInput.value || 0);
-            const iva = parseFloat(ivaInput.value || 0);
-
-            const total = subtotal + iva;
-
-            totalInput.value = total.toFixed(2);
-        }
-    });
-  </script>
-
-  <script>
+<script>
 document.addEventListener("DOMContentLoaded", () => {
 
-    const ivaInput = document.getElementById("iva");
-    const ivaPct   = document.getElementById("ivaPct");
+    const CAN_MANUAL = {{ $canManual ? 'true' : 'false' }};
+    const ivaPct     = document.getElementById("ivaPct");
+    const ivaInput   = document.getElementById("iva");
+    const subtotal   = document.getElementById("subtotal");
+    const total      = document.getElementById("total");
     const ivaManualHidden = document.getElementById("ivaManualInput");
 
-    // Cuando el usuario escribe IVA manual,
-    // copiamos ese valor al campo oculto IVA_MANUAL
-    ivaInput.addEventListener("input", function () {
-        if (!ivaInput.hasAttribute("readonly")) {
-            ivaManualHidden.value = ivaInput.value;
-        }
-    });
-
-    // Cuando el usuario cambia IVA%,
-    // si es >0, limpiamos el IVA manual oculto
-    ivaPct.addEventListener("input", function () {
+    function applyIvaLogic() {
         const pct = parseFloat(ivaPct.value || 0);
+        const sub = parseFloat(subtotal.value || 0);
 
-        if (pct > 0) {
-            ivaManualHidden.value = "";
-        } else {
-            // IVA manual entra en modo activo → asegurar que no quede vacío
-            if (ivaInput.value === "") ivaInput.value = "0.00";
-            ivaManualHidden.value = ivaInput.value;
+        if (pct === 0) {
+
+            // Bloqueo para usuarios sin permisos
+            if (!CAN_MANUAL) {
+                ivaInput.readOnly = true;
+                ivaInput.value = "0.00";
+                ivaManualHidden.value = "0.00";
+                total.value = sub.toFixed(2);
+                return;
+            }
+
+            // Usuarios con permisos → IVA manual
+            ivaInput.readOnly = false;
+
+            // Asegurar valor inicial
+            if (ivaInput.value === "" || isNaN(parseFloat(ivaInput.value))) {
+                ivaInput.value = "0.00";
+            }
+
+            const ivaManual = parseFloat(ivaInput.value || 0);
+
+            // Guardamos IVA manual igual que en EDIT
+            ivaManualHidden.value = ivaManual.toFixed(2);
+
+            total.value = (sub + ivaManual).toFixed(2);
         }
-    });
+
+        else {
+            // IVA automático
+            ivaInput.readOnly = true;
+
+            const ivaCalc = sub * (pct / 100);
+            ivaInput.value = ivaCalc.toFixed(2);
+
+            // En modo automático IVA manual se borra
+            ivaManualHidden.value = "";
+
+            total.value = (sub + ivaCalc).toFixed(2);
+        }
+    }
+
+    // Eventos
+    ivaPct.addEventListener("input", applyIvaLogic);
+    ivaInput.addEventListener("input", applyIvaLogic);
+
+    // Recalcular siempre que cambien partidas
+    const watcher = new MutationObserver(applyIvaLogic);
+    watcher.observe(subtotal, { attributes: true, childList: true, subtree: true });
+
+    applyIvaLogic();
 });
 </script>
+
 
 </x-app-layout>

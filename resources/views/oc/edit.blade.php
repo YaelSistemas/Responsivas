@@ -66,6 +66,8 @@ $fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDa
 $isAdminCanEditFolio = auth()->user()->hasRole('Administrador')
     || auth()->user()->can('oc.edit_prefix');
 
+$canManual = auth()->user()->hasRole('Administrador')
+             || auth()->user()->hasRole('Compras IVA');
 
 // ====================================================
 // 1) OBTENER IVA% REAL
@@ -372,10 +374,23 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
                 </div>
               </div>
 
+              {{-- IVA MONTO --}}
               <div>
-                <label>IVA</label>
-                <input type="number" step="0.01" min="0" name="iva" id="iva" value="{{ $fmt2($defaultIvaMonto) }}" @if($defaultIva != 0) readonly @endif>
-                <input type="hidden" name="iva_manual" id="ivaManualInput" value="{{ $defaultIva == 0 ? $fmt2($defaultIvaMonto) : '' }}">
+                  <label>IVA</label>
+
+                  @if($canManual)
+                      {{-- Admin y Compras IVA pueden modificar si IVA% == 0 --}}
+                      <input type="number" step="0.01" min="0" name="iva" id="iva"
+                            value="{{ $fmt2($defaultIvaMonto) }}"
+                            @if($defaultIva != 0) readonly @endif>
+                  @else
+                      {{-- Otros usuarios: solo lectura SIEMPRE --}}
+                      <input type="number" step="0.01" min="0" name="iva" id="iva"
+                            value="{{ $fmt2($defaultIvaMonto) }}" readonly>
+                  @endif
+
+                  <input type="hidden" name="iva_manual" id="ivaManualInput"
+                        value="{{ $defaultIva == 0 ? $fmt2($defaultIvaMonto) : '' }}">
               </div>
 
               <div>
@@ -404,6 +419,8 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
 
   <script>
 document.addEventListener("DOMContentLoaded", () => {
+
+  const canManual = {{ $canManual ? 'true' : 'false' }};
 
     /* ============================================================
        VARIABLES DE DOM
@@ -486,8 +503,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const isManual = (pct === 0);
 
         if (isManual) {
-            // IVA manual editable
-            elIva.readOnly = false;
+            // IVA MONTO editable SOLO si tiene permiso
+            elIva.readOnly = !canManual;
+
             const ivaUser = parseFloat(elIva.value || 0);
             elTotal.value = (subtotal + ivaUser).toFixed(2);
             return;
@@ -586,9 +604,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     recalc(); // cálculo inicial
 
-    // Activar modo manual al inicio si IVA% = 0
+    // ============================================================
+    // CONFIGURAR ESTADO INICIAL DE IVA SEGÚN PERMISOS Y IVA%
+    // ============================================================
+    const pctInit = parseFloat(ivaPct.value || "0");
+
+    if (pctInit === 0) {
+        // Modo manual → respetar valor cargado desde Blade
+        elIva.readOnly = !canManual;
+    } else {
+        // IVA automático
+        elIva.readOnly = true;
+        // recalcular por si subtotal cambió
+        elIva.value = ((parseFloat(elSub.value || 0) * pctInit) / 100).toFixed(2);
+    }
+
+    // Activar modo manual al inicio si IVA% = 0, pero solo si tiene permisos
     if (parseFloat(ivaPct.value || "0") === 0) {
-        elIva.readOnly = false;
+        elIva.readOnly = !canManual; // ← SOLO usuarios con permiso pueden editar
+    } else {
+        elIva.readOnly = true; // IVA automático siempre bloqueado
     }
 
     /* ============================================================
@@ -622,11 +657,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const pct = parseFloat(ivaPct.value || "0");
 
         if (pct === 0) {
-            // Activa modo manual
-            elIva.readOnly = false;
+            // IVA% = 0 → siempre poner IVA monto en 0
+            elIva.value = "0.00";
+            elIva.readOnly = !canManual;
         } else {
-            // Activa modo automático
+            // IVA automático
             elIva.readOnly = true;
+            elIva.value = ((parseFloat(elSub.value || 0) * pct) / 100).toFixed(2);
         }
 
         recalc();
