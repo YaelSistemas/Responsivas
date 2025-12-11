@@ -13,6 +13,8 @@ use App\Models\Colaborador;
 use App\Models\ProductoSerieHistorial;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class DevolucionController extends Controller implements HasMiddleware
 {
@@ -26,7 +28,7 @@ class DevolucionController extends Controller implements HasMiddleware
             new Middleware('auth'),
             new Middleware('permission:devoluciones.view',   only: ['index', 'show', 'pdf']),
             new Middleware('permission:devoluciones.create', only: ['create', 'store']),
-            new Middleware('permission:devoluciones.edit',   only: ['edit', 'update']),
+            new Middleware('permission:devoluciones.edit',   only: ['edit', 'update','firmarEnSitio']),
             new Middleware('permission:devoluciones.delete', only: ['destroy']),
         ];
     }
@@ -429,7 +431,14 @@ class DevolucionController extends Controller implements HasMiddleware
 
     public function show($id)
     {
-        $devolucion = Devolucion::with('responsiva.colaborador', 'productos', 'recibidoPor')->findOrFail($id);
+        $devolucion = Devolucion::with(
+            'responsiva.colaborador.unidadServicio',
+            'productos',
+            'recibidoPor',
+            'entregoColaborador',
+            'psitioColaborador'
+        )->findOrFail($id);
+
         return view('devoluciones.show', compact('devolucion'));
     }
 
@@ -602,4 +611,81 @@ class DevolucionController extends Controller implements HasMiddleware
         $pdf = \PDF::loadView('devoluciones.pdf_sheet', compact('devolucion'));
         return $pdf->stream('Devolución-'.$devolucion->folio.'.pdf');
     }
+
+    public function firmarEnSitio(Request $request, Devolucion $devolucion)
+{
+    // Recuerda que este método está protegido por permission:devoluciones.edit
+    $request->validate([
+        'campo' => 'required|in:entrego,psitio',
+        'firma' => 'required|string', // dataURL base64
+    ]);
+
+    $campo   = $request->input('campo');      // 'entrego' o 'psitio'
+    $dataUrl = $request->input('firma');
+
+    if (!Str::startsWith($dataUrl, 'data:image')) {
+        return back()->with('error', 'Formato de firma inválido.');
+    }
+
+    [$meta, $content] = explode(',', $dataUrl, 2);
+    $binary = base64_decode($content);
+
+    if (!$binary) {
+        return back()->with('error', 'No se pudo procesar la firma.');
+    }
+
+    $ext  = 'png';
+    $dir  = 'firmas_devoluciones';
+    $name = "devolucion-{$devolucion->id}_{$campo}.{$ext}";
+    $path = "{$dir}/{$name}";
+
+    Storage::disk('public')->put($path, $binary);
+
+    if ($campo === 'entrego') {
+        $devolucion->firma_entrego_path = $path;
+    } else {
+        $devolucion->firma_psitio_path  = $path;
+    }
+
+    $devolucion->save();
+
+    return redirect()
+        ->route('devoluciones.show', $devolucion->id)
+        ->with('success', 'Firma guardada correctamente.');
+}
+
+public function borrarFirmaEnSitio(Request $request, Devolucion $devolucion)
+{
+    // Si tienes política, puedes usar:
+    // $this->authorize('update', $devolucion);
+    // O tu gate de permiso:
+    // $this->authorize('devoluciones.edit');
+
+    $data = $request->validate([
+        'campo' => 'required|in:entrego,psitio',
+    ]);
+
+    $campo = $data['campo'];
+
+    if ($campo === 'entrego' && $devolucion->firma_entrego_path) {
+        // Borrar archivo físico si existe
+        if (Storage::exists($devolucion->firma_entrego_path)) {
+            Storage::delete($devolucion->firma_entrego_path);
+        }
+        // Limpiar columna en BD
+        $devolucion->firma_entrego_path = null;
+    }
+
+    if ($campo === 'psitio' && $devolucion->firma_psitio_path) {
+        if (Storage::exists($devolucion->firma_psitio_path)) {
+            Storage::delete($devolucion->firma_psitio_path);
+        }
+        $devolucion->firma_psitio_path = null;
+    }
+
+    $devolucion->save();
+
+    return back()->with('status', 'Firma eliminada. Ahora puedes volver a firmar en sitio.');
+}
+
 }

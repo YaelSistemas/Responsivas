@@ -18,6 +18,7 @@ use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\OcAdjuntoController;
 use App\Http\Controllers\OcLogController;
 use App\Http\Controllers\DevolucionController;
+use App\Http\Controllers\DevolucionFirmaLinkController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,6 +41,15 @@ Route::get('/firmar/{token}/pdf', [PublicResponsivaController::class, 'pdf'])
 Route::get('/public/responsivas/{responsiva}/pdf', [PublicResponsivaController::class, 'pdfById'])
     ->name('public.responsivas.pdf')
     ->middleware('signed');
+
+// Rutas públicas para firmar SIN login
+Route::get('/firmar-devolucion/{token}', 
+    [DevolucionFirmaLinkController::class, 'showForm']
+)->name('devoluciones.firmaExterna.show');
+
+Route::post('/firmar-devolucion/{token}', 
+    [DevolucionFirmaLinkController::class, 'guardarFirma']
+)->name('devoluciones.firmaExterna.store');
 /* <<< FIN */
 
 /*
@@ -216,6 +226,18 @@ Route::middleware(['auth'])->group(function () {
     // PDF interno
     Route::get('/devoluciones/{devolucion}/pdf', [DevolucionController::class, 'pdf'])
         ->name('devoluciones.pdf');
+
+    Route::post('devoluciones/{devolucion}/firmar-en-sitio', [DevolucionController::class, 'firmarEnSitio'])
+        ->name('devoluciones.firmarEnSitio');
+
+    Route::delete('/devoluciones/{devolucion}/firma', [DevolucionController::class, 'borrarFirmaEnSitio'])
+        ->name('devoluciones.borrarFirmaEnSitio');
+    
+    Route::middleware(['auth'])->group(function () {
+        Route::post('/devoluciones/{devolucion}/generar-link-firma', 
+            [DevolucionFirmaLinkController::class, 'generarLink']
+        )->name('devoluciones.generarLinkFirma');
+    });
 
     /*
     |--------------------  Órdenes de Compra (con permisos)  --------------------

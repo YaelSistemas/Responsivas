@@ -104,20 +104,68 @@
           ?: ($psitio->name ?? '')
         : '';
 
-    // Firmas
+    // Firmas globales por usuario (como ya tenías)
     $firmaUrlFor = function ($user) {
       if (!$user) return null;
-      $id = $user->id ?? null;
+      $id   = $user->id ?? null;
       $name = trim($user->name ?? ($user->nombre ?? ''));
       foreach (['png','jpg','jpeg','webp','svg'] as $ext) {
-        if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) return asset("storage/firmas/{$id}.{$ext}");
-        if ($name && file_exists(public_path("storage/firmas/".\Illuminate\Support\Str::slug($name).".{$ext}"))) return asset("storage/firmas/".\Illuminate\Support\Str::slug($name).".{$ext}");
+        if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) {
+            return asset("storage/firmas/{$id}.{$ext}");
+        }
+        if ($name && file_exists(public_path("storage/firmas/".\Illuminate\Support\Str::slug($name).".{$ext}"))) {
+            return asset("storage/firmas/".\Illuminate\Support\Str::slug($name).".{$ext}");
+        }
       }
       return null;
     };
-    $firmaEntrego = $firmaUrlFor($col);
+
+    // Firmas específicas de ESTA devolución (tienen prioridad)
+    $firmaEntregoDevolucion = $devolucion->firma_entrego_path
+        ? asset('storage/' . ltrim($devolucion->firma_entrego_path, '/'))
+        : null;
+
+    $firmaPsitioDevolucion = $devolucion->firma_psitio_path
+        ? asset('storage/' . ltrim($devolucion->firma_psitio_path, '/'))
+        : null;
+
+    // RECIBIÓ → admin (usuario Depto Sistemas), sólo desde firmas globales
     $firmaRecibio = $firmaUrlFor($recibio);
-    $firmaPsitio  = $firmaUrlFor($psitio);
+
+    // === Firma automática para PSITIO según colaborador ===
+    $psitioFirmaAuto = null;
+
+    if ($psitio) {
+        // Nombre completo en mayúsculas (soporta tildes/ñ)
+        $nombrePsitio = mb_strtoupper(trim(
+            ($psitio->nombre ?? '') . ' ' . ($psitio->apellidos ?? '')
+        ), 'UTF-8');
+
+        // Mapa: nombre completo -> archivo de firma en storage/public/firmas
+        $mapFirmas = [
+            'YAEL ALAIN ROMERO CAZAREZ'        => '1.png',
+            'ANA PATRICIA MAYORGA CAMACHO'     => '2.png',
+            'LEONARDO DANIEL CENTENO GUERRERO' => '3.png',
+            'GUSTAVO GUADALUPE PIÑA PEREZ'     => '4.png',
+        ];
+
+        if (isset($mapFirmas[$nombrePsitio])) {
+            $file = $mapFirmas[$nombrePsitio];
+
+            // Verificamos que el archivo exista en public/storage/firmas
+            $rutaPublica = public_path('storage/firmas/' . $file);
+            if (file_exists($rutaPublica)) {
+                $psitioFirmaAuto = asset('storage/firmas/' . $file);
+            }
+        }
+
+        // ❌ OJO: ya NO llamamos a $firmaUrlFor($psitio) aquí
+        // Eso evita que cualquier colaborador con id=1 use 1.png por error.
+    }
+
+    // ENTREGÓ y PSITIO
+    $firmaEntrego = $firmaEntregoDevolucion;                     // siempre en sitio
+    $firmaPsitio  = $firmaPsitioDevolucion ?: $psitioFirmaAuto;  // primero la de devolución, luego la automática
   @endphp
 
   <style>
@@ -220,6 +268,26 @@
         <div class="actions">
           <a href="{{ route('devoluciones.index') }}" class="btn btn-secondary">← Devoluciones</a>
           <a href="{{ route('devoluciones.pdf', $devolucion) }}" class="btn btn-primary" target="_blank" rel="noopener">Descargar PDF</a>
+
+          @can('devoluciones.edit')
+              {{-- Solo mostrar link de ENTREGÓ si NO hay firma guardada --}}
+              @if (empty($devolucion->firma_entrego_path))
+                  <button type="button"
+                          class="btn btn-secondary"
+                          onclick="openModalLinkFirmaDevolucion('entrego')">
+                      Link firma ENTREGÓ
+                  </button>
+              @endif
+
+              {{-- Solo mostrar link de PSITIO si NO hay firma en sitio ni firma automática --}}
+              @if (empty($devolucion->firma_psitio_path) && empty($psitioFirmaAuto))
+                  <button type="button"
+                          class="btn btn-secondary"
+                          onclick="openModalLinkFirmaDevolucion('psitio')">
+                      Link firma PSITIO
+                  </button>
+              @endif
+          @endcan
         </div>
 
         <div id="printable" class="doc">
@@ -406,24 +474,53 @@
                 {{-- 2️⃣ ENTREGÓ (colaborador) --}}
                 <div class="sign">
                     <div class="sign-title">ENTREGÓ</div>
-                    <div class="sign-sub"> CONFORMIDAD USUARIO</div>
+                    <div class="sign-sub">CONFORMIDAD USUARIO</div>
+
                     <div class="sign-space">
                         @if($firmaEntrego)
                             <img class="firma-img" src="{{ $firmaEntrego }}" alt="Firma entregó (colaborador)">
                         @endif
                     </div>
+
                     <div class="sign-inner">
-                        <div class="sign-name">{{ $colNombreEntrego  }}</div>
+                        <div class="sign-name">{{ $colNombreEntrego }}</div>
                         <div class="sign-line"></div>
                         <div class="sign-caption">Nombre y firma</div>
                     </div>
+
+                    @can('devoluciones.edit')
+                        @if($devolucion->firma_entrego_path)
+                            {{-- Botón para borrar firma ENTREGÓ --}}
+                            <form method="POST"
+                                  action="{{ route('devoluciones.borrarFirmaEnSitio', $devolucion) }}"
+                                  style="margin-top:6px; text-align:center;">
+                                @csrf
+                                @method('DELETE')
+                                <input type="hidden" name="campo" value="entrego">
+                                <button type="submit"
+                                        class="btn btn-danger"
+                                        onclick="return confirm('¿Quitar firma de ENTREGÓ? Podrás volver a firmar en sitio.');">
+                                    Quitar firma (ENTREGÓ)
+                                </button>
+                            </form>
+                        @else
+                            {{-- Si NO hay firma guardada, mostrar botón para firmar --}}
+                            <div class="mt-2" style="text-align:center;">
+                                <button type="button"
+                                        class="btn btn-secondary"
+                                        onclick="openFirma('entrego')">
+                                    Firmar en sitio (ENTREGÓ)
+                                </button>
+                            </div>
+                        @endif
+                    @endcan
                 </div>
             </div>
             
             {{-- 🔹 Segunda fila centrada: Psitio (colaborador auxiliar) --}}
             <div class="firma-row" style="justify-content:center; margin-top:16px;">
                 <div class="sign" style="flex:0 0 60%; max-width:60%;">
-                    <div class="sign-title">RECIBIO</div>
+                    <div class="sign-title">RECIBIÓ</div>
                     <div class="sign-sub">PERSONA EN SITIO</div>
                     <div class="sign-space">
                         @if($firmaPsitio)
@@ -435,6 +532,33 @@
                         <div class="sign-line"></div>
                         <div class="sign-caption">Nombre y firma</div>
                     </div>
+
+                    @can('devoluciones.edit')
+                        @if($devolucion->firma_psitio_path)
+                            {{-- Hay firma dibujada en sitio → permitir borrarla --}}
+                            <form method="POST"
+                                  action="{{ route('devoluciones.borrarFirmaEnSitio', $devolucion) }}"
+                                  style="margin-top:6px; text-align:center;">
+                                @csrf
+                                @method('DELETE')
+                                <input type="hidden" name="campo" value="psitio">
+                                <button type="submit"
+                                        class="btn btn-danger"
+                                        onclick="return confirm('¿Quitar firma de PSITIO? Podrás volver a firmar en sitio.');">
+                                    Quitar firma (PSITIO)
+                                </button>
+                            </form>
+                        @elseif(!$devolucion->firma_psitio_path && !$psitioFirmaAuto)
+                            {{-- No hay firma en sitio ni firma automática → mostrar botón para firmar --}}
+                            <div class="mt-2" style="text-align:center;">
+                                <button type="button"
+                                        class="btn btn-secondary"
+                                        onclick="openFirma('psitio')">
+                                    Firmar en sitio (PSITIO)
+                                </button>
+                            </div>
+                        @endif
+                    @endcan
                 </div>
             </div>
         </div>
@@ -444,4 +568,240 @@
       </div>
     </div>
   </div>
+
+  {{-- 🔹 MODAL LINK FIRMA DE DEVOLUCIÓN --}}
+<div id="modalLinkFirmaDevo"
+     class="fixed inset-0 hidden bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-lg p-4 w-full max-w-xl mx-4">
+    <h3 id="modalLinkDevoTitle" class="text-lg font-semibold mb-3">
+      Enlace de firma
+    </h3>
+
+    <div class="mb-3">
+      <label class="block text-sm font-medium mb-1">Link</label>
+      <input type="text" id="linkFirmaDevo"
+             class="w-full border rounded px-2 py-1 text-sm"
+             readonly>
+    </div>
+
+    <div class="flex gap-2 justify-end flex-wrap">
+      <button type="button" class="btn btn-secondary"
+              onclick="cerrarModalLinkFirmaDevo()">
+        Cerrar
+      </button>
+
+      <button type="button" class="btn btn-secondary"
+              onclick="window.open(document.getElementById('linkFirmaDevo').value, '_blank')">
+        Abrir link
+      </button>
+
+      <button type="button" class="btn btn-secondary"
+              onclick="navigator.clipboard.writeText(document.getElementById('linkFirmaDevo').value)">
+        Copiar link
+      </button>
+    </div>
+  </div>
+</div>
+
+  {{-- MODAL FIRMA EN SITIO (ENTREGÓ / PSITIO) --}}
+<div id="modalFirmar"
+     class="fixed inset-0 hidden bg-black/50 p-4 flex items-center justify-center overflow-y-auto"
+     style="z-index:60;"
+     onclick="closeFirma()">
+  <div id="panelFirma"
+       class="bg-white rounded-lg p-4 w-[640px] max-w-[92vw]"
+       onclick="event.stopPropagation()">
+    <h3 id="firmaTitle" class="text-lg font-semibold mb-3">Firmar</h3>
+
+    <form id="formFirmaEnSitio"
+          method="POST"
+          action="{{ route('devoluciones.firmarEnSitio', $devolucion) }}">
+      @csrf
+
+      {{-- campo para saber si es ENTREGÓ o PSITIO --}}
+      <input type="hidden" name="campo" id="campoFirma" value="entrego">
+      <input type="hidden" name="firma" id="firmaData">
+
+      <div class="border border-dashed rounded p-2 mb-2">
+        <canvas id="canvasFirma"
+                width="560" height="180"
+                style="width:100%;height:180px;touch-action:none;"></canvas>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button type="button" class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
+        <button type="button" class="btn btn-secondary" onclick="closeFirma()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Firmar y guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // === LINK DE FIRMA PARA DEVOLUCIONES ===
+  function openModalLinkFirmaDevolucion(tipo) {
+    const who   = tipo || 'entrego';
+    const input = document.getElementById('linkFirmaDevo');
+    const modal = document.getElementById('modalLinkFirmaDevo');
+    const title = document.getElementById('modalLinkDevoTitle');
+
+    fetch("{{ route('devoluciones.generarLinkFirma', $devolucion) }}", {
+        method: "POST",
+        headers: {
+            "X-CSRF-TOKEN": "{{ csrf_token() }}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ campo: who }),
+    })
+    .then(async (r) => {
+        const data = await r.json();
+
+        // SI HAY ERROR (403, 500, etc.) O NO VIENE 'link'
+        if (!r.ok || !data.link) {
+            alert(data.message || 'No se pudo generar el enlace de firma.');
+            return;
+        }
+
+        if (input) input.value = data.link;
+
+        if (title) {
+          title.textContent = (who === 'psitio')
+            ? 'Enlace de firma - RECIBIÓ EN SITIO'
+            : 'Enlace de firma - ENTREGÓ (colaborador)';
+        }
+
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+        }
+    })
+    .catch(() => {
+        alert('No se pudo generar el enlace de firma. Intenta de nuevo.');
+    });
+  }
+
+  function cerrarModalLinkFirmaDevo() {
+    const modal = document.getElementById('modalLinkFirmaDevo');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  // === FIRMA EN SITIO (canvas) ===
+  let firmaTarget = 'entrego'; // 'entrego' o 'psitio'
+
+  function openFirma(target) {
+    firmaTarget = target || 'entrego';
+    document.getElementById('campoFirma').value = firmaTarget;
+
+    const title = document.getElementById('firmaTitle');
+    if (firmaTarget === 'entrego') {
+      title.textContent = 'Firmar EN SITIO - ENTREGÓ (colaborador)';
+    } else {
+      title.textContent = 'Firmar EN SITIO - RECIBIÓ EN SITIO (colaborador)';
+    }
+
+    document.getElementById('modalFirmar').classList.remove('hidden');
+    initCanvas();
+  }
+
+  function closeFirma() {
+    document.getElementById('modalFirmar').classList.add('hidden');
+  }
+
+  let c, ctx, drawing = false, lastX = 0, lastY = 0, hasStrokes = false;
+
+  function initCanvas() {
+    c   = document.getElementById('canvasFirma');
+    ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+    ctx.strokeStyle = '#000000';
+    hasStrokes = false;
+  }
+
+  function startDraw(x, y) {
+    drawing = true;
+    lastX = x; lastY = y;
+  }
+
+  function moveDraw(x, y) {
+    if (!drawing) return;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    lastX = x; lastY = y;
+    hasStrokes = true;
+  }
+
+  function stopDraw() {
+    drawing = false;
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    c   = document.getElementById('canvasFirma');
+    if (!c) return;
+    ctx = c.getContext('2d');
+
+    // Mouse
+    c.addEventListener('mousedown', e => {
+      const rect = c.getBoundingClientRect();
+      startDraw(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    c.addEventListener('mousemove', e => {
+      const rect = c.getBoundingClientRect();
+      moveDraw(e.clientX - rect.left, e.clientY - rect.top);
+    });
+    c.addEventListener('mouseup', stopDraw);
+    c.addEventListener('mouseleave', stopDraw);
+
+    // Touch
+    c.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const rect = c.getBoundingClientRect();
+      const t = e.touches[0];
+      startDraw(t.clientX - rect.left, t.clientY - rect.top);
+    }, {passive:false});
+
+    c.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const rect = c.getBoundingClientRect();
+      const t = e.touches[0];
+      moveDraw(t.clientX - rect.left, t.clientY - rect.top);
+    }, {passive:false});
+
+    c.addEventListener('touchend', e => {
+      e.preventDefault();
+      stopDraw();
+    }, {passive:false});
+
+    // Botón limpiar
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    if (btnLimpiar) {
+      btnLimpiar.addEventListener('click', () => {
+        ctx.clearRect(0, 0, c.width, c.height);
+        hasStrokes = false;
+      });
+    }
+
+    // Submit → mandar base64
+    const formFirma = document.getElementById('formFirmaEnSitio');
+    if (formFirma) {
+      formFirma.addEventListener('submit', (ev) => {
+        if (!hasStrokes) {
+          ev.preventDefault();
+          alert('Por favor dibuja tu firma antes de continuar.');
+          return;
+        }
+        document.getElementById('firmaData').value = c.toDataURL('image/png');
+      });
+    }
+  });
+</script>
+
+
 </x-app-layout>

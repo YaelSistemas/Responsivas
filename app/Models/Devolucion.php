@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use App\Models\DevolucionFirmaLink;
 
 class Devolucion extends Model
 {
@@ -18,6 +19,8 @@ class Devolucion extends Model
         'recibi_id',
         'entrego_colaborador_id',
         'psitio_colaborador_id',
+        'firma_entrego_path',
+        'firma_psitio_path',
     ];
 
     protected $casts = [
@@ -83,5 +86,11 @@ class Devolucion extends Model
         return $this->belongsToMany(Producto::class, 'devolucion_producto')
                     ->withPivot('producto_serie_id')
                     ->withTimestamps();
+    }
+
+    public function firmaLinks()
+    {
+        // un link para ENTREGÓ, otro para PSITIO
+        return $this->hasMany(DevolucionFirmaLink::class);
     }
 }
