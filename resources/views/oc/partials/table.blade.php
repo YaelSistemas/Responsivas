@@ -170,7 +170,7 @@
       $creadaEn = optional($oc->created_at)->format('d-m-Y H:i');
       $editadaEn = optional($oc->updated_at)->format('d-m-Y H:i');
 
-      $puedeCambiar = auth()->user()->hasAnyRole(['Administrador', 'Compras Superior']);
+      $puedeCambiar = auth()->user()->hasAnyRole(['Administrador', 'Compras Superior', 'Compras', 'Compras IVA']);
       $puedeAdjuntar = $puedeCambiar || auth()->user()->can('oc.edit');
 
       // contador con withCount() o fallback

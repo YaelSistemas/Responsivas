@@ -24,7 +24,9 @@ use App\Http\Controllers\DevolucionController;
 | Públicas (sin auth)
 |--------------------------------------------------------------------------
 */
-Route::get('/', fn () => view('welcome'))->name('home');
+Route::get('/', function () {
+    return redirect()->route('login');
+});
 
 // Firma pública (colaborador)
 Route::get ('/firmar/{token}', [PublicResponsivaController::class, 'show'])->name('public.sign.show');
