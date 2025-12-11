@@ -76,7 +76,7 @@
       ? \Illuminate\Support\Carbon::parse($fechaDevolucion)->format('d-m-Y')
       : '—';
 
-  /* ===== FIRMAS ===== */
+    /* ===== FIRMAS ===== */
   $col = $devolucion->entregoColaborador ?? null;
   $recibio = $devolucion->recibidoPor ?? null;
   $psitio  = $devolucion->psitioColaborador ?? null;
@@ -94,20 +94,70 @@
       ? trim(($psitio->nombre ?? '').' '.($psitio->apellidos ?? ''))
       : '_________________________';
 
+  // === Firmas globales por usuario (solo se usa para RECIBIÓ) ===
   $firmaUrlFor = function ($user) {
     if (!$user) return null;
-    $id = $user->id ?? null;
+    $id   = $user->id ?? null;
     $name = trim($user->name ?? ($user->nombre ?? ''));
     foreach (['png','jpg','jpeg','webp','svg'] as $ext) {
-      if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) return public_path("storage/firmas/{$id}.{$ext}");
-      if ($name && file_exists(public_path("storage/firmas/".Str::slug($name).".{$ext}"))) return public_path("storage/firmas/".Str::slug($name).".{$ext}");
+      if ($id && file_exists(public_path("storage/firmas/{$id}.{$ext}"))) {
+        return public_path("storage/firmas/{$id}.{$ext}");
+      }
+      if ($name && file_exists(public_path("storage/firmas/".Str::slug($name).".{$ext}"))) {
+        return public_path("storage/firmas/".Str::slug($name).".{$ext}");
+      }
     }
     return null;
   };
 
+  // RECIBIÓ (admin) → misma lógica que en show.blade.php
   $firmaRecibio = $firmaUrlFor($recibio);
-  $firmaEntrego = $firmaUrlFor($col);
-  $firmaPsitio  = $firmaUrlFor($psitio);
+
+  // ENTREGÓ → SIEMPRE la firma específica de esta devolución
+  $firmaEntrego = null;
+  if (!empty($devolucion->firma_entrego_path)) {
+      $ruta = public_path('storage/'.ltrim($devolucion->firma_entrego_path, '/'));
+      if (file_exists($ruta)) {
+          $firmaEntrego = $ruta;
+      }
+  }
+
+  // PSITIO → primero firma en esta devolución, luego firma automática por nombre
+  $psitioFirmaAuto = null;
+  if ($psitio) {
+      $nombrePsitio = mb_strtoupper(
+          trim(($psitio->nombre ?? '').' '.($psitio->apellidos ?? '')),
+          'UTF-8'
+      );
+
+      $mapFirmas = [
+          'YAEL ALAIN ROMERO CAZAREZ'        => '1.png',
+          'ANA PATRICIA MAYORGA CAMACHO'     => '2.png',
+          'LEONARDO DANIEL CENTENO GUERRERO' => '3.png',
+          'GUSTAVO GUADALUPE PIÑA PEREZ'     => '4.png',
+      ];
+
+      if (isset($mapFirmas[$nombrePsitio])) {
+          $file = public_path('storage/firmas/'.$mapFirmas[$nombrePsitio]);
+          if (file_exists($file)) {
+              $psitioFirmaAuto = $file;
+          }
+      }
+  }
+
+  $firmaPsitio = null;
+  // 1) firma dibujada/guardada en esta devolución
+  if (!empty($devolucion->firma_psitio_path)) {
+      $ruta = public_path('storage/'.ltrim($devolucion->firma_psitio_path, '/'));
+      if (file_exists($ruta)) {
+          $firmaPsitio = $ruta;
+      }
+  }
+  // 2) si no hay firma en sitio, usar la automática
+  if (!$firmaPsitio && $psitioFirmaAuto) {
+      $firmaPsitio = $psitioFirmaAuto;
+  }
+
 @endphp
 
 <!DOCTYPE html>
