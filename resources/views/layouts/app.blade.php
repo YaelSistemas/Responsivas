@@ -18,8 +18,10 @@
     <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="font-sans antialiased">
-    <div class="min-h-screen bg-gray-100">
+<body class="font-sans antialiased bg-gray-100 min-h-screen flex flex-col">
+
+    {{-- CONTENIDO PRINCIPAL (ocupa todo el alto disponible) --}}
+    <div class="flex-1">
         @include('layouts.navigation')
 
         <!-- Page Heading -->
@@ -36,5 +38,27 @@
             {{ $slot }}
         </main>
     </div>
+
+    {{-- FOOTER GLOBAL --}}
+    <footer class="bg-gray-100 border-t border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4
+                    text-xs sm:text-sm text-gray-500
+                    flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p class="text-center sm:text-left">
+                © 2025 <span class="font-semibold">GRUPO VYSISA™</span>. Todos los derechos reservados.
+            </p>
+
+            <div class="flex items-center gap-4">
+                {{-- Cambia los href cuando tengas las páginas/rutas --}}
+                <a href="#" class="hover:text-gray-700 underline underline-offset-4">
+                    Contacto
+                </a>
+                <a href="#" class="hover:text-gray-700 underline underline-offset-4">
+                    Política de Privacidad
+                </a>
+            </div>
+        </div>
+    </footer>
+
 </body>
 </html>
