@@ -87,6 +87,54 @@
     .tbl th:nth-child(4), .tbl td:nth-child(4){ text-align:center; }
     .tbl td:nth-child(3) form{display:inline-block;}
 
+      .badge-estado{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:.25rem .75rem;
+    border-radius:9999px;
+    font-size:.75rem;
+    font-weight:600;
+    border-width:1px;
+    border-style:solid;
+  }
+
+  .badge-disponible{
+    background:#f3f4f6;   /* gris claro */
+    color:#374151;
+    border-color:#d1d5db;
+  }
+
+  .badge-asignado{
+    background:#dcfce7;   /* verde */
+    color:#166534;
+    border-color:#4ade80;
+  }
+
+  .badge-prestamo{
+    background:#fef9c3;   /* amarillo pastel */
+    color:#92400e;
+    border-color:#eab308;
+  }
+
+  .badge-devuelto{
+    background:#dbeafe;   /* azul claro */
+    color:#1d4ed8;
+    border-color:#93c5fd;
+  }
+
+  .badge-baja{
+    background:#fee2e2;   /* rojo claro */
+    color:#b91c1c;
+    border-color:#fecaca;
+  }
+
+  .badge-reparacion{
+    background:#ffedd5;   /* naranja */
+    color:#c2410c;
+    border-color:#fed7aa;
+  }
+
     .loading::after{
       content: '';
       width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#1d4ed8;border-radius:50%;
@@ -194,22 +242,54 @@
                       </a>
                     </td>
 
-                    {{-- Estado --}}
-                    <td>
-                      @can('productos.edit')
-                        <form method="POST" action="{{ route('productos.series.estado', [$producto,$s]) }}">
-                          @csrf @method('PUT')
-                          <span class="state-wrap">
-                            <select name="estado" class="state-select" onchange="this.form.submit()">
-                              @foreach(['disponible'=>'Disponible','asignado'=>'Asignado','devuelto'=>'Devuelto','baja'=>'Baja','reparacion'=>'Reparación'] as $val=>$lbl)
-                                <option value="{{ $val }}" @selected($s->estado===$val)>{{ $lbl }}</option>
-                              @endforeach
-                            </select>
-                          </span>
-                        </form>
-                      @else
-                        <span class="chip">{{ ucfirst($s->estado) }}</span>
-                      @endcan
+                    {{-- Estado (solo lectura, calculado) --}}
+                    <td class="text-center">
+                        @php
+                            // Estado técnico que guarda producto_series
+                            $estadoRaw = $s->estado; // disponible / asignado / devuelto / baja / reparacion
+                            $estado    = $estadoRaw;
+
+                            // Si está asignado, revisamos el historial para ver el estado lógico actual
+                            if ($estadoRaw === 'asignado') {
+
+                                // Tomamos el ÚLTIMO registro relevante de estado
+                                $ultimoEstado = $s->historial()
+                                    ->whereIn('accion', ['asignacion', 'edicion_asignacion'])
+                                    ->orderByDesc('id')
+                                    ->first();
+
+                                $estadoLogico = $ultimoEstado->estado_nuevo ?? null; // asignado / prestamo_provisional
+
+                                if ($estadoLogico === 'prestamo_provisional') {
+                                    $estado = 'prestamo';      // se muestra como “Préstamo”
+                                } elseif ($estadoLogico === 'asignado') {
+                                    $estado = 'asignado';      // se asegura que vuelva a “Asignado”
+                                }
+                            }
+
+                            $labels = [
+                                'disponible' => 'Disponible',
+                                'asignado'   => 'Asignado',
+                                'prestamo'   => 'Préstamo',
+                                'devuelto'   => 'Devuelto',
+                                'baja'       => 'Baja',
+                                'reparacion' => 'Reparación',
+                            ];
+
+                            $badgeClass = match($estado) {
+                                'disponible' => 'badge-disponible',
+                                'asignado'   => 'badge-asignado',
+                                'prestamo'   => 'badge-prestamo',
+                                'devuelto'   => 'badge-devuelto',
+                                'baja'       => 'badge-baja',
+                                'reparacion' => 'badge-reparacion',
+                                default      => 'badge-disponible',
+                            };
+                        @endphp
+
+                        <span class="badge-estado {{ $badgeClass }}">
+                            {{ $labels[$estado] ?? ucfirst($estado) }}
+                        </span>
                     </td>
 
                     {{-- HISTORIAL --}}
