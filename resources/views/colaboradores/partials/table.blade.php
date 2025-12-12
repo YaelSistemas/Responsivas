@@ -5,100 +5,97 @@
     $showActions = $canEdit || $canDelete;
   @endphp
 
-  <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg mx-auto w-full max-w-5xl">
-    <table class="table-auto w-full text-sm tbl text-center">
-      <thead class="bg-gray-100">
-        <tr class="text-center font-semibold text-gray-700">
-          <th class="px-4 py-2">Colaborador</th>
-          <th class="px-4 py-2">Empresa</th>
-          <th class="px-4 py-2">Unidad Servicio</th>
-          <th class="px-4 py-2">Área</th>
-          <th class="px-4 py-2">Puesto</th>
-          <th class="px-4 py-2">Estado</th>
+  {{-- Quitamos la tarjeta extra --}}
+  <table class="table-auto w-full text-sm tbl text-center">
+    <thead class="bg-gray-100">
+      <tr class="text-center font-semibold text-gray-700">
+        <th class="px-4 py-2">Colaborador</th>
+        <th class="px-4 py-2">Empresa</th>
+        <th class="px-4 py-2">Unidad Servicio</th>
+        <th class="px-4 py-2">Área</th>
+        <th class="px-4 py-2">Puesto</th>
+        <th class="px-4 py-2">Estado</th>
+        @role('Administrador')
+          <th class="px-4 py-2">Historial</th>
+        @endrole
+        @if($showActions)
+          <th class="px-4 py-2">Acciones</th>
+        @endif
+      </tr>
+    </thead>
+
+    <tbody>
+      @forelse ($colaboradores as $c)
+        <tr class="border-b hover:bg-gray-50 transition-colors duration-100 ease-in">
+          {{-- Colaborador --}}
+          <td class="px-4 py-2 text-left font-medium text-gray-800">
+            {{ trim($c->nombre . ' ' . $c->apellidos) }}
+          </td>
+
+          {{-- Empresa / Unidad / Área / Puesto --}}
+          <td class="px-4 py-2">{{ $c->subsidiaria->nombre ?? '—' }}</td>
+          <td class="px-4 py-2">{{ $c->unidadServicio->nombre ?? '—' }}</td>
+          <td class="px-4 py-2">{{ $c->area->nombre ?? '—' }}</td>
+          <td class="px-4 py-2">{{ $c->puesto->nombre ?? '—' }}</td>
+
+          {{-- Estado --}}
+          <td class="px-4 py-2">
+            @if($c->activo)
+              <span class="estado-activo">Activo</span>
+            @else
+              <span class="estado-inactivo">Inactivo</span>
+            @endif
+          </td>
+
           @role('Administrador')
-            <th class="px-4 py-2">Historial</th>
+            <td class="text-center">
+              <button type="button"
+                      class="btn btn-sm"
+                      onclick="openColabHistorial({{ $c->id }})"
+                      title="Ver historial">
+                Historial
+              </button>
+            </td>
           @endrole
+
           @if($showActions)
-            <th class="px-4 py-2">Acciones</th>
+            <td class="px-4 py-2">
+              <div class="flex justify-center items-center gap-4">
+                @can('colaboradores.edit')
+                  <a href="{{ route('colaboradores.edit', $c) }}"
+                     class="text-yellow-500 hover:text-yellow-700 text-lg"
+                     title="Editar">
+                    <i class="fa-solid fa-pen"></i>
+                  </a>
+                @endcan
+
+                @can('colaboradores.delete')
+                  <form action="{{ route('colaboradores.destroy', $c) }}"
+                        method="POST"
+                        onsubmit="return confirm('¿Eliminar este colaborador?');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit"
+                            class="text-red-600 hover:text-red-800 text-lg"
+                            title="Eliminar">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </form>
+                @endcan
+              </div>
+            </td>
           @endif
         </tr>
-      </thead>
-
-      <tbody>
-        @forelse ($colaboradores as $c)
-          <tr class="border-b hover:bg-gray-50 transition-colors duration-100 ease-in">
-            {{-- Colaborador --}}
-            <td class="px-4 py-2 text-left font-medium text-gray-800">
-              {{ trim($c->nombre . ' ' . $c->apellidos) }}
-            </td>
-
-            {{-- Empresa / Unidad / Área / Puesto --}}
-            <td class="px-4 py-2">{{ $c->subsidiaria->nombre ?? '—' }}</td>
-            <td class="px-4 py-2">{{ $c->unidadServicio->nombre ?? '—' }}</td>
-            <td class="px-4 py-2">{{ $c->area->nombre ?? '—' }}</td>
-            <td class="px-4 py-2">{{ $c->puesto->nombre ?? '—' }}</td>
-
-            {{-- Estado Activo/Inactivo --}}
-            <td class="px-4 py-2">
-              @if($c->activo)
-                <span class="estado-activo">Activo</span>
-              @else
-                <span class="estado-inactivo">Inactivo</span>
-              @endif
-            </td>
-
-            {{-- 🔹 Historial (solo para Administrador) --}}
-            @role('Administrador')
-              <td class="text-center">
-                <button type="button"
-                        class="btn btn-sm"
-                        onclick="openColabHistorial({{ $c->id }})"
-                        title="Ver historial">
-                  Historial
-                </button>
-              </td>
-            @endrole
-
-            {{-- 🔹 Acciones (solo si tiene permisos) --}}
-            @if($showActions)
-              <td class="px-4 py-2">
-                <div class="flex justify-center items-center gap-4">
-                  @can('colaboradores.edit')
-                    <a href="{{ route('colaboradores.edit', $c) }}"
-                       class="text-yellow-500 hover:text-yellow-700 text-lg"
-                       title="Editar">
-                      <i class="fa-solid fa-pen"></i>
-                    </a>
-                  @endcan
-
-                  @can('colaboradores.delete')
-                    <form action="{{ route('colaboradores.destroy', $c) }}"
-                          method="POST"
-                          onsubmit="return confirm('¿Eliminar este colaborador?');">
-                      @csrf
-                      @method('DELETE')
-                      <button type="submit"
-                              class="text-red-600 hover:text-red-800 text-lg"
-                              title="Eliminar">
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
-                    </form>
-                  @endcan
-                </div>
-              </td>
-            @endif
-          </tr>
-        @empty
-          <tr>
-            <td colspan="{{ (auth()->user()->hasRole('Administrador') ? 7 : 6) + ($showActions ? 1 : 0) }}"
-                class="px-4 py-6 text-center text-gray-500">
-              No hay colaboradores.
-            </td>
-          </tr>
-        @endforelse
-      </tbody>
-    </table>
-  </div>
+      @empty
+        <tr>
+          <td colspan="{{ (auth()->user()->hasRole('Administrador') ? 7 : 6) + ($showActions ? 1 : 0) }}"
+              class="px-4 py-6 text-center text-gray-500">
+            No hay colaboradores.
+          </td>
+        </tr>
+      @endforelse
+    </tbody>
+  </table>
 
   {{-- Paginación --}}
   <div class="mt-4">
