@@ -1,13 +1,13 @@
 @php
     // Imágenes del dashboard
     $slides = [
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_1.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_2.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_3.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_4.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_5.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_6.png') ],
-        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_7.png') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_1.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_2.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_3.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_4.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_5.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_6.PNG') ],
+        [ 'src' => asset('presentaciones/Procedimiento para Solicitar Equipos, Accesorios y Repuestos/PSE_7.PNG') ],
 
         [ 'src' => asset('presentaciones/Cuidado de Baterias y Cargadores/CBC_1.jpg') ],
         [ 'src' => asset('presentaciones/Cuidado de Baterias y Cargadores/CBC_2.jpg') ],
