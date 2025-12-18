@@ -4,22 +4,19 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo: MISMA VISTA, SOLO MÁS “PEQUEÑA” EN MÓVIL ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    /* ====== Zoom responsivo ====== */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* valor por defecto en desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      /* compensamos el ancho para que visualmente quepa todo sin recortar */
       width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (mismos que ya usas en otras vistas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs */
     @media (max-width: 768px){
       input, select, textarea{ font-size:16px; }
     }
@@ -40,7 +37,6 @@
     .btn-save:hover{background:#15803d}
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
 
-    /* En móviles, apilar botones */
     @media (max-width: 480px){
       .form-buttons{flex-direction:column-reverse;align-items:stretch}
       .btn-cancel,.btn-save{width:100%}
@@ -76,14 +72,13 @@
       transition: .3s;
     }
     input:checked + .slider {
-      background-color: #16a34a; /* verde */
+      background-color: #16a34a;
     }
     input:checked + .slider:before {
       transform: translateX(22px);
     }
   </style>
 
-  <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="page-wrap py-6">
@@ -188,4 +183,66 @@
       </div>
     </div>
   </div>
+
+  @push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+    <style>
+        /* Solo el contenido interno tendrá scroll */
+        .ts-dropdown {
+            max-height: none;
+            overflow: visible;
+            z-index: 9999 !important;
+        }
+        .ts-dropdown .ts-dropdown-content {
+            max-height: 260px;   /* o el alto que prefieras */
+            overflow-y: auto;
+        }
+    </style>
+@endpush
+
+  @push('scripts')
+      <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script>
+          document.addEventListener('DOMContentLoaded', () => {
+              const baseConfig = {
+                  allowEmptyOption: true,
+                  placeholder: '-- Selecciona --',
+                  maxOptions: 5000,
+                  sortField: { field: 'text', direction: 'asc' },
+                  plugins: ['dropdown_input'],
+                  dropdownParent: 'body',
+              };
+
+              if (document.getElementById('subsidiaria_id')) {
+                  new TomSelect('#subsidiaria_id', {
+                      ...baseConfig,
+                      placeholder: '— Selecciona empresa —'
+                  });
+              }
+
+              if (document.getElementById('unidad_servicio_id')) {
+                  new TomSelect('#unidad_servicio_id', {
+                      ...baseConfig,
+                      placeholder: '— Selecciona unidad —'
+                  });
+              }
+
+              if (document.getElementById('area_id')) {
+                  new TomSelect('#area_id', {
+                      ...baseConfig,
+                      placeholder: '— Selecciona área —'
+                  });
+              }
+
+              if (document.getElementById('puesto_id')) {
+                  new TomSelect('#puesto_id', {
+                      ...baseConfig,
+                      placeholder: '— Selecciona puesto —'
+                  });
+              }
+          });
+      </script>
+  @endpush
+
 </x-app-layout>

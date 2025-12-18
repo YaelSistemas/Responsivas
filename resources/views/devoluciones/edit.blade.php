@@ -124,7 +124,7 @@
                         <th>Marca</th>
                         <th>Modelo</th>
                         <th>Serie</th>
-                        <th style="width:60px;">Devolver</th> {{-- ✅ Mover aquí al final --}}
+                        <th style="width:60px;">Devolver</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -135,23 +135,23 @@
                         $checked = in_array($s->id, $seriesSeleccionadas) ? 'checked' : '';
                         @endphp
                         <tr>
-                        <td>{{ $p->nombre }}</td>
-                        <td>{{ $p->descripcion ?? '-' }}</td>
-                        <td>{{ $p->marca ?? '-' }}</td>
-                        <td>{{ $p->modelo ?? '-' }}</td>
-                        <td>{{ $s?->serie ?? '-' }}</td>
-                        <td>
-                            <input
-                              type="checkbox"
-                              name="productos[{{ $p->id }}][]"
-                              value="{{ $s->id }}"
-                              {{ $checked }}
-                            >
-                        </td>
+                          <td>{{ $p->nombre }}</td>
+                          <td>{{ $p->descripcion ?? '-' }}</td>
+                          <td>{{ $p->marca ?? '-' }}</td>
+                          <td>{{ $p->modelo ?? '-' }}</td>
+                          <td>{{ $s?->serie ?? '-' }}</td>
+                          <td>
+                              <input
+                                type="checkbox"
+                                name="productos[{{ $p->id }}][]"
+                                value="{{ $s->id }}"
+                                {{ $checked }}
+                              >
+                          </td>
                         </tr>
                     @empty
                         <tr>
-                        <td colspan="6" class="text-center text-gray-500">Sin productos asignados actualmente a esta responsiva.</td>
+                          <td colspan="6" class="text-center text-gray-500">Sin productos asignados actualmente a esta responsiva.</td>
                         </tr>
                     @endforelse
                     </tbody>
@@ -167,7 +167,7 @@
               {{-- Recibió --}}
               <div>
                 <label>Recibió (usuario admin)</label>
-                <select name="recibi_id" required>
+                <select name="recibi_id" id="recibi_id" required>
                   <option value="">— Selecciona —</option>
                   @foreach($admins as $a)
                     <option value="{{ $a->id }}" {{ $devolucion->recibi_id == $a->id ? 'selected' : '' }}>
@@ -181,7 +181,7 @@
               {{-- Entregó --}}
               <div>
                 <label>Entregó (colaborador)</label>
-                <select name="entrego_colaborador_id" required>
+                <select name="entrego_colaborador_id" id="entrego_colaborador_id" required>
                   <option value="">— Selecciona —</option>
                   @foreach($colaboradores as $c)
                     <option value="{{ $c->id }}" {{ $devolucion->entrego_colaborador_id == $c->id ? 'selected' : '' }}>
@@ -195,7 +195,7 @@
               {{-- Psitio --}}
               <div>
                 <label>Psitio (colaborador)</label>
-                <select name="psitio_colaborador_id" required>
+                <select name="psitio_colaborador_id" id="psitio_colaborador_id" required>
                   <option value="">— Selecciona —</option>
                   @foreach($colaboradores as $c)
                     <option value="{{ $c->id }}" {{ $devolucion->psitio_colaborador_id == $c->id ? 'selected' : '' }}>
@@ -240,7 +240,7 @@
           warningBox.style.display = 'block';
           warningBox.classList.add('show');
 
-          // Quitarla automáticamente en 3 segundos
+          // Quitarla automáticamente en 5 segundos
           setTimeout(() => {
             warningBox.classList.remove('show');
             setTimeout(() => warningBox.style.display = 'none', 400);
@@ -256,10 +256,76 @@
         const toggle = document.getElementById('chkAll');
         if (!toggle) return;
         toggle.addEventListener('change', (e) => {
-        document.querySelectorAll('#productosTable tbody input[type="checkbox"]').forEach(chk => {
-            chk.checked = e.target.checked;
-        });
+          document.querySelectorAll('#productosTable tbody input[type="checkbox"]').forEach(chk => {
+              chk.checked = e.target.checked;
+          });
         });
     });
   </script>
+
+  @push('styles')
+      <link rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+      <style>
+          .ts-dropdown {
+              max-height: 260px;
+              overflow-y: auto;
+              z-index: 9999 !important;
+          }
+
+          .ts-dropdown .ts-dropdown-content {
+              max-height: inherit;
+              overflow-y: auto;
+          }
+      </style>
+  @endpush
+
+  @push('scripts')
+      <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script>
+          document.addEventListener('DOMContentLoaded', () => {
+              const baseConfig = {
+                  allowEmptyOption: true,
+                  maxOptions: 5000,
+                  sortField: { field: 'text', direction: 'asc' },
+                  plugins: ['dropdown_input'],
+                  dropdownParent: 'body',
+                  onDropdownOpen: function () {
+                      const rect = this.control.getBoundingClientRect();
+                      const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                      const dropdown = this.dropdown;
+
+                      if (dropdown) {
+                          const minimo = 160;
+                          const maximo = 260;
+                          let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                          dropdown.style.maxHeight = alto + 'px';
+                      }
+                  }
+              };
+
+              if (document.getElementById('recibi_id')) {
+                  new TomSelect('#recibi_id', {
+                      ...baseConfig,
+                      placeholder: 'Selecciona quién recibe…',
+                  });
+              }
+
+              if (document.getElementById('entrego_colaborador_id')) {
+                  new TomSelect('#entrego_colaborador_id', {
+                      ...baseConfig,
+                      placeholder: 'Selecciona colaborador que entrega…',
+                  });
+              }
+
+              if (document.getElementById('psitio_colaborador_id')) {
+                  new TomSelect('#psitio_colaborador_id', {
+                      ...baseConfig,
+                      placeholder: 'Selecciona colaborador de sitio…',
+                  });
+              }
+          });
+      </script>
+  @endpush
+
 </x-app-layout>

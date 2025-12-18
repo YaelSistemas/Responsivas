@@ -250,7 +250,7 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
             <div class="grid2 row">
               <div>
                 <label>Solicitante</label>
-                <select name="solicitante_id" required>
+                <select name="solicitante_id" id="solicitante_id" required>
                   <option value="" disabled>— Selecciona —</option>
                   @foreach($colaboradores as $c)
                     @php
@@ -266,7 +266,7 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
 
               <div>
                 <label>Proveedor</label>
-                <select name="proveedor_id" required>
+                <select name="proveedor_id" id="proveedor_id" required>
                   <option value="" disabled>— Selecciona —</option>
                   @foreach($proveedores as $p)
                     <option value="{{ $p->id }}" @selected((int)old('proveedor_id', $oc->proveedor_id)===$p->id)>{{ $p->nombre }}</option>
@@ -277,7 +277,7 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
             </div>
 
             <div class="row">
-              <div>
+              <div style="width:100%">
                 <label>Descripción</label>
                 <textarea name="descripcion" rows="3" placeholder="Detalle del pedido, referencias, condiciones, etc.">{{ old('descripcion', $oc->descripcion) }}</textarea>
                 @error('descripcion') <div class="err">{{ $message }}</div> @enderror
@@ -670,7 +670,66 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
 });
+  </script>
 
-</script>
+@push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+    <style>
+        /* Altura máxima del menú de Tom Select y scroll interno */
+        .ts-dropdown {
+            max-height: 260px;
+            overflow-y: auto;
+            z-index: 9999 !important; /* por encima del footer/nav */
+        }
+
+        .ts-dropdown .ts-dropdown-content {
+            max-height: inherit;
+            overflow-y: auto;
+        }
+    </style>
+@endpush
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseConfig = {
+                allowEmptyOption: true,
+                placeholder: '— Selecciona —',
+                maxOptions: 5000,
+                sortField: { field: 'text', direction: 'asc' },
+                plugins: ['dropdown_input'],   // buscador interno
+                dropdownParent: 'body',        // se monta en <body>
+                onDropdownOpen: function () {  // ajusta altura al espacio disponible
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            };
+
+            // Solicitante
+            if (document.getElementById('solicitante_id')) {
+                new TomSelect('#solicitante_id', {
+                    ...baseConfig
+                });
+            }
+
+            // Proveedor
+            if (document.getElementById('proveedor_id')) {
+                new TomSelect('#proveedor_id', {
+                    ...baseConfig
+                });
+            }
+        });
+    </script>
+@endpush
 
 </x-app-layout>

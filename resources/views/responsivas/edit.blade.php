@@ -240,6 +240,7 @@
           </div>
         </div>
 
+        {{-- 🔧 Script de series (se mantiene igual) --}}
         <script>
           (function(){
             const DATA   = @json($data);
@@ -248,19 +249,6 @@
             const search = document.getElementById('searchBox');
             const btnAll = document.getElementById('btnSelectVisible');
             const btnClr = document.getElementById('btnClearSel');
-
-            // Sincroniza "Recibí" con "Colaborador" (permite cambiar manualmente después)
-            const colSel = document.getElementById('colaborador_id');
-            const recibi = document.getElementById('recibi_colaborador_id');
-            if (colSel && recibi) {
-              colSel.addEventListener('change', () => {
-                const v = colSel.value;
-                if (v && recibi.querySelector(`option[value="${v}"]`)) recibi.value = v;
-              });
-              if (!recibi.value && colSel.value && recibi.querySelector(`option[value="${colSel.value}"]`)) {
-                recibi.value = colSel.value;
-              }
-            }
 
             function render(filterText='') {
               const q = (filterText || '').toLowerCase().trim();
@@ -339,4 +327,135 @@
       @endcan
     </div>
   </div>
+
+  @push('styles')
+      <link rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+      <style>
+          .ts-dropdown {
+              max-height: 260px;
+              overflow-y: auto;
+              z-index: 9999 !important;
+          }
+          .ts-dropdown .ts-dropdown-content {
+              max-height: inherit;
+              overflow-y: auto;
+          }
+      </style>
+  @endpush
+
+  @push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseConfig = {
+                allowEmptyOption: true,
+                maxOptions: 5000,
+                sortField: { field: 'text', direction: 'asc' },
+                plugins: ['dropdown_input'],
+                dropdownParent: 'body',
+                onDropdownOpen: function () {
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            };
+
+            let tsCol    = null;
+            let tsRecibi = null;
+
+            // Colaborador
+            if (document.getElementById('colaborador_id')) {
+                tsCol = new TomSelect('#colaborador_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona colaborador…',
+                });
+            }
+
+            // Entregó
+            if (document.getElementById('entrego_user_id')) {
+                new TomSelect('#entrego_user_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona usuario que entrega…',
+                });
+            }
+
+            // Recibí
+            if (document.getElementById('recibi_colaborador_id')) {
+                tsRecibi = new TomSelect('#recibi_colaborador_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona colaborador que recibe…',
+                });
+            }
+
+            // Autorizó
+            if (document.getElementById('autoriza_user_id')) {
+                new TomSelect('#autoriza_user_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona usuario que autoriza…',
+                });
+            }
+
+            // 🔁 SINCRONÍA INTELIGENTE ENTRE COLABORADOR Y RECIBÍ
+            if (tsCol && tsRecibi) {
+                // Siempre empezamos asumiendo que están "linkeados" en esta edición
+                let isLinked = true;
+
+                const colInitial = tsCol.getValue();
+                const recInitial = tsRecibi.getValue();
+
+                // Si Recibí está vacío pero Colaborador tiene valor, lo copiamos
+                if (!recInitial && colInitial) {
+                    tsRecibi.setValue(colInitial, true);
+                }
+
+                // 1) Cuando cambie el COLABORADOR
+                tsCol.on('change', function (value) {
+                    if (!isLinked) {
+                        // El usuario ya modificó Recibí manualmente en esta edición
+                        return;
+                    }
+
+                    if (value) {
+                        tsRecibi.setValue(value, true);
+                    } else {
+                        tsRecibi.clear(true);
+                    }
+                });
+
+                // 2) Cuando cambie RECIBÍ
+                tsRecibi.on('change', function (value) {
+                    const colVal = tsCol.getValue();
+
+                    if (!value) {
+                        // Si limpia Recibí y hay colaborador, volvemos a engancharlo
+                        if (colVal) {
+                            tsRecibi.setValue(colVal, true);
+                            isLinked = true;
+                        }
+                        return;
+                    }
+
+                    if (value === colVal) {
+                        // Si el usuario deja Recibí igual que Colaborador → siguen linkeados
+                        isLinked = true;
+                    } else {
+                        // Si el usuario elige un colaborador distinto en Recibí → romper link
+                        isLinked = false;
+                    }
+                });
+            }
+        });
+    </script>
+@endpush
+
+
+
 </x-app-layout>

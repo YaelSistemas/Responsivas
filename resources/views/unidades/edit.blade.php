@@ -28,8 +28,22 @@
     .form-container{max-width:700px;margin:0 auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     .form-group{margin-bottom:16px}
     .form-container label{display:block;margin-bottom:6px;color:#374151;font-weight:600}
-    .form-container input,.form-container textarea,.form-container select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
-    .form-container input:focus,.form-container textarea:focus,.form-container select:focus{outline:none;border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    .form-container input,
+    .form-container textarea,
+    .form-container select{
+      width:100%;
+      padding:8px;
+      border:1px solid #ccc;
+      border-radius:6px;
+      font-size:14px
+    }
+    .form-container input:focus,
+    .form-container textarea:focus,
+    .form-container select:focus{
+      outline:none;
+      border-color:#2563eb;
+      box-shadow:0 0 0 3px rgba(37,99,235,.12)
+    }
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
     .err{color:#dc2626;font-size:12px;margin-top:6px}
     .form-buttons{display:flex;gap:12px;justify-content:space-between;padding-top:20px}
@@ -41,12 +55,6 @@
     @media (max-width: 480px){
       .form-buttons{flex-direction:column-reverse;align-items:stretch}
       .btn-cancel,.btn-save{width:100%}
-    }
-
-    /* 🔹 Evita que se corte el menú del select */
-    select {
-      max-height: 220px;
-      overflow-y: auto;
     }
   </style>
 
@@ -104,4 +112,55 @@
       </div>
     </div>
   </div>
+
+  @push('styles')
+      <link rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+      <style>
+          .ts-dropdown {
+              max-height: 260px;
+              overflow-y: auto;
+              z-index: 9999 !important;
+          }
+          .ts-dropdown .ts-dropdown-content {
+              max-height: inherit;
+              overflow-y: auto;
+          }
+      </style>
+  @endpush
+
+  @push('scripts')
+      <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script>
+          document.addEventListener('DOMContentLoaded', () => {
+              const baseConfig = {
+                  allowEmptyOption: true,
+                  placeholder: 'Seleccione un colaborador…',
+                  maxOptions: 5000,
+                  sortField: { field: 'text', direction: 'asc' },
+                  plugins: ['dropdown_input'],
+                  dropdownParent: 'body',
+                  onDropdownOpen: function () {
+                      const rect = this.control.getBoundingClientRect();
+                      const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                      const dropdown = this.dropdown;
+
+                      if (dropdown) {
+                          const minimo = 160;
+                          const maximo = 260;
+                          let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                          dropdown.style.maxHeight = alto + 'px';
+                      }
+                  }
+              };
+
+              if (document.getElementById('responsable_id')) {
+                  new TomSelect('#responsable_id', {
+                      ...baseConfig
+                  });
+              }
+          });
+      </script>
+  @endpush>
+
 </x-app-layout>
