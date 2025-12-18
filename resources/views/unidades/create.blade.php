@@ -46,6 +46,19 @@
       max-height: 220px;
       overflow-y: auto;
     }
+
+        /* === Tom Select: que el dropdown no se corte y tenga scroll interno === */
+    .ts-dropdown {
+      z-index: 9999 !important;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .ts-dropdown .ts-dropdown-content {
+      max-height: inherit;
+      overflow-y: auto;
+    }
+
   </style>
 
   <div class="zoom-outer">
@@ -99,4 +112,42 @@
       </div>
     </div>
   </div>
+
+ @push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+@endpush
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const el = document.getElementById('responsable_id');
+            if (!el) return;
+
+            new TomSelect(el, {
+                allowEmptyOption: true,
+                placeholder: 'Seleccione un colaborador…',
+                maxOptions: 5000,
+                sortField: { field: 'text', direction: 'asc' },
+                plugins: ['dropdown_input'],  // cuadro de búsqueda dentro del dropdown
+                dropdownParent: 'body',        // 👈 pinta el dropdown en <body>
+                onDropdownOpen: function () {  // 👈 ajusta altura según espacio disponible
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            });
+        });
+    </script>
+@endpush
+
+
 </x-app-layout>

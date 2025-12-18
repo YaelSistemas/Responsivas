@@ -128,7 +128,7 @@
             <div class="grid2 row">
               <div>
                 <label>Solicitante</label>
-                <select name="solicitante_id" required>
+                <select name="solicitante_id" id="solicitante_id" required>
                   <option value="" disabled {{ old('solicitante_id') ? '' : 'selected' }}>— Selecciona —</option>
                   @foreach($colaboradores as $c)
                     @php
@@ -455,5 +455,66 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
+@push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+
+    <style>
+        /* Altura máxima del menú de Tom Select y scroll interno */
+        .ts-dropdown {
+            max-height: 260px;       /* ajusta a gusto */
+            overflow-y: auto;
+            z-index: 9999 !important; /* para que quede por encima del footer */
+        }
+
+        .ts-dropdown .ts-dropdown-content {
+            max-height: inherit;
+            overflow-y: auto;
+        }
+    </style>
+@endpush
+
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseConfig = {
+                allowEmptyOption: true,
+                placeholder: '— Selecciona —',
+                maxOptions: 5000,
+                sortField: { field: 'text', direction: 'asc' },
+                plugins: ['dropdown_input'],   // cuadro de búsqueda dentro del menú
+                dropdownParent: 'body',        // 👈 el dropdown se monta en <body>
+                onDropdownOpen: function () {  // 👈 ajusta altura según espacio disponible
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10; // margen inferior
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            };
+
+            // Solicitante
+            if (document.getElementById('solicitante_id')) {
+                new TomSelect('#solicitante_id', {
+                    ...baseConfig
+                });
+            }
+
+            // Proveedor
+            if (document.getElementById('proveedor_id')) {
+                new TomSelect('#proveedor_id', {
+                    ...baseConfig
+                });
+            }
+        });
+    </script>
+@endpush
 
 </x-app-layout>

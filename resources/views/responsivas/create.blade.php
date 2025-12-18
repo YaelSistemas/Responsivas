@@ -42,6 +42,23 @@
     .section-sep{display:flex;align-items:center;margin:22px 0 14px}
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
+
+     /* === Tom Select: dropdown con fondo blanco y scroll interno === */
+.ts-dropdown {
+  z-index: 9999 !important;
+  max-height: none;
+  overflow: visible;
+  background: #ffffff;               /* 👈 fondo blanco */
+  border: 1px solid #d1d5db;         /* mismo borde que inputs */
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,.1); /* sombrita ligera */
+}
+
+.ts-dropdown .ts-dropdown-content {
+  max-height: 220px;
+  overflow-y: auto;                  /* scroll SOLO aquí */
+  background: #ffffff;               /* 👈 asegura fondo blanco también en el contenido */
+}
+
   </style>
 
   @php
@@ -235,21 +252,6 @@
             const btnAll = document.getElementById('btnSelectVisible');
             const btnClr = document.getElementById('btnClearSel');
 
-            // Sincroniza "Recibí" con "Colaborador"
-            const colSel = document.getElementById('colaborador_id');
-            const recibi = document.getElementById('recibi_colaborador_id');
-            if (colSel && recibi) {
-              colSel.addEventListener('change', () => {
-                const v = colSel.value;
-                if (v && recibi.querySelector(`option[value="${v}"]`)) {
-                  recibi.value = v;
-                }
-              });
-              if (!recibi.value && colSel.value && recibi.querySelector(`option[value="${colSel.value}"]`)) {
-                recibi.value = colSel.value;
-              }
-            }
-
             function render(filterText='') {
               const q = (filterText || '').toLowerCase().trim();
               const selected = new Set(Array.from(select.selectedOptions).map(o => o.value));
@@ -324,4 +326,89 @@
       @endcan
     </div>
   </div>
+
+  @push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+@endpush
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseConfig = {
+                allowEmptyOption: true,
+                maxOptions: 5000,
+                sortField: [
+                    { field: '$order', direction: 'asc' },
+                    { field: 'text',   direction: 'asc' },
+                ],
+                plugins: ['dropdown_input'],
+                dropdownParent: 'body',
+                onDropdownOpen: function () {
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            };
+
+            // Colaborador (Datos)
+            const tsColaborador = document.getElementById('colaborador_id')
+                ? new TomSelect('#colaborador_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona colaborador…',
+                })
+                : null;
+
+            // Entregó (solo admin)
+            const tsEntrego = document.getElementById('entrego_user_id')
+                ? new TomSelect('#entrego_user_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona quién entrega…',
+                })
+                : null;
+
+            // Recibí (colaborador)
+            const tsRecibi = document.getElementById('recibi_colaborador_id')
+                ? new TomSelect('#recibi_colaborador_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona quién recibe…',
+                })
+                : null;
+
+            // Autorizó (solo admin)
+            const tsAutoriza = document.getElementById('autoriza_user_id')
+                ? new TomSelect('#autoriza_user_id', {
+                    ...baseConfig,
+                    placeholder: 'Selecciona quién autoriza…',
+                })
+                : null;
+
+            // 🔄 Sincronizar "Recibí" con "Colaborador"
+            if (tsColaborador && tsRecibi) {
+                // Cuando cambie el colaborador → actualizar "Recibí"
+                tsColaborador.on('change', (value) => {
+                    if (value && tsRecibi.options[value]) {
+                        tsRecibi.setValue(value, true);
+                    }
+                });
+
+                // Al cargar la página: si "Recibí" está vacío pero hay colaborador, copiarlo
+                const colValue = tsColaborador.getValue();
+                if (!tsRecibi.getValue() && colValue && tsRecibi.options[colValue]) {
+                    tsRecibi.setValue(colValue, true);
+                }
+            }
+        });
+    </script>
+@endpush
+
 </x-app-layout>

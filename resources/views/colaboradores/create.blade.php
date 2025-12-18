@@ -81,6 +81,18 @@
     input:checked + .slider:before {
       transform: translateX(22px);
     }
+
+        /* === Tom Select: que el dropdown no se corte y tenga scroll interno === */
+    .ts-dropdown {
+      z-index: 9999 !important;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .ts-dropdown .ts-dropdown-content {
+      max-height: inherit;
+      overflow-y: auto;
+    }
   </style>
 
   <!-- Envoltura de zoom: mantiene el layout, solo escala visualmente en móvil -->
@@ -187,4 +199,55 @@
       </div>
     </div>
   </div>
+
+  @push('styles')
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+@endpush
+
+@push('scripts')
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const baseConfig = {
+                allowEmptyOption: true,
+                placeholder: '-- Selecciona --',
+                maxOptions: 5000,
+                sortField: { field: 'text', direction: 'asc' },
+                plugins: ['dropdown_input'],      // cuadro de búsqueda
+                dropdownParent: 'body',           // 👈 dropdown fuera del contenedor
+                onDropdownOpen: function () {     // 👈 ajusta altura según espacio
+                    const rect = this.control.getBoundingClientRect();
+                    const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                    const dropdown = this.dropdown;
+
+                    if (dropdown) {
+                        const minimo = 160;
+                        const maximo = 260;
+                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                        dropdown.style.maxHeight = alto + 'px';
+                    }
+                }
+            };
+
+            const ids = [
+                '#subsidiaria_id',      // Empresa
+                '#unidad_servicio_id',  // Unidad de servicio
+                '#area_id',             // Área / Depto / Sede
+                '#puesto_id'            // Puesto
+            ];
+
+            ids.forEach(selector => {
+                const el = document.querySelector(selector);
+                if (!el) return;
+
+                new TomSelect(selector, {
+                    ...baseConfig
+                });
+            });
+        });
+    </script>
+@endpush
+
+
 </x-app-layout>
