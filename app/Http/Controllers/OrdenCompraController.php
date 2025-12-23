@@ -133,8 +133,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
             ->orderBy('apellidos')
             ->get(['id', 'nombre', 'apellidos']);
 
-        // 🔹 Proveedores del tenant actual
+        // 🔹 Proveedores ACTIVOS del tenant actual
         $proveedores = Proveedor::where('empresa_tenant_id', $tenantId)
+            ->where('activo', 1)          // 👈 solo activos
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'rfc', 'ciudad', 'estado']);
 
@@ -389,15 +390,22 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $this->authorizeCompany($oc);
         $tenantId = $this->tenantId();
 
-        // 🔹 Solo colaboradores ACTIVOS del tenant actual
+        // 🔹 Colaboradores ACTIVOS + el solicitante actual aunque esté inactivo (EDIT)
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenantId)
-            ->where('activo', 1) // ← 🔸 agregado
+            ->where(function ($q) use ($oc) {
+                $q->where('activo', 1)              // todos los activos
+                ->orWhere('id', $oc->solicitante_id); // + el que ya está asignado
+            })
             ->orderBy('nombre')
             ->orderBy('apellidos')
             ->get(['id', 'nombre', 'apellidos']);
 
-        // 🔹 Proveedores del tenant actual
+        // 🔹 Proveedores del tenant actual (activos + el proveedor actual aunque esté inactivo)
         $proveedores = Proveedor::where('empresa_tenant_id', $tenantId)
+            ->where(function ($q) use ($oc) {
+                $q->where('activo', 1)
+                ->orWhere('id', $oc->proveedor_id);   // Incluye el actual aunque esté inactivo
+            })
             ->orderBy('nombre')
             ->get(['id', 'nombre', 'rfc', 'ciudad', 'estado']);
 

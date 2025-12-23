@@ -355,9 +355,19 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         $responsiva->load(['detalles.producto', 'detalles.serie', 'colaborador']);
 
-        // 🔹 Solo colaboradores ACTIVOS del tenant actual
+        // 🔹 Colaboradores ACTIVOS + los de la responsiva aunque estén inactivos
+        $idsForzar = array_filter([
+            $responsiva->colaborador_id,
+            $responsiva->recibi_colaborador_id,
+        ]);
+
         $colabQ = Colaborador::query()
-            ->where('activo', 1)
+            ->where(function ($q) use ($idsForzar) {
+                $q->where('activo', 1);          // todos los activos
+                if (!empty($idsForzar)) {
+                    $q->orWhereIn('id', $idsForzar);  // + los que ya están en la responsiva
+                }
+            })
             ->orderBy('nombre')
             ->orderBy('apellidos')
             ->select(['id','nombre','apellidos']);
