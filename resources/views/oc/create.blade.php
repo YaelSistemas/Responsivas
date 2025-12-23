@@ -460,17 +460,28 @@ document.addEventListener("DOMContentLoaded", () => {
       href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
 
 <style>
-    /* Contenedor del dropdown: SIN scroll */
+    /* Contenedor del dropdown: SIN scroll pero con fondo */
     .ts-dropdown {
         max-height: none;
         overflow-y: visible;
         z-index: 9999 !important;
+
+        background: #ffffff;              /* fondo sólido */
+        border: 1px solid #d1d5db;        /* opcional, para que se vea como tu form */
+        box-shadow: 0 4px 10px rgba(0,0,0,.08);
     }
 
-    /* Solo el contenido interno tiene scroll y altura máxima */
+    /* Contenido interno con scroll y mismo fondo */
     .ts-dropdown .ts-dropdown-content {
-        max-height: 260px;    /* ajusta al gusto */
+        max-height: 260px;
         overflow-y: auto;
+        background: #ffffff;              /* asegura fondo blanco también aquí */
+    }
+
+    /* (Opcional) mejor contraste al pasar el mouse */
+    .ts-dropdown .option:hover,
+    .ts-dropdown .option.active {
+        background: #f3f4f6;
     }
 </style>
 @endpush
