@@ -39,6 +39,44 @@
     .section-sep{display:flex;align-items:center;margin:22px 0 14px}
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
+     /* === Toggle switch igual que colaboradores === */
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 46px;
+        height: 26px;
+    }
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #e5e7eb; /* gris claro */
+        transition: .3s;
+        border-radius: 999px;
+    }
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 20px;
+        width: 20px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .3s;
+        border-radius: 999px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    }
+    input:checked + .slider {
+        background-color: #16a34a; /* verde */
+    }
+    input:checked + .slider:before {
+        transform: translateX(18px);
+    }
   </style>
 
   <div class="zoom-outer">
@@ -73,7 +111,7 @@
               <div>
                 <label>RFC</label>
                 <input type="text" name="rfc" value="{{ old('rfc') }}" placeholder="Opcional">
-                <div class="hint">Ejemplo: ABCD001122XYZ (12–13 caracteres).</div>
+                <div class="hint">Ejemplo: RPS880920E12 (12–13 caracteres).</div>
                 @error('rfc') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>
@@ -107,6 +145,31 @@
                 <input type="text" name="estado" value="{{ old('estado') }}">
                 @error('estado') <div class="err">{{ $message }}</div> @enderror
               </div>
+            </div>
+
+            {{-- Estado (Activo / Inactivo) --}}
+            <div class="row">
+                <label for="activo">Estado</label>
+
+                <div style="display:flex; align-items:center; gap:12px;">
+                    {{-- siempre mandamos algo aunque no esté marcado --}}
+                    <input type="hidden" name="activo" value="0">
+
+                    <label class="switch">
+                        <input type="checkbox"
+                              id="activo"
+                              name="activo"
+                              value="1"
+                              {{ old('activo', 1) ? 'checked' : '' }}> {{-- por defecto ACTIVO --}}
+                        <span class="slider"></span>
+                    </label>
+
+                    <span class="hint">Activa o desactiva el estado del proveedor.</span>
+                </div>
+
+                @error('activo')
+                    <div class="err">{{ $message }}</div>
+                @enderror
             </div>
 
             <div class="grid2" style="margin-top:18px">

@@ -9,7 +9,19 @@ class Proveedor extends Model
     protected $table = 'proveedores';
     
     protected $fillable = [
-        'empresa_tenant_id','nombre','rfc', 'calle','colonia','codigo_postal','ciudad','estado'
+        'nombre',
+        'rfc',
+        'calle',
+        'colonia',
+        'codigo_postal',
+        'ciudad',
+        'estado',
+        'empresa_tenant_id',
+        'activo',              
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean', 
     ];
 
     public function scopeTenant($q, int $tenantId){

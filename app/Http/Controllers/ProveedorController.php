@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Validation\Rule;
 class ProveedorController extends Controller implements HasMiddleware
 {
     public static function middleware(): array
@@ -84,17 +85,37 @@ class ProveedorController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
+        $tenantId = $this->tenantId();
+
         $data = $request->validate([
-            'nombre'        => ['required', 'string', 'max:255'],
-            'rfc'           => ['nullable', 'string', 'max:13'],
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                // ÚNICO por empresa
+                Rule::unique('proveedores', 'nombre')
+                    ->where(fn ($q) => $q->where('empresa_tenant_id', $tenantId)),
+            ],
+            'rfc' => [
+                'nullable',
+                'string',
+                'max:13',
+                // ÚNICO por empresa (si se captura)
+                Rule::unique('proveedores', 'rfc')
+                    ->where(fn ($q) => $q->where('empresa_tenant_id', $tenantId)),
+            ],
             'calle'         => ['nullable', 'string', 'max:255'],
             'colonia'       => ['nullable', 'string', 'max:255'],
             'codigo_postal' => ['nullable', 'string', 'max:20'],
             'ciudad'        => ['nullable', 'string', 'max:120'],
             'estado'        => ['nullable', 'string', 'max:120'],
+            'activo'        => ['required', 'boolean'],
+        ], [
+            'nombre.unique' => 'Ya existe un proveedor con ese nombre en esta empresa.',
+            'rfc.unique'    => 'Ya existe un proveedor con ese RFC en esta empresa.',
         ]);
 
-        $data['empresa_tenant_id'] = $this->tenantId();
+        $data['empresa_tenant_id'] = $tenantId;
 
         Proveedor::create($data);
 
@@ -110,15 +131,34 @@ class ProveedorController extends Controller implements HasMiddleware
     public function update(Request $request, Proveedor $proveedor)
     {
         $this->authorizeCompany($proveedor);
+        $tenantId = $this->tenantId();
 
         $data = $request->validate([
-            'nombre'        => ['required', 'string', 'max:255'],
-            'rfc'           => ['nullable', 'string', 'max:13'],
+            'nombre' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('proveedores', 'nombre')
+                    ->where(fn ($q) => $q->where('empresa_tenant_id', $tenantId))
+                    ->ignore($proveedor->id),  // 👈 no se compara consigo mismo
+            ],
+            'rfc' => [
+                'nullable',
+                'string',
+                'max:13',
+                Rule::unique('proveedores', 'rfc')
+                    ->where(fn ($q) => $q->where('empresa_tenant_id', $tenantId))
+                    ->ignore($proveedor->id),
+            ],
             'calle'         => ['nullable', 'string', 'max:255'],
             'colonia'       => ['nullable', 'string', 'max:255'],
             'codigo_postal' => ['nullable', 'string', 'max:20'],
             'ciudad'        => ['nullable', 'string', 'max:120'],
             'estado'        => ['nullable', 'string', 'max:120'],
+            'activo'        => ['required', 'boolean'],
+        ], [
+            'nombre.unique' => 'Ya existe un proveedor con ese nombre en esta empresa.',
+            'rfc.unique'    => 'Ya existe un proveedor con ese RFC en esta empresa.',
         ]);
 
         $proveedor->update($data);
