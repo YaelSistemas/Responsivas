@@ -456,24 +456,24 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 
 @push('styles')
-    <link rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+<link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
 
-    <style>
-        /* Altura máxima del menú de Tom Select y scroll interno */
-        .ts-dropdown {
-            max-height: 260px;       /* ajusta a gusto */
-            overflow-y: auto;
-            z-index: 9999 !important; /* para que quede por encima del footer */
-        }
+<style>
+    /* Contenedor del dropdown: SIN scroll */
+    .ts-dropdown {
+        max-height: none;
+        overflow-y: visible;
+        z-index: 9999 !important;
+    }
 
-        .ts-dropdown .ts-dropdown-content {
-            max-height: inherit;
-            overflow-y: auto;
-        }
-    </style>
+    /* Solo el contenido interno tiene scroll y altura máxima */
+    .ts-dropdown .ts-dropdown-content {
+        max-height: 260px;    /* ajusta al gusto */
+        overflow-y: auto;
+    }
+</style>
 @endpush
-
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
