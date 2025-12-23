@@ -164,7 +164,7 @@
                               id="activo"
                               name="activo"
                               value="1"
-                              {{ old('activo', 1) ? 'checked' : '' }}> {{-- por defecto ACTIVO --}}
+                              {{ old('activo', (int)$proveedor->activo) ? 'checked' : '' }}>
                         <span class="slider"></span>
                     </label>
 
