@@ -183,6 +183,7 @@
             {{-- Estado (Activo / Inactivo) --}}
             <div class="form-group">
               <label for="activo">Estado</label>
+              <input type="hidden" name="activo" value="0">
               <label class="switch">
                 <input type="checkbox" id="activo" name="activo" value="1" {{ old('activo', 1) ? 'checked' : '' }}>
                 <span class="slider"></span>
