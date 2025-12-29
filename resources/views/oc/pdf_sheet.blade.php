@@ -33,12 +33,18 @@
     }
   }
 
-  /* ===== Firma ===== */
-  $userName    = trim(auth()->user()->name ?? '');
-  $nombreFirma = '';
-  if ($userName !== '') {
-    $parts = preg_split('/\s+/', $userName);
-    $nombreFirma = count($parts) >= 2 ? $parts[0].' '.$parts[count($parts)-2] : $userName;
+  /* ===== Firma (CREADOR) ===== */
+  $full = trim($oc->creator?->name ?? '');
+  $nombreFirma = '—';
+
+  if ($full !== '') {
+    $parts = preg_split('/\s+/', $full, -1, PREG_SPLIT_NO_EMPTY);
+
+    // Arturo Gerardo Gomez Cruz => Arturo Gomez
+    // Arturo Gomez => Arturo Gomez
+    $nombreFirma = count($parts) >= 2
+      ? ($parts[0] . ' ' . $parts[count($parts) - 2])
+      : $parts[0];
   }
 
   /* ===== Footer ===== */

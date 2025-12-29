@@ -770,48 +770,52 @@ class OrdenCompraController extends Controller implements HasMiddleware
     }
 
         public function pdfOpen(OrdenCompra $oc)
-{
-    $this->authorizeCompany($oc);
-    $html = view('oc.pdf_sheet', compact('oc'))->render();
+    {
+        $this->authorizeCompany($oc);
 
-    // Tomamos la ruta desde .env (BROWSERSHOT_CHROME_PATH o CHROME_PATH)
-    $chromePath = env('CHROME_PATH', env('BROWSERSHOT_CHROME_PATH'));
+        $oc->loadMissing('creator');
+        
+        $html = view('oc.pdf_sheet', compact('oc'))->render();
 
-    $shot = Browsershot::html($html)
-        ->noSandbox()
-        ->showBackground()
-        ->emulateMedia('screen')
-        ->format('A4')
-        ->margins(10, 10, 10, 10)
-        ->timeout(120000)
-        ->waitUntil('load')
-        ->setOption('args', [
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-extensions',
-            '--disable-setuid-sandbox',
-            '--no-zygote',
-        ]);
+        // Tomamos la ruta desde .env (BROWSERSHOT_CHROME_PATH o CHROME_PATH)
+        $chromePath = env('CHROME_PATH', env('BROWSERSHOT_CHROME_PATH'));
 
-    if ($chromePath && is_file($chromePath)) {
-        $shot->setChromePath($chromePath);
+        $shot = Browsershot::html($html)
+            ->noSandbox()
+            ->showBackground()
+            ->emulateMedia('screen')
+            ->format('A4')
+            ->margins(10, 10, 10, 10)
+            ->timeout(120000)
+            ->waitUntil('load')
+            ->setOption('args', [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-extensions',
+                '--disable-setuid-sandbox',
+                '--no-zygote',
+            ]);
+
+        if ($chromePath && is_file($chromePath)) {
+            $shot->setChromePath($chromePath);
+        }
+
+        $pdf = $shot->pdf();
+
+        $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+
+        return response($pdf)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="'.$filename.'"');
     }
-
-    $pdf = $shot->pdf();
-
-    $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
-
-    return response($pdf)
-        ->header('Content-Type', 'application/pdf')
-        ->header('Content-Disposition', 'inline; filename="'.$filename.'"');
-}
-
 
     public function pdfDownload(OrdenCompra $oc)
     {
         $this->authorizeCompany($oc);
+
+         $oc->loadMissing('creator');
 
         $html       = view('oc.pdf_sheet', compact('oc'))->render();
         $chromePath = $this->resolveChromePath();
