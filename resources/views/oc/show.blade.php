@@ -46,12 +46,18 @@
         : \Illuminate\Support\Carbon::parse($oc->fecha)->format('d/m/Y');
     }
 
-    // ===== Nombre para firma: primer nombre + primer apellido =====
-    $userName     = trim(auth()->user()->name ?? '');
-    $nombreFirma  = '';
-    if ($userName !== '') {
-      $parts = preg_split('/\s+/', $userName);
-      $nombreFirma = count($parts) >= 2 ? $parts[0] . ' ' . $parts[count($parts) - 2] : $userName;
+    // ===== Nombre para firma: primer nombre + primer apellido (CREADOR) =====
+    $full = trim($oc->creator?->name ?? '');
+    $nombreFirma = '—';
+
+    if ($full !== '') {
+      $parts = preg_split('/\s+/', $full, -1, PREG_SPLIT_NO_EMPTY);
+
+      // Arturo Gerardo Gomez Cruz => Arturo Gomez
+      // Arturo Gomez => Arturo Gomez
+      $nombreFirma = count($parts) >= 2
+        ? ($parts[0] . ' ' . $parts[count($parts) - 2])
+        : $parts[0];
     }
 
     // ===== Imagen de pie (footer) =====

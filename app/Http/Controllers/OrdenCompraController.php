@@ -697,6 +697,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
         $this->authorizeCompany($oc);
         $empresa = auth()->user()->empresa ?? null;
 
+        // ✅ Trae el usuario que la creó (created_by)
+        $oc->loadMissing(['creator:id,name']);
+
         return view('oc.show', compact('oc', 'empresa'));
     }
 
