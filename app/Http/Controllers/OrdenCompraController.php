@@ -885,51 +885,50 @@ class OrdenCompraController extends Controller implements HasMiddleware
     }
 
     public function updateRecepcion(Request $request, OrdenCompra $oc)
-    {
-        $user = Auth::user();
+{
+    $this->authorizeCompany($oc); // 🔐 multi-tenant
 
-        // Solo Administrador o Compras Superior pueden cambiar recepción
-        if (!$user->hasAnyRole(['Administrador', 'Compras Superior'])) {
-            abort(403, 'No tienes permisos para cambiar la recepción de una orden.');
-        }
+    $user = Auth::user();
 
-        $data = $request->validate([
-            'recepcion' => ['required', Rule::in(OrdenCompra::RECEPCIONES)],
-        ]);
-
-        $old = $oc->recepcion;   // ← Guardamos valor ANTERIOR
-
-        $oc->recepcion = $data['recepcion'];
-
-        if (Schema::hasColumn($oc->getTable(), 'updated_by')) {
-            $oc->updated_by = $user->id;
-        }
-
-        $oc->save();
-
-        // === LOG DE CAMBIO DE RECEPCIÓN ===
-        OcLog::create([
-            'orden_compra_id' => $oc->id,
-            'type'            => 'recepcion_changed',
-            'data' => [
-                'from' => $old,
-                'to'   => $oc->recepcion,
-            ],
-            'user_id' => auth()->id(),
-        ]);
-
-        // Respuesta AJAX
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json([
-                'ok'        => true,
-                'recepcion' => $oc->recepcion,
-                'label'     => $oc->recepcion_label,
-                'class'     => $oc->recepcion_class,
-                'msg'       => 'Recepción actualizada correctamente.',
-            ]);
-        }
-
-        return back()->with('updated', true);
+    // Administrador, Compras Superior, Compras y Compras IVA
+    if (!$user->hasAnyRole([
+        'Administrador',
+        'Compras Superior',
+        'Compras',
+        'Compras IVA',
+    ])) {
+        abort(403, 'No tienes permisos para cambiar la recepción de una orden.');
     }
+
+    $data = $request->validate([
+        'recepcion' => ['required', Rule::in(OrdenCompra::RECEPCIONES)],
+    ]);
+
+    $old = $oc->recepcion;
+
+    $oc->recepcion = $data['recepcion'];
+
+    if (Schema::hasColumn($oc->getTable(), 'updated_by')) {
+        $oc->updated_by = $user->id;
+    }
+
+    $oc->save();
+
+    OcLog::create([
+        'orden_compra_id' => $oc->id,
+        'type'            => 'recepcion_changed',
+        'data'            => ['from' => $old, 'to' => $oc->recepcion],
+        'user_id'         => $user->id,
+    ]);
+
+    return response()->json([
+        'ok'        => true,
+        'recepcion' => $oc->recepcion,
+        'label'     => $oc->recepcion_label,
+        'class'     => $oc->recepcion_class,
+        'msg'       => 'Recepción actualizada correctamente.',
+    ]);
+}
+
 
 }
