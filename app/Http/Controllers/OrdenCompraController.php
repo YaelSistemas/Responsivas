@@ -644,6 +644,52 @@ class OrdenCompraController extends Controller implements HasMiddleware
     return redirect()->route('oc.show', $oc)->with('updated', true);
 }
 
+    /**
+     * Resuelve la ruta de Chrome/Chromium según el entorno.
+     */
+    protected function resolveChromePath(): ?string
+    {
+        // 1) Primero, lo que venga en el .env (servidor)
+        if ($path = env('BROWSERSHOT_CHROME_PATH')) {
+            if (is_file($path) || is_link($path)) {
+                return $path;
+            }
+        }
+
+        // 2) Luego, variable CHROME_PATH (por si la usas en local)
+        if ($path = env('CHROME_PATH')) {
+            if (is_file($path) || is_link($path)) {
+                return $path;
+            }
+        }
+
+        // 3) Rutas por defecto según sistema operativo
+        if (PHP_OS_FAMILY === 'Windows') {
+            $candidates = [
+                'C:\Program Files\Google\Chrome\Application\chrome.exe',
+                'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+                'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+            ];
+        } else {
+            // Linux (VPS)
+            $candidates = [
+                '/usr/bin/chromium-browser',
+                '/usr/bin/chromium',
+                '/usr/bin/google-chrome',
+            ];
+        }
+
+        foreach ($candidates as $candidate) {
+            if (is_file($candidate) || is_link($candidate)) {
+                return $candidate;
+            }
+        }
+
+        // Si no encontramos ninguno, devolvemos null y dejamos que Browsershot intente autodetectar
+        return null;
+    }
+
+
     /* ===================== Vistas y PDF ===================== */
 
     public function show(OrdenCompra $oc)
@@ -720,18 +766,14 @@ class OrdenCompraController extends Controller implements HasMiddleware
         return sprintf('%s-%04d', $prefix, $next);
     }
 
-    public function pdfOpen(OrdenCompra $oc)
+        public function pdfOpen(OrdenCompra $oc)
     {
-        $html = view('oc.pdf_sheet', compact('oc'))->render();
+        $this->authorizeCompany($oc);
 
-        $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
-        if (!is_file($chromePath)) {
-            $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
-            if (is_file($edge)) $chromePath = $edge;
-        }
+        $html       = view('oc.pdf_sheet', compact('oc'))->render();
+        $chromePath = $this->resolveChromePath();
 
-        $pdf = Browsershot::html($html)
-            ->setChromePath($chromePath)
+        $shot = Browsershot::html($html)
             ->noSandbox()
             ->showBackground()
             ->emulateMedia('screen')
@@ -745,8 +787,13 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--disable-extensions',
-            ])
-            ->pdf();
+            ]);
+
+        if ($chromePath) {
+            $shot->setChromePath($chromePath);
+        }
+
+        $pdf = $shot->pdf();
 
         $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
 
@@ -757,21 +804,17 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
     public function pdfDownload(OrdenCompra $oc)
     {
-        $html = view('oc.pdf_sheet', compact('oc'))->render();
+        $this->authorizeCompany($oc);
 
-        $chromePath = env('CHROME_PATH', 'C:\Program Files\Google\Chrome\Application\chrome.exe');
-        if (!is_file($chromePath)) {
-            $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe';
-            if (is_file($edge)) $chromePath = $edge;
-        }
+        $html       = view('oc.pdf_sheet', compact('oc'))->render();
+        $chromePath = $this->resolveChromePath();
 
-        $pdf = Browsershot::html($html)
-            ->setChromePath($chromePath)
+        $shot = Browsershot::html($html)
             ->noSandbox()
             ->showBackground()
             ->emulateMedia('screen')
             ->format('A4')
-            ->margins(10,10,10,10)
+            ->margins(10, 10, 10, 10)
             ->timeout(120000)
             ->waitUntil('load')
             ->setOption('args', [
@@ -780,8 +823,13 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 '--no-first-run',
                 '--no-default-browser-check',
                 '--disable-extensions',
-            ])
-            ->pdf();
+            ]);
+
+        if ($chromePath) {
+            $shot->setChromePath($chromePath);
+        }
+
+        $pdf = $shot->pdf();
 
         $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
 
