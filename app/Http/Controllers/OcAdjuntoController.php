@@ -46,7 +46,7 @@ class OcAdjuntoController extends Controller
 
         $data = $request->validate([
             'files'   => ['required', 'array', 'max:10'],
-            'files.*' => ['file', 'max:10240', 'mimes:pdf,xml,jpg,jpeg,png,zip'],
+            'files.*' => ['file', 'max:51200', 'mimes:pdf,xml,jpg,jpeg,png,zip'],
             'nota'    => ['nullable', 'string', 'max:255'],
         ]);
 
