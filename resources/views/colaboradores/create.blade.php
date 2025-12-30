@@ -82,16 +82,14 @@
       transform: translateX(22px);
     }
 
-        /* === Tom Select: que el dropdown no se corte y tenga scroll interno === */
-    .ts-dropdown {
-      z-index: 9999 !important;
-      max-height: 260px;
-      overflow-y: auto;
+    /* Tom Select: un solo scroll y que no se recorte */
+    .ts-dropdown{
+      z-index: 999999 !important;
+      overflow: hidden;      /* NO scroll aquí */
     }
 
-    .ts-dropdown .ts-dropdown-content {
-      max-height: inherit;
-      overflow-y: auto;
+    .ts-dropdown .ts-dropdown-content{
+      overflow-y: auto;      /* scroll SOLO aquí */
     }
   </style>
 

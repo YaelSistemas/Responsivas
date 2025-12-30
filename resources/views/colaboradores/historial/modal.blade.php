@@ -161,16 +161,27 @@
                   </thead>
                   <tbody>
                     @foreach($otrosCambios as $campo => $valor)
-                      @if(is_array($valor) && isset($valor['de'], $valor['a']))
+                      @php
+                        $isDiff = is_array($valor) && array_key_exists('de', $valor) && array_key_exists('a', $valor);
+
+                        $toText = function ($v) {
+                          if (is_null($v) || $v === '') return '—';
+                          if (is_bool($v)) return $v ? 'Sí' : 'No';
+                          if (is_scalar($v)) return (string) $v;   // string/int/float
+                          return json_encode($v, JSON_UNESCAPED_UNICODE); // arrays/objects
+                        };
+                      @endphp
+
+                      @if($isDiff)
                         <tr>
                           <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
-                          <td class="mono text-gray-500">{{ $valor['de'] ?? '—' }}</td>
-                          <td class="mono">{{ $valor['a'] ?? '—' }}</td>
+                          <td class="mono text-gray-500">{{ $toText($valor['de'] ?? null) }}</td>
+                          <td class="mono">{{ $toText($valor['a'] ?? null) }}</td>
                         </tr>
                       @else
                         <tr>
                           <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
-                          <td class="mono" colspan="2">{{ $valor ?? '—' }}</td>
+                          <td class="mono" colspan="2">{{ $toText($valor) }}</td>
                         </tr>
                       @endif
                     @endforeach
