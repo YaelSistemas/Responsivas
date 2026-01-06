@@ -6,7 +6,6 @@
   </x-slot>
 
   <style>
-    /* ====== Zoom responsivo (misma vista, solo escala en móvil) ====== */
     .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
       --zoom: 1;
@@ -21,7 +20,6 @@
 
     @media (max-width: 768px){ input, select, textarea{ font-size:16px; } }
 
-    /* ====== Estilos de la vista (mismo look & feel que edit.blade) ====== */
     .box{max-width:760px;margin:0 auto;background:#fff;padding:24px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
     label{display:block;margin-bottom:6px;color:#111827;font-weight:600}
     .inp{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px}
@@ -47,22 +45,50 @@
             </div>
           @endif
 
-          <form id="serieForm" method="POST" action="{{ route('productos.series.update', [$serie->producto, $serie]) }}">
-            @csrf @method('PUT')
+          {{-- ✅ IMPORTANTE: id del form coincide con JS --}}
+          <form id="serieDescForm" method="POST" action="{{ route('productos.series.update', [$producto, $serie]) }}">
+            @csrf
+            @method('PUT')
 
             <p class="hint">
               Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.
             </p>
 
+            {{-- ✅ Subsidiaria --}}
+            <div>
+              <label>Subsidiaria</label>
+              <select class="inp" name="subsidiaria_id" id="subsidiaria_id">
+                <option value="">— Sin subsidiaria —</option>
+                @foreach(($subsidiarias ?? []) as $sub)
+                  <option
+                    value="{{ $sub->id }}"
+                    @selected(old('subsidiaria_id', $serie->subsidiaria_id) == $sub->id)
+                  >
+                    {{ $sub->nombre }}
+                  </option>
+                @endforeach
+              </select>
+              @error('subsidiaria_id') <div class="err">{{ $message }}</div> @enderror
+            </div>
+
+            {{-- ✅ Descripción --}}
             <div>
               <label>Descripción / notas</label>
+
+              @php
+                // valor actual guardado en serie (para tipos no-PC)
+                $descActual = data_get($serie->especificaciones, 'descripcion');
+                $descOld = old('descripcion', $descActual);
+              @endphp
+
               <textarea
-                  class="inp"
-                  name="descripcion"
-                  id="descripcion"
-                  rows="6"
-                  placeholder="{{ $descripcion ?? $serie->observaciones ?? $producto->descripcion ?? 'Escribe la descripción o notas…' }}"
-              >{{ old('descripcion') }}</textarea>
+                class="inp"
+                name="descripcion"
+                id="descripcion"
+                rows="6"
+                placeholder="{{ $producto->descripcion ?? 'Escribe la descripción o notas…' }}"
+              >{{ $descOld }}</textarea>
+
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
             </div>
 
@@ -74,6 +100,7 @@
               </div>
             </div>
           </form>
+
         </div>
       </div>
     </div>
@@ -81,34 +108,46 @@
 
   <script>
     (function(){
-      const form     = document.getElementById('serieDescForm');
+      const form     = document.getElementById('serieDescForm'); // ✅ correcto
       const desc     = document.getElementById('descripcion');
       const btnClear = document.getElementById('btn-clear');
       const btnSave  = document.getElementById('btn-submit');
 
-      // Focus inicial
       desc?.focus();
 
-      // Limpiar campo
-      btnClear?.addEventListener('click', ()=>{ desc.value=''; desc.focus(); });
+      btnClear?.addEventListener('click', ()=>{
+        if(desc){ desc.value=''; desc.focus(); }
+      });
 
-      // Previene doble envío
       let sending = false;
       form?.addEventListener('submit', (e)=>{
         if(sending){ e.preventDefault(); return; }
-        sending = true; btnSave.disabled = true; btnSave.style.opacity = .7;
+        sending = true;
+        if(btnSave){
+          btnSave.disabled = true;
+          btnSave.style.opacity = .7;
+        }
       });
 
-      // Atajos
       document.addEventListener('keydown', (e)=>{
-        if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); btnSave?.click(); }
-        if(e.key==='Escape'){ e.preventDefault(); window.location.href = "{{ route('productos.series', $producto) }}"; }
+        if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){
+          e.preventDefault();
+          btnSave?.click();
+        }
+        if(e.key==='Escape'){
+          e.preventDefault();
+          window.location.href = "{{ route('productos.series', $producto) }}";
+        }
       });
 
-      // Aviso si hay cambios sin guardar
       let dirty=false;
       form?.addEventListener('input', ()=> dirty=true);
-      window.addEventListener('beforeunload', (e)=>{ if(dirty && !sending){ e.preventDefault(); e.returnValue=''; }});
+      window.addEventListener('beforeunload', (e)=>{
+        if(dirty && !sending){
+          e.preventDefault();
+          e.returnValue='';
+        }
+      });
     })();
   </script>
 </x-app-layout>

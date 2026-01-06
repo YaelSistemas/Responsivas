@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use App\Models\Responsiva;
 use App\Models\ProductoSerieHistorial;
+use App\Models\Subsidiaria;
 
 class ProductoSerie extends Model
 {
@@ -28,6 +29,7 @@ class ProductoSerie extends Model
         'ubicacion',
         'observaciones',
         'asignado_en_responsiva_id',
+        'subsidiaria_id',
         'especificaciones',               // <-- overrides por serie (JSON)
     ];
 
@@ -35,6 +37,7 @@ class ProductoSerie extends Model
         'empresa_tenant_id'         => 'integer',
         'producto_id'               => 'integer',
         'asignado_en_responsiva_id' => 'integer',
+        'subsidiaria_id'            => 'integer',
         'especificaciones'          => 'array',   // <-- importante
         // si creaste columnas generadas, puedes castear también:
         // 'ram_gb_index'            => 'integer',
@@ -54,6 +57,10 @@ class ProductoSerie extends Model
         return $this->belongsTo(Responsiva::class, 'asignado_en_responsiva_id');
     }
 
+    public function subsidiaria()
+    {
+        return $this->belongsTo(Subsidiaria::class, 'subsidiaria_id');
+    }
     /* =================== Scopes =================== */
 
     public function scopeDeEmpresa(Builder $q, int $tenantId): Builder

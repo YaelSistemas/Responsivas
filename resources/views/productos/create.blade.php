@@ -177,11 +177,47 @@
             {{-- Carga inicial SEGÚN tracking --}}
             <div id="serial-wrap" style="{{ old('tracking')==='serial' ? '' : 'display:none' }}">
               <div class="form-group">
-                <label>Series (una por línea)</label>
-                <textarea name="series_lotes" rows="5" placeholder="Pega o escribe una serie por línea...">{{ old('series_lotes') }}</textarea>
-                <div class="hint">Se crearán como <b>disponibles</b>. Duplicadas se omiten.</div>
-                @error('series_lotes') <div class="err">{{ $message }}</div> @enderror
+                <label>Series + Subsidiaria</label>
+
+                <div id="seriesRows"></div>
+
+                <button type="button" id="addSerieBtn" class="btn-save" style="margin-top:10px;padding:6px 12px;">
+                  + Agregar serie
+                </button>
+
+                <div class="hint" style="margin-top:10px;">
+                  Agrega una fila por cada serie y selecciona su subsidiaria.
+                </div>
+
+                @error('series') <div class="err">{{ $message }}</div> @enderror
+                @error('series.*.serie') <div class="err">{{ $message }}</div> @enderror
+                @error('series.*.subsidiaria_id') <div class="err">{{ $message }}</div> @enderror
               </div>
+
+              <template id="serieRowTpl">
+                <div class="grid-2" style="align-items:end;margin-bottom:10px;">
+                  <div>
+                    <label style="font-size:12px;color:#374151;">Serie</label>
+                    <input type="text" name="series[__i__][serie]" placeholder="Ej. ABC123" required>
+                  </div>
+
+                  <div>
+                    <label style="font-size:12px;color:#374151;">Subsidiaria</label>
+                    <select name="series[__i__][subsidiaria_id]">
+                      <option value="">— Sin subsidiaria —</option>
+                      @foreach($subsidiarias as $s)
+                        <option value="{{ $s->id }}">{{ $s->nombre }}</option>
+                      @endforeach
+                    </select>
+                  </div>
+
+                  <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
+                    <button type="button" class="btn-cancel btnRemoveRow" style="padding:6px 12px;">
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              </template>
             </div>
 
             <div id="cantidad-wrap" style="{{ old('tracking')==='cantidad' ? '' : 'display:none' }}">
@@ -220,6 +256,43 @@
     const descripcion  = document.getElementById('descripcion');
     const colorConsumibleWrap = document.getElementById('color-consumible-wrap');
 
+    // ===== Repeater de series + subsidiaria =====
+    const rowsWrap = document.getElementById('seriesRows');
+    const addBtn   = document.getElementById('addSerieBtn');
+    const tpl      = document.getElementById('serieRowTpl');
+    let rowIndex   = 0;
+
+    function addSerieRow(values = {}) {
+      if (!rowsWrap || !tpl) return;
+
+      const html = tpl.innerHTML.replaceAll('__i__', String(rowIndex));
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+
+      const row = temp.firstElementChild;
+
+      // set values si vienen
+      const inputSerie = row.querySelector(`input[name="series[${rowIndex}][serie]"]`);
+      const selSubs    = row.querySelector(`select[name="series[${rowIndex}][subsidiaria_id]"]`);
+
+      if (inputSerie && values.serie) inputSerie.value = values.serie;
+      if (selSubs && values.subsidiaria_id) selSubs.value = String(values.subsidiaria_id);
+
+      row.querySelector('.btnRemoveRow')?.addEventListener('click', () => row.remove());
+
+      rowsWrap.appendChild(row);
+      rowIndex++;
+    }
+
+    addBtn?.addEventListener('click', () => addSerieRow());
+
+    // Al cargar: si tracking=serial, crea una fila por defecto
+    function ensureOneRowIfSerial() {
+      // si está visible serial-wrap y no hay filas, agrega una
+      if (serialWrap.style.display !== 'none' && rowsWrap && rowsWrap.children.length === 0) {
+        addSerieRow();
+      }
+    }
 
     // defaults por tipo (monitor y pantalla como impresora; periférico ahora serial)
     const defaultTracking = {
@@ -257,6 +330,7 @@
         serialWrap.style.display = 'none';
         cantWrap.style.display = 'none';
         updateSKUVisibility();
+        ensureOneRowIfSerial();
         return;
       }
       const isCantidad = tracking.value === 'cantidad';

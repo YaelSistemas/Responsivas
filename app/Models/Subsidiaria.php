@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\ProductoSerie;
+use Illuminate\Database\Eloquent\Builder;
 
 class Subsidiaria extends Model
 {
@@ -19,8 +21,13 @@ class Subsidiaria extends Model
         'descripcion',
     ];
 
+    public function productoSeries()
+    {
+        return $this->hasMany(ProductoSerie::class, 'subsidiaria_id');
+    }
+
     /* -------- Scopes -------- */
-    public function scopeDeEmpresa($q, int $tenantId)
+    public function scopeDeEmpresa(Builder $q, int $tenantId): Builder
     {
         return $q->where('empresa_tenant_id', $tenantId);
     }
@@ -28,10 +35,11 @@ class Subsidiaria extends Model
     /* -------- Blindaje por tenant en rutas /subsidiarias/{subsidiaria} -------- */
     public function resolveRouteBinding($value, $field = null)
     {
-        $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id);
+        $user   = auth()->user();
+        $tenant = (int) session('empresa_activa', $user?->empresa_id);
 
         return $this->where($field ?? $this->getRouteKeyName(), $value)
-            ->where('empresa_tenant_id', $tenant)
+            ->when($tenant, fn($q) => $q->where('empresa_tenant_id', $tenant))
             ->firstOrFail();
     }
 

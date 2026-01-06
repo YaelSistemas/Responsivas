@@ -14,6 +14,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use App\Models\ProductoHistorial;
+use App\Models\Subsidiaria;
 
 class ProductoController extends Controller implements HasMiddleware
 {
@@ -95,7 +96,7 @@ class ProductoController extends Controller implements HasMiddleware
 
         $seriesQuery = \App\Models\ProductoSerie::deEmpresa($tenant)
             ->whereIn('producto_id', $ids)
-            ->select('id','producto_id','serie','estado','asignado_en_responsiva_id')
+            ->select('id','producto_id','serie','estado','asignado_en_responsiva_id','subsidiaria_id')
             ->orderBy('serie');
 
         if (method_exists(\App\Models\ProductoSerie::class, 'responsivaAsignada')) {
@@ -114,6 +115,8 @@ class ProductoController extends Controller implements HasMiddleware
     // ===================== CREAR =====================
     public function create()
     {
+        $tenant = $this->tenantId();
+
         $tipos = [
             'equipo_pc'  => 'Equipo de Cómputo',
             'impresora'  => 'Impresora/Multifuncional',
@@ -124,7 +127,13 @@ class ProductoController extends Controller implements HasMiddleware
             'consumible' => 'Consumible',
             'otro'       => 'Otro',
         ];
-        return view('productos.create', compact('tipos'));
+
+        $subsidiarias = Subsidiaria::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')
+            ->get(['id','nombre']);
+
+        return view('productos.create', compact('tipos','subsidiarias'));
     }
 
     public function store(Request $request)
@@ -142,8 +151,13 @@ class ProductoController extends Controller implements HasMiddleware
             'descripcion'    => 'nullable|string|max:2000',
             'color_consumible' => ['nullable', Rule::requiredIf(fn() => $request->input('tipo') === 'consumible'),'string','max:50'],
             // Carga inicial
-            'series_lotes'   => 'nullable|string',
-            'stock_inicial'  => 'nullable|integer|min:0',
+            'series'                 => ['nullable','array'],
+            'series.*.serie'         => ['required_with:series','string','max:255'],
+            'series.*.subsidiaria_id'=> [
+                'nullable',
+                Rule::exists('subsidiarias', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
+            ],
+            'stock_inicial'          => 'nullable|integer|min:0',
             // Especificaciones
             'spec.color'                               => ['nullable','string','max:50'],
             'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
@@ -204,38 +218,63 @@ class ProductoController extends Controller implements HasMiddleware
             $producto->save();
 
             if ($tracking === 'serial') {
-                $raw = preg_split('/\r\n|\r|\n/', (string)($data['series_lotes'] ?? ''));
-                $items = collect($raw)->map(fn($s)=>trim($s))->filter()->unique()->values();
 
-                foreach ($items as $serie) {
+                // ✅ Ahora viene como array: series[n][serie] + series[n][subsidiaria_id]
+                $items = collect($data['series'] ?? [])
+                    ->map(function ($row) {
+                        $serie = trim((string)($row['serie'] ?? ''));
+                        if ($serie === '') return null;
+
+                        $subs = $row['subsidiaria_id'] ?? null;
+                        $subs = ($subs === '' || $subs === null) ? null : (int) $subs;
+
+                        return ['serie' => $serie, 'subsidiaria_id' => $subs];
+                    })
+                    ->filter()
+                    ->unique(fn($x) => $x['serie'])
+                    ->values();
+
+                // (opcional) si no mandaron series, no hace nada y sigue
+                foreach ($items as $row) {
                     try {
+                        // ✅ seguridad extra: aunque ya validaste exists+tenant, lo dejamos
+                        if (!empty($row['subsidiaria_id'])) {
+                            $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
+                                ->where('id', $row['subsidiaria_id'])
+                                ->exists();
+
+                            if (!$ok) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'series' => "La serie {$row['serie']} tiene una subsidiaria inválida o de otra empresa.",
+                                ]);
+                            }
+                        }
 
                         $serieModel = ProductoSerie::create([
                             'empresa_tenant_id' => $tenant,
                             'producto_id'       => $producto->id,
-                            'serie'             => $serie,
+                            'serie'             => $row['serie'],
                             'estado'            => 'disponible',
+                            'subsidiaria_id'    => $row['subsidiaria_id'], // ✅ aquí entra el select
                         ]);
 
-                        // =====================================================
-                        // 🟦 REGISTRO AUTOMÁTICO DE HISTORIAL DE LA SERIE
-                        // =====================================================
                         if (method_exists($serieModel, 'registrarHistorial')) {
-
                             $serieModel->registrarHistorial([
                                 'accion'          => 'creacion',
                                 'estado_anterior' => null,
                                 'estado_nuevo'    => 'disponible',
                                 'cambios'         => [
                                     'especificaciones_base' => $producto->especificaciones ?? [],
-                                    'serie' => $serieModel->serie,
+                                    'serie'                 => $serieModel->serie,
+                                    'subsidiaria_id'        => $serieModel->subsidiaria_id,
                                 ],
                             ]);
                         }
-                        // =====================================================
 
+                    } catch (\Illuminate\Validation\ValidationException $e) {
+                        throw $e; // ✅ que cancele la transacción y muestre error
                     } catch (\Throwable $e) {
-                        /* duplicadas: ignorar */
+                        // duplicadas u otros errores: ignorar (como ya lo tenías)
                     }
                 }
             } else {
@@ -411,14 +450,24 @@ class ProductoController extends Controller implements HasMiddleware
             return redirect()->route('productos.existencia', $producto);
         }
 
+        $tenant = $this->tenantId();
+
+        $subsidiarias = Subsidiaria::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')
+            ->get(['id','nombre']);
+
         $q = trim((string) $request->query('q',''));
+
         $series = $producto->series()
-            ->deEmpresa($this->tenantId())
+            ->deEmpresa($tenant)
+            ->with(['subsidiaria:id,nombre'])
             ->when($q, fn($w)=> $w->where('serie','like',"%{$q}%"))
             ->orderBy('id','desc')
-            ->paginate(15)->withQueryString();
+            ->paginate(15)
+            ->withQueryString();
 
-        return view('productos.series', compact('producto','series','q'));
+        return view('productos.series', compact('producto','series','q','subsidiarias'));
     }
 
     public function seriesStore(Request $request, Producto $producto)
@@ -426,54 +475,145 @@ class ProductoController extends Controller implements HasMiddleware
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
         if ($producto->tracking !== 'serial') abort(403);
 
-        $data = $request->validate([
-            'lotes' => 'required|string',
-        ]);
-
         $tenant = $this->tenantId();
 
-        $raw = preg_split('/\r\n|\r|\n/', $data['lotes']);
-        $items = collect($raw)->map(fn($s)=> trim($s))->filter()->unique()->values();
+        // Acepta: series[] (nuevo) o lotes (legacy)
+        $data = $request->validate([
+            // ✅ NUEVO: filas tipo create
+            'series' => ['nullable', 'array'],
+            'series.*.serie' => ['required_with:series', 'string', 'max:255'],
+            'series.*.subsidiaria_id' => [
+                'nullable',
+                Rule::exists('subsidiarias', 'id')
+                    ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
+            ],
 
-        if ($items->isEmpty()) {
-            return back()->with('error','No se detectaron series.');
+            // ✅ LEGACY: textarea
+            'lotes' => ['nullable', 'string'],
+        ]);
+
+        // ===============================
+        // 1) Construir items desde series[]
+        // ===============================
+        $itemsFromArray = collect($data['series'] ?? [])
+            ->map(function ($row) {
+                $serie = trim((string)($row['serie'] ?? ''));
+                if ($serie === '') return null;
+
+                $subs = $row['subsidiaria_id'] ?? null;
+                $subs = ($subs === '' || $subs === null) ? null : (int)$subs;
+
+                return [
+                    'serie' => $serie,
+                    'subsidiaria_id' => $subs,
+                ];
+            })
+            ->filter()
+            // unique por serie
+            ->unique(fn($x) => $x['serie'])
+            ->values();
+
+        // ===============================
+        // 2) Construir items desde lotes (si viene)
+        // ===============================
+        $itemsFromText = collect();
+
+        if (!empty($data['lotes'])) {
+            $raw = preg_split('/\r\n|\r|\n/', (string)$data['lotes']);
+            $itemsFromText = collect($raw)
+                ->map(fn($s) => trim((string)$s))
+                ->filter()
+                ->unique()
+                ->values()
+                ->map(fn($serie) => ['serie' => $serie, 'subsidiaria_id' => null]);
         }
 
-        $creadas = 0; 
+        // ===============================
+        // 3) Unir (prioridad: series[] manda subsidiaria; lotes solo serie)
+        // Si misma serie aparece en ambos, se queda la que tenga subsidiaria (series[])
+        // ===============================
+        $items = $itemsFromText
+            ->concat($itemsFromArray)
+            ->groupBy('serie')
+            ->map(function ($group) {
+                // si alguna fila trae subsidiaria_id, la preferimos
+                $withSubs = $group->first(fn($x) => !empty($x['subsidiaria_id']));
+                return $withSubs ?: $group->first();
+            })
+            ->values();
+
+        if ($items->isEmpty()) {
+            return back()->with('error', 'No se detectaron series.');
+        }
+
+        $creadas = 0;
         $duplicadas = 0;
 
-        foreach ($items as $serie) {
+        foreach ($items as $row) {
+            $serieTxt = $row['serie'];
+            $subsId   = $row['subsidiaria_id'] ?? null;
+
             try {
+                // ✅ evita duplicados por producto + serie + tenant
+                $exists = ProductoSerie::where('empresa_tenant_id', $tenant)
+                    ->where('producto_id', $producto->id)
+                    ->where('serie', $serieTxt)
+                    ->exists();
+
+                if ($exists) {
+                    $duplicadas++;
+                    continue;
+                }
+
+                // ✅ seguridad extra: subsidiaria pertenece al tenant (aunque ya valida)
+                if (!empty($subsId)) {
+                    $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
+                        ->where('id', $subsId)
+                        ->exists();
+
+                    if (!$ok) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'series' => "La serie {$serieTxt} tiene una subsidiaria inválida o de otra empresa.",
+                        ]);
+                    }
+                }
 
                 $serieModel = ProductoSerie::create([
                     'empresa_tenant_id' => $tenant,
                     'producto_id'       => $producto->id,
-                    'serie'             => $serie,
+                    'serie'             => $serieTxt,
                     'estado'            => 'disponible',
+                    'subsidiaria_id'    => $subsId, // ✅ NUEVO
                 ]);
 
                 $creadas++;
 
-                /** 🔵 REGISTRO DE HISTORIAL DE LA SERIE */
+                // ✅ historial
                 if (method_exists($serieModel, 'registrarHistorial')) {
-
                     $serieModel->registrarHistorial([
                         'accion'          => 'creacion',
                         'estado_anterior' => null,
                         'estado_nuevo'    => 'disponible',
                         'cambios'         => [
                             'serie'                 => $serieModel->serie,
+                            'subsidiaria_id'        => $serieModel->subsidiaria_id,
                             'especificaciones_base' => $producto->especificaciones ?? [],
                         ],
                     ]);
                 }
 
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                throw $e;
             } catch (\Throwable $e) {
+                // Si algo raro pasa, lo contamos como duplicada/omitida
                 $duplicadas++;
             }
         }
 
-        return back()->with('created', "Series creadas: {$creadas}".($duplicadas? " | Duplicadas: {$duplicadas}" : ''));
+        return back()->with(
+            'created',
+            "Series creadas: {$creadas}" . ($duplicadas ? " | Duplicadas/Omitidas: {$duplicadas}" : '')
+        );
     }
 
     public function seriesDestroy(Producto $producto, ProductoSerie $serie)
@@ -516,20 +656,29 @@ class ProductoController extends Controller implements HasMiddleware
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
         abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
 
-        // Si es equipo de cómputo => vista completa de overrides (color/ram/almacenamiento/cpu)
+        $tenant = $this->tenantId();
+
+        $subsidiarias = \App\Models\Subsidiaria::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')
+            ->get(['id','nombre']);
+
+        // Si es equipo de cómputo => vista completa
         if ($producto->tipo === 'equipo_pc') {
             return view('series.edit_specs', [
-                'producto' => $producto,
-                'serie'    => $serie,
-                'over'     => (array) ($serie->especificaciones ?? []), // overrides actuales
+                'producto'     => $producto,
+                'serie'        => $serie,
+                'over'         => (array) ($serie->especificaciones ?? []),
+                'subsidiarias' => $subsidiarias, // ✅ también aquí
             ]);
         }
 
-        // Para cualquier otro tipo solo una caja de descripción
+        // Otros tipos => solo descripción
         return view('series.edit_desc', [
-            'producto'    => $producto,
-            'serie'       => $serie,
-            'descripcion' => data_get($serie->especificaciones, 'descripcion'),
+            'producto'     => $producto,
+            'serie'        => $serie,
+            'descripcion'  => data_get($serie->especificaciones, 'descripcion'),
+            'subsidiarias' => $subsidiarias, // ✅ para que puedas editar subsidiaria también
         ]);
     }
 
@@ -550,6 +699,7 @@ class ProductoController extends Controller implements HasMiddleware
                 'spec.almacenamiento.tipo'         => ['nullable','in:ssd,hdd,m2'],
                 'spec.almacenamiento.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
                 'spec.procesador'                  => ['nullable','string','max:120'],
+                'subsidiaria_id' => ['nullable', Rule::exists('subsidiarias', 'id') ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),],
             ]);
 
             // overrides nuevos
@@ -565,12 +715,40 @@ class ProductoController extends Controller implements HasMiddleware
                 'procesador' => $request->input('spec.procesador'),
             ], fn($v)=>$v!==null);
 
+            $tenant = $this->tenantId();
+            $subsidiariaId = $request->filled('subsidiaria_id')
+                ? (int) $request->input('subsidiaria_id')
+                : null;
+
+            if ($subsidiariaId) {
+                $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
+                    ->where('id', $subsidiariaId)
+                    ->exists();
+
+                if (!$ok) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'subsidiaria_id' => 'Subsidiaria inválida o no pertenece a la empresa activa.',
+                    ]);
+                }
+            }
+
+            $oldSubs = $serie->subsidiaria_id;
+            $serie->subsidiaria_id = $subsidiariaId;
+
             // GUARDAR NUEVAS OVERRIDES
             $serie->especificaciones = $over ?: null;
             $serie->save();
 
             // === GUARDAR HISTORIAL ===
             $cambios = [];
+
+            // ✅ subsidiaria también en historial
+            if ($oldSubs != $subsidiariaId) {
+                $cambios['subsidiaria_id'] = [
+                    'antes'   => $oldSubs,
+                    'despues' => $subsidiariaId,
+                ];
+            }
 
             foreach(['color','ram_gb','procesador'] as $campo){
                 $old = data_get($antes, $campo);
@@ -607,32 +785,57 @@ class ProductoController extends Controller implements HasMiddleware
         }
 
         // === OTROS TIPOS (SOLO DESCRIPCIÓN) ===
-
         $data = $request->validate([
-            'descripcion' => ['nullable','string','max:2000'],
+            'descripcion'    => ['nullable','string','max:2000'],
+            'subsidiaria_id' => [
+                'nullable',
+                Rule::exists('subsidiarias', 'id')
+                    ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),
+            ],
         ]);
 
         $oldDesc = data_get($serie->especificaciones, 'descripcion');
         $newDesc = $data['descripcion'] ?? null;
 
-        $serie->especificaciones = $newDesc ? ['descripcion'=>$newDesc] : null;
+        $oldSubs = $serie->subsidiaria_id;
+        $newSubs = $data['subsidiaria_id'] ?? null;
+
+        // ✅ guardar subsidiaria
+        $serie->subsidiaria_id = $newSubs;
+
+        // ✅ guardar descripción
+        $serie->especificaciones = $newDesc ? ['descripcion' => $newDesc] : null;
+
         $serie->save();
 
-        if($oldDesc != $newDesc){
+        // ✅ historial (una sola vez)
+        $cambios = [];
+
+        if ($oldDesc != $newDesc) {
+            $cambios['descripcion'] = [
+                'antes'   => $oldDesc,
+                'despues' => $newDesc,
+            ];
+        }
+
+        if ($oldSubs != $newSubs) {
+            $cambios['subsidiaria_id'] = [
+                'antes'   => $oldSubs,
+                'despues' => $newSubs,
+            ];
+        }
+
+        if (!empty($cambios)) {
             $serie->registrarHistorial([
-                'accion' => 'edicion',
-                'cambios' => [
-                    'descripcion' => [
-                        'antes'   => $oldDesc,
-                        'despues' => $newDesc,
-                    ]
-                ]
+                'accion'  => 'edicion',
+                'cambios' => $cambios,
             ]);
         }
 
         return redirect()
             ->route('productos.series', $producto)
-            ->with('updated', true);
+            ->with('updated', 'Serie actualizada.');
+
     }
 
     // ===================== EXISTENCIA (NO SERIAL) =====================

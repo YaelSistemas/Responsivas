@@ -6,8 +6,8 @@
   </x-slot>
 
   @php
-    $eff  = (array) ($serie->specs ?? []);             // Producto + overrides
-    $over = (array) ($serie->especificaciones ?? []);  // Overrides de la serie
+    $eff  = (array) ($serie->specs ?? []);              // Producto + overrides (si tu accessor existe)
+    $over = (array) ($serie->especificaciones ?? []);   // Overrides guardados en la serie
   @endphp
 
   <style>
@@ -35,6 +35,7 @@
     <div class="zoom-inner">
       <div class="py-6">
         <div class="box space-y-4">
+
           @if ($errors->any())
             <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;">
               <b>Revisa los campos:</b>
@@ -44,11 +45,29 @@
             </div>
           @endif
 
-          {{-- IMPORTANTE: esta ruta debe existir como PUT productos/{producto}/series/{serie} --}}
-          <form id="serieForm" method="POST" action="{{ route('productos.series.update', [$serie->producto, $serie]) }}">
-            @csrf @method('PUT')
+          {{-- ✅ IMPORTANTE: usa $producto (no $serie->producto) --}}
+          <form id="serieSpecsForm" method="POST" action="{{ route('productos.series.update', [$producto, $serie]) }}">
+            @csrf
+            @method('PUT')
 
-            <p class="hint">Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.</p>
+            <p class="hint">
+              Solo cambia lo que <b>difiera</b> del producto base. Si dejas un campo vacío, se usará el valor del producto.
+            </p>
+
+            {{-- ✅ Subsidiaria --}}
+            <div>
+              <label>Subsidiaria</label>
+              <select class="inp" name="subsidiaria_id" id="subsidiaria_id">
+                <option value="">— Sin subsidiaria —</option>
+                @foreach(($subsidiarias ?? []) as $sub)
+                  <option value="{{ $sub->id }}" @selected(old('subsidiaria_id', $serie->subsidiaria_id) == $sub->id)>
+                    {{ $sub->nombre }}
+                  </option>
+                @endforeach
+              </select>
+              @error('subsidiaria_id') <div class="err">{{ $message }}</div> @enderror
+              <div class="hint">Esto se guarda directamente en la serie.</div>
+            </div>
 
             <div class="grid2">
               <div>
@@ -107,8 +126,7 @@
           </form>
 
           <div class="hint">
-            <b>Valores actuales:</b>
-            <br>
+            <b>Valores actuales:</b><br>
             Color: {{ data_get($eff,'color') ?: '—' }} |
             RAM: {{ data_get($eff,'ram_gb') ? (int) data_get($eff,'ram_gb').' GB' : '—' }} |
             Almacenamiento: {{ strtoupper((string) data_get($eff,'almacenamiento.tipo')) ?: '—' }}
@@ -123,18 +141,27 @@
 
   <script>
     (function(){
-      const form = document.getElementById('serieForm');
+      const form = document.getElementById('serieSpecsForm');
       const btnClearAll = document.getElementById('btn-clear-all');
       const btnSubmit = document.getElementById('btn-submit');
-      const fields = ['#color','#ram','#alm_tipo','#alm_cap','#cpu']
+
+      const fields = ['#subsidiaria_id','#color','#ram','#alm_tipo','#alm_cap','#cpu']
         .map(s=>document.querySelector(s)).filter(Boolean);
 
       (fields.find(el => (el.tagName==='SELECT' ? !el.value : (el.value||'').trim()==='')) || fields[0])?.focus();
 
-      btnClearAll?.addEventListener('click', ()=>{ fields.forEach(el => { el.value=''; }); });
+      btnClearAll?.addEventListener('click', ()=>{
+        fields.forEach(el => { el.value=''; });
+        fields[0]?.focus();
+      });
 
       let sending=false;
-      form.addEventListener('submit',(e)=>{ if(sending){e.preventDefault();return;} sending=true; btnSubmit.disabled=true; btnSubmit.style.opacity=.7; });
+      form?.addEventListener('submit',(e)=>{
+        if(sending){e.preventDefault();return;}
+        sending=true;
+        btnSubmit.disabled=true;
+        btnSubmit.style.opacity=.7;
+      });
 
       document.addEventListener('keydown',(e)=>{
         if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); btnSubmit?.click(); }
@@ -142,7 +169,7 @@
       });
 
       let dirty=false;
-      form.addEventListener('input', ()=> dirty=true);
+      form?.addEventListener('input', ()=> dirty=true);
       window.addEventListener('beforeunload', (e)=>{ if(dirty && !sending){ e.preventDefault(); e.returnValue=''; }});
     })();
   </script>

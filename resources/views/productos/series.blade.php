@@ -141,6 +141,32 @@
       display:inline-block;margin-left:8px;vertical-align:middle;animation:spin .6s linear infinite;
     }
     @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ====== Subsidiaria pill azul ====== */
+    .sub-pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:.28rem .75rem;
+      border-radius:9999px;
+      font-size:.75rem;
+      font-weight:700;
+      line-height:1;
+      border:1px solid #93c5fd;   /* azul borde */
+      background:#dbeafe;         /* azul claro */
+      color:#1d4ed8;              /* azul texto */
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* cuando no hay subsidiaria (si quieres igual azul, deja esto igual que arriba) */
+    .sub-pill--none{
+      border-color:#93c5fd;
+      background:#dbeafe;
+      color:#1d4ed8;
+    }
   </style>
 
   <!-- Escalamos SOLO el contenido principal.
@@ -186,6 +212,7 @@
               <thead>
                 <tr>
                   <th>Serie</th>
+                  <th class="text-center" style="width:130px">Subsidiaria</th>
                   <th class="text-center" style="width:130px">Fotos</th>
                   <th class="text-center" style="width:200px">Estado</th>
                   <th class="text-center" style="width:120px">Historial</th>
@@ -233,6 +260,17 @@
                           </div>
                         @endif
                       @endif
+                    </td>
+
+                    <td class="text-center">
+                      @php
+                        $subName = $s->subsidiaria?->nombre ?? 'Sin subsidiaria';
+                        $isNone  = empty($s->subsidiaria?->nombre);
+                      @endphp
+
+                      <span class="sub-pill {{ $isNone ? 'sub-pill--none' : '' }}" title="{{ $subName }}">
+                        {{ $subName }}
+                      </span>
                     </td>
 
                     {{-- Fotos --}}
@@ -342,24 +380,107 @@
 
   {{-- MODAL: Alta masiva (solo crear) --}}
   @can('productos.create')
-    <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-      <div class="backdrop" data-close="1"></div>
-      <div class="panel">
-        <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
-        <h3>Alta masiva de series</h3>
-        <form method="POST" action="{{ route('productos.series.store', $producto) }}">
-          @csrf
-          <textarea name="lotes" rows="8" placeholder="Pega o escribe una serie por línea...">{{ old('lotes') }}</textarea>
-          <div class="hint">Se crearán como <b>disponibles</b>. Duplicadas se omiten.</div>
-          @error('lotes') <div class="err">{{ $message }}</div> @enderror
-          <div class="actions">
-            <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Agregar series</button>
-          </div>
-        </form>
-      </div>
+  <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="backdrop" data-close="1"></div>
+
+    <div class="panel">
+      <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
+      <h3>Alta masiva de series</h3>
+
+      <form id="bulkForm" method="POST" action="{{ route('productos.series.store', $producto) }}">
+        @csrf
+
+        <div class="hint" style="margin-bottom:10px">
+          Agrega varias series y asigna su subsidiaria. Se crearán como <b>Disponible</b>.
+        </div>
+
+        <div id="rowsWrap" style="display:flex;flex-direction:column;gap:14px;">
+          @php
+            $oldRows = old('series', []);
+            if (!is_array($oldRows)) $oldRows = [];
+          @endphp
+
+          @if(count($oldRows))
+            @foreach($oldRows as $i => $r)
+              <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+                <div>
+                  <label>Serie</label>
+                  <input class="inp"
+                         name="series[{{ $i }}][serie]"
+                         value="{{ $r['serie'] ?? '' }}"
+                         placeholder="Ej. ABC123"
+                         autocomplete="off"
+                         required>
+                  @error("series.$i.serie") <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                  <label>Subsidiaria</label>
+                  <select class="inp" name="series[{{ $i }}][subsidiaria_id]">
+                    <option value="">— Sin subsidiaria —</option>
+                    @foreach(($subsidiarias ?? []) as $sub)
+                      <option value="{{ $sub->id }}"
+                        @selected((string)($r['subsidiaria_id'] ?? '') === (string)$sub->id)>
+                        {{ $sub->nombre }}
+                      </option>
+                    @endforeach
+                  </select>
+                  @error("series.$i.subsidiaria_id") <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">
+                    Quitar
+                  </button>
+                </div>
+              </div>
+            @endforeach
+          @else
+            <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+              <div>
+                <label>Serie</label>
+                <input class="inp"
+                       name="series[0][serie]"
+                       value=""
+                       placeholder="Ej. ABC123"
+                       autocomplete="off"
+                       required>
+              </div>
+
+              <div>
+                <label>Subsidiaria</label>
+                <select class="inp" name="series[0][subsidiaria_id]">
+                  <option value="">— Sin subsidiaria —</option>
+                  @foreach(($subsidiarias ?? []) as $sub)
+                    <option value="{{ $sub->id }}">{{ $sub->nombre }}</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <div style="display:flex;justify-content:flex-end;">
+                <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">
+                  Quitar
+                </button>
+              </div>
+            </div>
+          @endif
+        </div>
+
+        <div style="margin-top:14px;">
+          <button type="button" id="btnAddRow" class="btn btn-primary" style="background:#16a34a;border:none">
+            + Agregar serie
+          </button>
+        </div>
+
+        <div class="actions" style="margin-top:16px;">
+          <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnBulkSave">Guardar</button>
+        </div>
+      </form>
     </div>
-  @endcan
+  </div>
+@endcan
+
 
   {{-- MODALES DE FOTOS (uno por serie) --}}
   @foreach($series as $s)
@@ -410,20 +531,7 @@
 
   {{-- CONTENEDOR GLOBAL PARA MODAL AJAX DE HISTORIAL --}}
   <div id="ajax-modal-container"></div>
-
-  <script>
-    (function(){
-      const modal = document.getElementById('bulk-modal');
-      const openBtn = document.getElementById('open-bulk');
-      function openModal(){ modal.classList.add('open'); setTimeout(()=> modal.querySelector('textarea')?.focus(), 30); }
-      function closeModal(){ modal.classList.remove('open'); }
-      openBtn?.addEventListener('click', openModal);
-      modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
-      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal?.classList.contains('open')) closeModal(); });
-      @if ($errors->has('lotes')) openModal(); @endif
-    })();
-  </script>
-
+  
   <script>
     (function(){
       document.querySelectorAll('[data-open-fotos]').forEach(a=>{
@@ -587,5 +695,122 @@
       }
   });
   </script>
+
+<script>
+(function(){
+  const modal   = document.getElementById('bulk-modal');
+  const openBtn = document.getElementById('open-bulk');
+  const form    = document.getElementById('bulkForm');
+  const wrap    = document.getElementById('rowsWrap');
+  const addBtn  = document.getElementById('btnAddRow');
+  const btnSave = document.getElementById('btnBulkSave');
+
+  function openModal(){
+    modal.classList.add('open');
+    setTimeout(()=> {
+      const first = wrap?.querySelector('input[name*="[serie]"]');
+      first?.focus();
+    }, 30);
+  }
+  function closeModal(){
+    modal.classList.remove('open');
+  }
+
+  openBtn?.addEventListener('click', openModal);
+  modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal?.classList.contains('open')) closeModal(); });
+
+  // Crea una fila nueva
+  function makeRow(index){
+    const row = document.createElement('div');
+    row.className = 'bulk-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;';
+
+    row.innerHTML = `
+      <div>
+        <label>Serie</label>
+        <input class="inp" name="series[${index}][serie]" value="" placeholder="Ej. ABC123" autocomplete="off" required>
+      </div>
+      <div>
+        <label>Subsidiaria</label>
+        <select class="inp" name="series[${index}][subsidiaria_id]">
+          <option value="">— Sin subsidiaria —</option>
+          ${getSubsidiariasOptionsHTML()}
+        </select>
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">Quitar</button>
+      </div>
+    `;
+    return row;
+  }
+
+  // Toma las options existentes del primer select (para no duplicar PHP)
+  function getSubsidiariasOptionsHTML(){
+    const anySelect = wrap?.querySelector('select[name*="[subsidiaria_id]"]');
+    if(!anySelect) return '';
+    const opts = [...anySelect.querySelectorAll('option')]
+      .filter(o => o.value !== '') // quitamos "Sin subsidiaria" porque ya lo pusimos arriba
+      .map(o => `<option value="${o.value}">${o.textContent}</option>`)
+      .join('');
+    return opts;
+  }
+
+  // Renumera names: series[0]...[n]
+  function renumber(){
+    const rows = [...wrap.querySelectorAll('.bulk-row')];
+    rows.forEach((row, i) => {
+      const input = row.querySelector('input[name*="[serie]"]');
+      const select= row.querySelector('select[name*="[subsidiaria_id]"]');
+      if(input)  input.name  = `series[${i}][serie]`;
+      if(select) select.name = `series[${i}][subsidiaria_id]`;
+    });
+  }
+
+  // Agregar fila
+  addBtn?.addEventListener('click', ()=>{
+    const index = wrap.querySelectorAll('.bulk-row').length;
+    const row = makeRow(index);
+    wrap.appendChild(row);
+    row.querySelector('input')?.focus();
+  });
+
+  // Quitar fila (delegado)
+  wrap?.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.btn-remove-row');
+    if(!btn) return;
+
+    const rows = wrap.querySelectorAll('.bulk-row');
+    if(rows.length <= 1){
+      // si queda 1, solo limpiamos en vez de eliminar
+      const row = rows[0];
+      row.querySelector('input[name*="[serie]"]').value = '';
+      row.querySelector('select[name*="[subsidiaria_id]"]').value = '';
+      row.querySelector('input')?.focus();
+      return;
+    }
+
+    btn.closest('.bulk-row')?.remove();
+    renumber();
+  });
+
+  // Previene doble submit
+  let sending = false;
+  form?.addEventListener('submit', (e)=>{
+    if(sending){ e.preventDefault(); return; }
+    sending = true;
+    if(btnSave){
+      btnSave.disabled = true;
+      btnSave.style.opacity = .7;
+    }
+  });
+
+  // Si hubo errores de validación del bulk, abre modal
+  @if ($errors->has('series') || collect($errors->keys())->first(fn($k)=> str_starts_with($k, 'series.')))
+    openModal();
+  @endif
+})();
+</script>
+
 
 </x-app-layout>
