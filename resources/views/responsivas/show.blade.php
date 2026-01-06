@@ -455,8 +455,14 @@
                     <img
                       src="{{ $responsiva->firma_colaborador_url }}"
                       alt="Firma colaborador"
-                      style="position:absolute;left:50%;top:50%;transform:translate(-50%,-55%);
-                             max-width:180px;max-height:70px;opacity:.9;">
+                      style="position:absolute;
+                              left:50%;top:50%;
+                              transform:translate(-50%,-50%);
+                              width:900px;          /* fuerza tamaño visual */
+                              max-width:95%;
+                              height:auto;
+                              max-height:90px;      /* acorde al sign-space */
+                              opacity:1;">
                   @endif
                 </div>
                 <div class="sign-inner">
@@ -675,10 +681,10 @@
       c.width  = Math.max(1, Math.round(rect.width  * DPR));
       c.height = Math.max(1, Math.round(rect.height * DPR));
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      ctx.lineWidth   = 2;
+      ctx.lineWidth   = 3.5;
       ctx.lineCap     = 'round';
       ctx.lineJoin    = 'round';
-      ctx.strokeStyle = '#111';
+      ctx.strokeStyle = '#000';
       ctx.clearRect(0, 0, c.width, c.height);
     }
 
