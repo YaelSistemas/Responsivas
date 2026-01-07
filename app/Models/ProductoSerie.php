@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use App\Models\Responsiva;
 use App\Models\ProductoSerieHistorial;
 use App\Models\Subsidiaria;
+use App\Models\UnidadServicio;
 
 class ProductoSerie extends Model
 {
@@ -30,6 +31,7 @@ class ProductoSerie extends Model
         'observaciones',
         'asignado_en_responsiva_id',
         'subsidiaria_id',
+        'unidad_servicio_id',
         'especificaciones',               // <-- overrides por serie (JSON)
     ];
 
@@ -61,6 +63,12 @@ class ProductoSerie extends Model
     {
         return $this->belongsTo(Subsidiaria::class, 'subsidiaria_id');
     }
+
+    public function unidadServicio()
+    {
+        return $this->belongsTo(UnidadServicio::class, 'unidad_servicio_id');
+    }
+
     /* =================== Scopes =================== */
 
     public function scopeDeEmpresa(Builder $q, int $tenantId): Builder

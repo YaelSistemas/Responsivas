@@ -71,6 +71,20 @@
               @error('subsidiaria_id') <div class="err">{{ $message }}</div> @enderror
             </div>
 
+            {{-- ✅ Unidad de servicio --}}
+            <div>
+              <label>Unidad de servicio</label>
+              <select class="inp" name="unidad_servicio_id" id="unidad_servicio_id">
+                <option value="">— Sin unidad de servicio —</option>
+                @foreach(($unidadesServicio ?? []) as $u)
+                  <option value="{{ $u->id }}" @selected(old('unidad_servicio_id', $serie->unidad_servicio_id) == $u->id)>
+                    {{ $u->nombre }}
+                  </option>
+                @endforeach
+              </select>
+              @error('unidad_servicio_id') <div class="err">{{ $message }}</div> @enderror
+            </div>
+
             {{-- ✅ Descripción --}}
             <div>
               <label>Descripción / notas</label>

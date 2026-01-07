@@ -31,6 +31,9 @@
     .btn-save:hover{background:#15803d}
     .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     @media (max-width: 520px){ .grid-2{ grid-template-columns:1fr; } }
+
+    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    @media (max-width: 720px){ .grid-3{ grid-template-columns:1fr; } }
   </style>
 
   <!-- Envoltura de zoom -->
@@ -177,7 +180,7 @@
             {{-- Carga inicial SEGÚN tracking --}}
             <div id="serial-wrap" style="{{ old('tracking')==='serial' ? '' : 'display:none' }}">
               <div class="form-group">
-                <label>Series + Subsidiaria</label>
+                <label>Series + Subsidiaria + Unidad de servicio</label>
 
                 <div id="seriesRows"></div>
 
@@ -186,16 +189,17 @@
                 </button>
 
                 <div class="hint" style="margin-top:10px;">
-                  Agrega una fila por cada serie y selecciona su subsidiaria.
+                  Agrega una fila por cada serie y selecciona su subsidiaria y unidad de servicio.
                 </div>
 
                 @error('series') <div class="err">{{ $message }}</div> @enderror
                 @error('series.*.serie') <div class="err">{{ $message }}</div> @enderror
                 @error('series.*.subsidiaria_id') <div class="err">{{ $message }}</div> @enderror
+                @error('series.*.unidad_servicio_id') <div class="err">{{ $message }}</div> @enderror
               </div>
 
               <template id="serieRowTpl">
-                <div class="grid-2" style="align-items:end;margin-bottom:10px;">
+                <div class="grid-3" style="align-items:end;margin-bottom:10px;">
                   <div>
                     <label style="font-size:12px;color:#374151;">Serie</label>
                     <input type="text" name="series[__i__][serie]" placeholder="Ej. ABC123" required>
@@ -211,6 +215,16 @@
                     </select>
                   </div>
 
+                  <div>
+                    <label style="font-size:12px;color:#374151;">Unidad de servicio</label>
+                    <select name="series[__i__][unidad_servicio_id]">
+                      <option value="">— Sin unidad —</option>
+                      @foreach($unidadesServicio as $u)
+                        <option value="{{ $u->id }}">{{ $u->nombre }}</option>
+                      @endforeach
+                    </select>
+                  </div>
+
                   <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
                     <button type="button" class="btn-cancel btnRemoveRow" style="padding:6px 12px;">
                       Quitar
@@ -219,7 +233,7 @@
                 </div>
               </template>
             </div>
-
+            
             <div id="cantidad-wrap" style="{{ old('tracking')==='cantidad' ? '' : 'display:none' }}">
               <div class="form-group">
                 <label>Stock inicial</label>
@@ -228,16 +242,16 @@
                 @error('stock_inicial') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>
-
+            
             <div class="form-buttons">
               <a href="{{ route('productos.index') }}" class="btn-cancel">Cancelar</a>
               <button class="btn-save" type="submit">Crear</button>
             </div>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
   <script>
   (function(){
@@ -274,9 +288,11 @@
       // set values si vienen
       const inputSerie = row.querySelector(`input[name="series[${rowIndex}][serie]"]`);
       const selSubs    = row.querySelector(`select[name="series[${rowIndex}][subsidiaria_id]"]`);
+      const selUnidad  = row.querySelector(`select[name="series[${rowIndex}][unidad_servicio_id]"]`);
 
       if (inputSerie && values.serie) inputSerie.value = values.serie;
       if (selSubs && values.subsidiaria_id) selSubs.value = String(values.subsidiaria_id);
+      if (selUnidad && values.unidad_servicio_id) selUnidad.value = String(values.unidad_servicio_id);
 
       row.querySelector('.btnRemoveRow')?.addEventListener('click', () => row.remove());
 

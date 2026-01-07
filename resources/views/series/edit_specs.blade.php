@@ -69,6 +69,21 @@
               <div class="hint">Esto se guarda directamente en la serie.</div>
             </div>
 
+            {{-- ✅ Unidad de servicio --}}
+            <div>
+              <label>Unidad de servicio</label>
+              <select class="inp" name="unidad_servicio_id" id="unidad_servicio_id">
+                <option value="">— Sin unidad de servicio —</option>
+                @foreach(($unidadesServicio ?? []) as $u)
+                  <option value="{{ $u->id }}" @selected(old('unidad_servicio_id', $serie->unidad_servicio_id) == $u->id)>
+                    {{ $u->nombre }}
+                  </option>
+                @endforeach
+              </select>
+              @error('unidad_servicio_id') <div class="err">{{ $message }}</div> @enderror
+              <div class="hint">Esto se guarda directamente en la serie.</div>
+            </div>
+
             <div class="grid2">
               <div>
                 <label>Color</label>
@@ -145,7 +160,7 @@
       const btnClearAll = document.getElementById('btn-clear-all');
       const btnSubmit = document.getElementById('btn-submit');
 
-      const fields = ['#subsidiaria_id','#color','#ram','#alm_tipo','#alm_cap','#cpu']
+      const fields = ['#subsidiaria_id','#unidad_servicio_id','#color','#ram','#alm_tipo','#alm_cap','#cpu']
         .map(s=>document.querySelector(s)).filter(Boolean);
 
       (fields.find(el => (el.tagName==='SELECT' ? !el.value : (el.value||'').trim()==='')) || fields[0])?.focus();

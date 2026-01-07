@@ -20,6 +20,11 @@ class UnidadServicio extends Model
         'responsable_id',  // <- nuevo
     ];
 
+    public function productoSeries()
+    {
+        return $this->hasMany(\App\Models\ProductoSerie::class, 'unidad_servicio_id');
+    }
+
     public function creador()
     {
         return $this->belongsTo(User::class, 'created_by');

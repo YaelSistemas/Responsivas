@@ -15,6 +15,7 @@ use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use App\Models\ProductoHistorial;
 use App\Models\Subsidiaria;
+use App\Models\UnidadServicio;
 
 class ProductoController extends Controller implements HasMiddleware
 {
@@ -96,7 +97,7 @@ class ProductoController extends Controller implements HasMiddleware
 
         $seriesQuery = \App\Models\ProductoSerie::deEmpresa($tenant)
             ->whereIn('producto_id', $ids)
-            ->select('id','producto_id','serie','estado','asignado_en_responsiva_id','subsidiaria_id')
+            ->select('id','producto_id','serie','estado','asignado_en_responsiva_id','subsidiaria_id','unidad_servicio_id')
             ->orderBy('serie');
 
         if (method_exists(\App\Models\ProductoSerie::class, 'responsivaAsignada')) {
@@ -133,7 +134,12 @@ class ProductoController extends Controller implements HasMiddleware
             ->orderBy('nombre')
             ->get(['id','nombre']);
 
-        return view('productos.create', compact('tipos','subsidiarias'));
+        $unidadesServicio = UnidadServicio::query()
+        ->where('empresa_tenant_id', $tenant)
+        ->orderBy('nombre')
+        ->get(['id','nombre']);
+
+        return view('productos.create', compact('tipos','subsidiarias','unidadesServicio'));
     }
 
     public function store(Request $request)
@@ -156,6 +162,11 @@ class ProductoController extends Controller implements HasMiddleware
             'series.*.subsidiaria_id'=> [
                 'nullable',
                 Rule::exists('subsidiarias', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
+            ],
+            'series.*.unidad_servicio_id' => [
+                'nullable',
+                Rule::exists('unidades_servicio', 'id')
+                    ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
             'stock_inicial'          => 'nullable|integer|min:0',
             // Especificaciones
@@ -228,7 +239,14 @@ class ProductoController extends Controller implements HasMiddleware
                         $subs = $row['subsidiaria_id'] ?? null;
                         $subs = ($subs === '' || $subs === null) ? null : (int) $subs;
 
-                        return ['serie' => $serie, 'subsidiaria_id' => $subs];
+                        $unidadId = $row['unidad_servicio_id'] ?? null;
+                        $unidadId = ($unidadId === '' || $unidadId === null) ? null : (int) $unidadId;
+
+                        return [
+                            'serie'              => $serie,
+                            'subsidiaria_id'     => $subs,
+                            'unidad_servicio_id' => $unidadId,
+                        ];
                     })
                     ->filter()
                     ->unique(fn($x) => $x['serie'])
@@ -250,12 +268,25 @@ class ProductoController extends Controller implements HasMiddleware
                             }
                         }
 
+                        if (!empty($row['unidad_servicio_id'])) {
+                            $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
+                                ->where('id', $row['unidad_servicio_id'])
+                                ->exists();
+
+                            if (!$ok) {
+                                throw \Illuminate\Validation\ValidationException::withMessages([
+                                    'series' => "La serie {$row['serie']} tiene una unidad de servicio inválida o de otra empresa.",
+                                ]);
+                            }
+                        }                   
+
                         $serieModel = ProductoSerie::create([
                             'empresa_tenant_id' => $tenant,
                             'producto_id'       => $producto->id,
                             'serie'             => $row['serie'],
                             'estado'            => 'disponible',
-                            'subsidiaria_id'    => $row['subsidiaria_id'], // ✅ aquí entra el select
+                            'subsidiaria_id'    => $row['subsidiaria_id'], 
+                            'unidad_servicio_id' => $row['unidad_servicio_id'],
                         ]);
 
                         if (method_exists($serieModel, 'registrarHistorial')) {
@@ -267,6 +298,7 @@ class ProductoController extends Controller implements HasMiddleware
                                     'especificaciones_base' => $producto->especificaciones ?? [],
                                     'serie'                 => $serieModel->serie,
                                     'subsidiaria_id'        => $serieModel->subsidiaria_id,
+                                    'unidad_servicio_id' => $serieModel->unidad_servicio_id,
                                 ],
                             ]);
                         }
@@ -457,17 +489,22 @@ class ProductoController extends Controller implements HasMiddleware
             ->orderBy('nombre')
             ->get(['id','nombre']);
 
+        $unidadesServicio = UnidadServicio::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')
+            ->get(['id','nombre']);
+
         $q = trim((string) $request->query('q',''));
 
         $series = $producto->series()
             ->deEmpresa($tenant)
-            ->with(['subsidiaria:id,nombre'])
+            ->with(['subsidiaria:id,nombre', 'unidadServicio:id,nombre'])
             ->when($q, fn($w)=> $w->where('serie','like',"%{$q}%"))
             ->orderBy('id','desc')
             ->paginate(15)
             ->withQueryString();
 
-        return view('productos.series', compact('producto','series','q','subsidiarias'));
+        return view('productos.series', compact('producto','series','q','subsidiarias','unidadesServicio'));
     }
 
     public function seriesStore(Request $request, Producto $producto)
@@ -487,6 +524,11 @@ class ProductoController extends Controller implements HasMiddleware
                 Rule::exists('subsidiarias', 'id')
                     ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
+            'series.*.unidad_servicio_id' => [
+                'nullable',
+                Rule::exists('unidades_servicio', 'id')
+                    ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
+            ],
 
             // ✅ LEGACY: textarea
             'lotes' => ['nullable', 'string'],
@@ -503,10 +545,15 @@ class ProductoController extends Controller implements HasMiddleware
                 $subs = $row['subsidiaria_id'] ?? null;
                 $subs = ($subs === '' || $subs === null) ? null : (int)$subs;
 
+                $unidadId = $row['unidad_servicio_id'] ?? null;
+                $unidadId = ($unidadId === '' || $unidadId === null) ? null : (int)$unidadId;
+
                 return [
-                    'serie' => $serie,
-                    'subsidiaria_id' => $subs,
+                    'serie'              => $serie,
+                    'subsidiaria_id'     => $subs,
+                    'unidad_servicio_id' => $unidadId,
                 ];
+
             })
             ->filter()
             // unique por serie
@@ -525,7 +572,11 @@ class ProductoController extends Controller implements HasMiddleware
                 ->filter()
                 ->unique()
                 ->values()
-                ->map(fn($serie) => ['serie' => $serie, 'subsidiaria_id' => null]);
+                ->map(fn($serie) => [
+                    'serie'              => $serie,
+                    'subsidiaria_id'     => null,
+                    'unidad_servicio_id' => null,
+                ]);
         }
 
         // ===============================
@@ -552,6 +603,7 @@ class ProductoController extends Controller implements HasMiddleware
         foreach ($items as $row) {
             $serieTxt = $row['serie'];
             $subsId   = $row['subsidiaria_id'] ?? null;
+            $unidadId = $row['unidad_servicio_id'] ?? null;
 
             try {
                 // ✅ evita duplicados por producto + serie + tenant
@@ -583,7 +635,8 @@ class ProductoController extends Controller implements HasMiddleware
                     'producto_id'       => $producto->id,
                     'serie'             => $serieTxt,
                     'estado'            => 'disponible',
-                    'subsidiaria_id'    => $subsId, // ✅ NUEVO
+                    'subsidiaria_id'    => $subsId, 
+                    'unidad_servicio_id' => $unidadId,
                 ]);
 
                 $creadas++;
@@ -663,13 +716,19 @@ class ProductoController extends Controller implements HasMiddleware
             ->orderBy('nombre')
             ->get(['id','nombre']);
 
+        $unidadesServicio = \App\Models\UnidadServicio::query()
+            ->where('empresa_tenant_id', $tenant)
+            ->orderBy('nombre')
+            ->get(['id','nombre']);
+
         // Si es equipo de cómputo => vista completa
         if ($producto->tipo === 'equipo_pc') {
             return view('series.edit_specs', [
                 'producto'     => $producto,
                 'serie'        => $serie,
                 'over'         => (array) ($serie->especificaciones ?? []),
-                'subsidiarias' => $subsidiarias, // ✅ también aquí
+                'subsidiarias' => $subsidiarias, 
+                'unidadesServicio' => $unidadesServicio,
             ]);
         }
 
@@ -678,7 +737,8 @@ class ProductoController extends Controller implements HasMiddleware
             'producto'     => $producto,
             'serie'        => $serie,
             'descripcion'  => data_get($serie->especificaciones, 'descripcion'),
-            'subsidiarias' => $subsidiarias, // ✅ para que puedas editar subsidiaria también
+            'subsidiarias' => $subsidiarias, 
+            'unidadesServicio' => $unidadesServicio,
         ]);
     }
 
@@ -700,6 +760,7 @@ class ProductoController extends Controller implements HasMiddleware
                 'spec.almacenamiento.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
                 'spec.procesador'                  => ['nullable','string','max:120'],
                 'subsidiaria_id' => ['nullable', Rule::exists('subsidiarias', 'id') ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),],
+                'unidad_servicio_id' => ['nullable', Rule::exists('unidades_servicio', 'id') ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),],
             ]);
 
             // overrides nuevos
@@ -735,6 +796,25 @@ class ProductoController extends Controller implements HasMiddleware
             $oldSubs = $serie->subsidiaria_id;
             $serie->subsidiaria_id = $subsidiariaId;
 
+            $unidadId = $request->filled('unidad_servicio_id')
+                ? (int) $request->input('unidad_servicio_id')
+                : null;
+
+            if ($unidadId) {
+                $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
+                    ->where('id', $unidadId)
+                    ->exists();
+
+                if (!$ok) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'unidad_servicio_id' => 'Unidad de servicio inválida o no pertenece a la empresa activa.',
+                    ]);
+                }
+            }
+
+            $oldUnidad = $serie->unidad_servicio_id;
+            $serie->unidad_servicio_id = $unidadId;
+
             // GUARDAR NUEVAS OVERRIDES
             $serie->especificaciones = $over ?: null;
             $serie->save();
@@ -747,6 +827,13 @@ class ProductoController extends Controller implements HasMiddleware
                 $cambios['subsidiaria_id'] = [
                     'antes'   => $oldSubs,
                     'despues' => $subsidiariaId,
+                ];
+            }
+
+            if ($oldUnidad != $unidadId) {
+                $cambios['unidad_servicio_id'] = [
+                    'antes'   => $oldUnidad,
+                    'despues' => $unidadId,
                 ];
             }
 
@@ -792,6 +879,11 @@ class ProductoController extends Controller implements HasMiddleware
                 Rule::exists('subsidiarias', 'id')
                     ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),
             ],
+            'unidad_servicio_id' => [
+                'nullable',
+                Rule::exists('unidades_servicio', 'id')
+                    ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),
+            ],
         ]);
 
         $oldDesc = data_get($serie->especificaciones, 'descripcion');
@@ -802,6 +894,11 @@ class ProductoController extends Controller implements HasMiddleware
 
         // ✅ guardar subsidiaria
         $serie->subsidiaria_id = $newSubs;
+
+        $oldUnidad = $serie->unidad_servicio_id;
+        $newUnidad = $data['unidad_servicio_id'] ?? null;
+
+        $serie->unidad_servicio_id = $newUnidad;
 
         // ✅ guardar descripción
         $serie->especificaciones = $newDesc ? ['descripcion' => $newDesc] : null;
@@ -822,6 +919,13 @@ class ProductoController extends Controller implements HasMiddleware
             $cambios['subsidiaria_id'] = [
                 'antes'   => $oldSubs,
                 'despues' => $newSubs,
+            ];
+        }
+
+        if ($oldUnidad != $newUnidad) {
+            $cambios['unidad_servicio_id'] = [
+                'antes'   => $oldUnidad,
+                'despues' => $newUnidad,
             ];
         }
 

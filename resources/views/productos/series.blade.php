@@ -82,10 +82,16 @@
     .upload-row .btn{flex:0 0 auto}
     .hint{font-size:12px;color:#6b7280;margin-top:6px}
 
+    /* centrado para: Subsidiaria (2), Unidad (3), Fotos (4), Estado (5), Historial (6), Acciones (7) */
     .tbl th:nth-child(2), .tbl td:nth-child(2),
     .tbl th:nth-child(3), .tbl td:nth-child(3),
-    .tbl th:nth-child(4), .tbl td:nth-child(4){ text-align:center; }
-    .tbl td:nth-child(3) form{display:inline-block;}
+    .tbl th:nth-child(4), .tbl td:nth-child(4),
+    .tbl th:nth-child(5), .tbl td:nth-child(5),
+    .tbl th:nth-child(6), .tbl td:nth-child(6),
+    .tbl th:nth-child(7), .tbl td:nth-child(7){ text-align:center; }
+
+    /* antes era nth-child(3) porque Fotos estaba en 3; ahora Fotos es 4 */
+    .tbl td:nth-child(4) form{display:inline-block;}
 
       .badge-estado{
     display:inline-flex;
@@ -167,6 +173,30 @@
       background:#dbeafe;
       color:#1d4ed8;
     }
+
+    /* ====== Unidad de servicio pill morado ====== */
+    .unit-pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:.28rem .75rem;
+      border-radius:9999px;
+      font-size:.75rem;
+      font-weight:700;
+      line-height:1;
+      border:1px solid #c4b5fd;   /* morado borde */
+      background:#ede9fe;         /* morado claro */
+      color:#5b21b6;              /* morado texto */
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .unit-pill--none{
+      border-color:#c4b5fd;
+      background:#ede9fe;
+      color:#5b21b6;
+    }
   </style>
 
   <!-- Escalamos SOLO el contenido principal.
@@ -213,6 +243,7 @@
                 <tr>
                   <th>Serie</th>
                   <th class="text-center" style="width:130px">Subsidiaria</th>
+                  <th class="text-center" style="width:130px">Unidad</th>
                   <th class="text-center" style="width:130px">Fotos</th>
                   <th class="text-center" style="width:200px">Estado</th>
                   <th class="text-center" style="width:120px">Historial</th>
@@ -270,6 +301,17 @@
 
                       <span class="sub-pill {{ $isNone ? 'sub-pill--none' : '' }}" title="{{ $subName }}">
                         {{ $subName }}
+                      </span>
+                    </td>
+
+                    <td class="text-center">
+                      @php
+                        $unidadName = $s->unidadServicio?->nombre ?? 'Sin unidad';
+                        $unidadNone = empty($s->unidadServicio?->nombre);
+                      @endphp
+
+                      <span class="unit-pill {{ $unidadNone ? 'unit-pill--none' : '' }}" title="{{ $unidadName }}">
+                        {{ $unidadName }}
                       </span>
                     </td>
 
@@ -402,15 +444,15 @@
 
           @if(count($oldRows))
             @foreach($oldRows as $i => $r)
-              <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+              <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
                 <div>
                   <label>Serie</label>
                   <input class="inp"
-                         name="series[{{ $i }}][serie]"
-                         value="{{ $r['serie'] ?? '' }}"
-                         placeholder="Ej. ABC123"
-                         autocomplete="off"
-                         required>
+                        name="series[{{ $i }}][serie]"
+                        value="{{ $r['serie'] ?? '' }}"
+                        placeholder="Ej. ABC123"
+                        autocomplete="off"
+                        required>
                   @error("series.$i.serie") <div class="err">{{ $message }}</div> @enderror
                 </div>
 
@@ -428,6 +470,20 @@
                   @error("series.$i.subsidiaria_id") <div class="err">{{ $message }}</div> @enderror
                 </div>
 
+                <div>
+                  <label>Unidad de servicio</label>
+                  <select class="inp" name="series[{{ $i }}][unidad_servicio_id]">
+                    <option value="">— Sin unidad de servicio —</option>
+                    @foreach(($unidadesServicio ?? []) as $u)
+                      <option value="{{ $u->id }}"
+                        @selected((string)($r['unidad_servicio_id'] ?? '') === (string)$u->id)>
+                        {{ $u->nombre }}
+                      </option>
+                    @endforeach
+                  </select>
+                  @error("series.$i.unidad_servicio_id") <div class="err">{{ $message }}</div> @enderror
+                </div>
+
                 <div style="display:flex;justify-content:flex-end;">
                   <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">
                     Quitar
@@ -436,15 +492,10 @@
               </div>
             @endforeach
           @else
-            <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+            <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
               <div>
                 <label>Serie</label>
-                <input class="inp"
-                       name="series[0][serie]"
-                       value=""
-                       placeholder="Ej. ABC123"
-                       autocomplete="off"
-                       required>
+                <input class="inp" name="series[0][serie]" placeholder="Ej. ABC123" autocomplete="off" required>
               </div>
 
               <div>
@@ -453,6 +504,16 @@
                   <option value="">— Sin subsidiaria —</option>
                   @foreach(($subsidiarias ?? []) as $sub)
                     <option value="{{ $sub->id }}">{{ $sub->nombre }}</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <div>
+                <label>Unidad de servicio</label>
+                <select class="inp" name="series[0][unidad_servicio_id]">
+                  <option value="">— Sin unidad de servicio —</option>
+                  @foreach(($unidadesServicio ?? []) as $u)
+                    <option value="{{ $u->id }}">{{ $u->nombre }}</option>
                   @endforeach
                 </select>
               </div>
@@ -724,13 +785,14 @@
   function makeRow(index){
     const row = document.createElement('div');
     row.className = 'bulk-row';
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;';
 
     row.innerHTML = `
       <div>
         <label>Serie</label>
         <input class="inp" name="series[${index}][serie]" value="" placeholder="Ej. ABC123" autocomplete="off" required>
       </div>
+
       <div>
         <label>Subsidiaria</label>
         <select class="inp" name="series[${index}][subsidiaria_id]">
@@ -738,6 +800,15 @@
           ${getSubsidiariasOptionsHTML()}
         </select>
       </div>
+
+      <div>
+        <label>Unidad de servicio</label>
+        <select class="inp" name="series[${index}][unidad_servicio_id]">
+          <option value="">— Sin unidad de servicio —</option>
+          ${getUnidadesOptionsHTML()}
+        </select>
+      </div>
+
       <div style="display:flex;justify-content:flex-end;">
         <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">Quitar</button>
       </div>
@@ -756,14 +827,26 @@
     return opts;
   }
 
+  function getUnidadesOptionsHTML(){
+    const anySelect = wrap?.querySelector('select[name*="[unidad_servicio_id]"]');
+    if(!anySelect) return '';
+    return [...anySelect.querySelectorAll('option')]
+      .filter(o => o.value !== '') // quitamos "Sin unidad..." porque ya lo pusimos arriba
+      .map(o => `<option value="${o.value}">${o.textContent}</option>`)
+      .join('');
+  }
+
   // Renumera names: series[0]...[n]
   function renumber(){
     const rows = [...wrap.querySelectorAll('.bulk-row')];
     rows.forEach((row, i) => {
-      const input = row.querySelector('input[name*="[serie]"]');
-      const select= row.querySelector('select[name*="[subsidiaria_id]"]');
+      const input  = row.querySelector('input[name*="[serie]"]');
+      const subSel = row.querySelector('select[name*="[subsidiaria_id]"]');
+      const uniSel = row.querySelector('select[name*="[unidad_servicio_id]"]');
+
       if(input)  input.name  = `series[${i}][serie]`;
-      if(select) select.name = `series[${i}][subsidiaria_id]`;
+      if(subSel) subSel.name = `series[${i}][subsidiaria_id]`;
+      if(uniSel) uniSel.name = `series[${i}][unidad_servicio_id]`;
     });
   }
 
@@ -786,6 +869,7 @@
       const row = rows[0];
       row.querySelector('input[name*="[serie]"]').value = '';
       row.querySelector('select[name*="[subsidiaria_id]"]').value = '';
+      row.querySelector('select[name*="[unidad_servicio_id]"]').value = '';
       row.querySelector('input')?.focus();
       return;
     }
