@@ -72,6 +72,18 @@
   .badge-orange { background: #ffedd5; color: #c2410c; }
 </style>
 
+@php
+  // Mapas id => nombre (para que el historial no muestre IDs)
+  $subsMap = \App\Models\Subsidiaria::query()->pluck('nombre', 'id')->toArray();
+  $uniMap  = \App\Models\UnidadServicio::query()->pluck('nombre', 'id')->toArray();
+
+  // Labels bonitos para los campos
+  $labelsCampo = [
+    'subsidiaria_id'      => 'Subsidiaria',
+    'unidad_servicio_id'  => 'Unidad de servicio',
+  ];
+@endphp
+
 <div class="colab-modal-backdrop" data-modal-backdrop>
   <div class="colab-modal" role="dialog" aria-modal="true">
 
@@ -822,29 +834,42 @@
                       $antes = $valor['antes'];
                       $despues = $valor['despues'];
 
-                      $format = function($v) use ($campo) {
-                          if(is_array($v)) {
-                              if(isset($v['color'])) return $v['color'];
-                              if(isset($v['ram_gb'])) return $v['ram_gb'].' GB';
-                              if(isset($v['procesador'])) return $v['procesador'];
+                      $format = function($v) use ($campo, $subsMap, $uniMap) {
 
-                              if(isset($v['tipo']) || isset($v['capacidad_gb'])) {
-                                  return ($v['tipo'] ?? '').' — '.($v['capacidad_gb'] ?? '').' GB';
-                              }
+                            // ✅ Convertir IDs a nombres
+                            if ($campo === 'subsidiaria_id') {
+                                if (!$v) return 'Sin subsidiaria';
+                                return $subsMap[(int)$v] ?? "ID: $v";
+                            }
 
-                              return json_encode($v, JSON_UNESCAPED_UNICODE);
-                          }
+                            if ($campo === 'unidad_servicio_id') {
+                                if (!$v) return 'Sin unidad de servicio';
+                                return $uniMap[(int)$v] ?? "ID: $v";
+                            }
 
-                          if($campo === 'ram_gb' && is_numeric($v)) {
-                              return $v . ' GB';
-                          }
+                            // ---- tu lógica actual ----
+                            if(is_array($v)) {
+                                if(isset($v['color'])) return $v['color'];
+                                if(isset($v['ram_gb'])) return $v['ram_gb'].' GB';
+                                if(isset($v['procesador'])) return $v['procesador'];
 
-                          return $v ?? '—';
-                      };
+                                if(isset($v['tipo']) || isset($v['capacidad_gb'])) {
+                                    return ($v['tipo'] ?? '').' — '.($v['capacidad_gb'] ?? '').' GB';
+                                }
+
+                                return json_encode($v, JSON_UNESCAPED_UNICODE);
+                            }
+
+                            if($campo === 'ram_gb' && is_numeric($v)) {
+                                return $v . ' GB';
+                            }
+
+                            return $v ?? '—';
+                        };
                     @endphp
 
                     <tr>
-                        <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
+                        <td>{{ $labelsCampo[$campo] ?? ucfirst(str_replace('_',' ', $campo)) }}</td>
 
                         @if($accion !== 'asignacion')
                           <td class="mono text-gray-500">{{ $format($antes) }}</td>
