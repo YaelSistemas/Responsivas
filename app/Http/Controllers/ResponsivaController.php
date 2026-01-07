@@ -190,6 +190,11 @@ class ResponsivaController extends Controller implements HasMiddleware
 
             $folio = $this->nextFolio($tenantId);
 
+            $colabAsignado = Colaborador::with(['unidadServicio'])
+                ->findOrFail($req->colaborador_id);
+
+            $unidadNuevaId = $colabAsignado->unidad_servicio_id;   // <- unidad del colaborador
+
             $resp = Responsiva::create([
                 'empresa_tenant_id'     => $tenantId,
                 'folio'                 => $folio,
@@ -251,7 +256,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                 ->whereIn('id', $req->series_ids)
                 ->lockForUpdate()
                 ->with('producto:id,activo')
-                ->get(['id','producto_id','serie','estado']);
+                ->get(['id','producto_id','serie','estado','unidad_servicio_id','subsidiaria_id']);
 
             if ($series->count() !== count($req->series_ids)) {
                 throw ValidationException::withMessages([
@@ -284,10 +289,17 @@ class ResponsivaController extends Controller implements HasMiddleware
                     'producto_serie_id' => $s->id,
                 ]);
 
-                // Actualizar serie → asignado (estado real de la serie)
+                $antesUnidadId = $s->unidad_servicio_id; // 👈 unidad que tenía la serie antes
+
                 $s->update([
                     'estado'                    => $asignado,
                     'asignado_en_responsiva_id' => $resp->id,
+
+                    // ✅ aquí el cambio que quieres:
+                    'unidad_servicio_id'        => $unidadNuevaId,
+
+                    // ✅ opcional (si también quieres alinear subsidiaria)
+                    // 'subsidiaria_id'            => $subNuevaId,
                 ]);
 
                 // 👉 Estado lógico de la asignación según motivo
@@ -306,6 +318,11 @@ class ResponsivaController extends Controller implements HasMiddleware
                         'asignado_a' => [
                             'antes'   => null,
                             'despues' => $resp->colaborador->nombre . ' ' . $resp->colaborador->apellidos,
+                        ],
+
+                        'unidad_servicio_id' => [
+                            'antes'   => $antesUnidadId,
+                            'despues' => $unidadNuevaId,
                         ],
 
                         'entregado_por' => [
@@ -462,6 +479,10 @@ class ResponsivaController extends Controller implements HasMiddleware
                     ->with('producto:id,activo')
                     ->get(['id','producto_id','serie','estado']);
 
+                // ✅ Unidad del colaborador NUEVO (del request)
+                $colabNuevo = Colaborador::find($req->colaborador_id);
+                $unidadNuevaId = $colabNuevo?->unidad_servicio_id;
+
                 foreach ($seriesAdd as $s) {
 
                     if (!$s->producto || !$s->producto->activo) {
@@ -484,6 +505,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                     $s->update([
                         'estado' => $asignado,
                         'asignado_en_responsiva_id' => $responsiva->id,
+                        'unidad_servicio_id'        => $unidadNuevaId,
                     ]);
 
                     $estadoNuevo = $req->motivo_entrega === 'prestamo_provisional'
@@ -734,6 +756,31 @@ class ResponsivaController extends Controller implements HasMiddleware
                     'cambios'       => $cambiosResp,
                 ]);
             }
+
+            // ===================================
+            // ✅ SI CAMBIÓ EL COLABORADOR: actualizar unidad_servicio_id en TODAS las series actuales
+            // ===================================
+            if (($original['colaborador_id'] ?? null) != $responsiva->colaborador_id) {
+
+                $colabNuevo     = Colaborador::find($responsiva->colaborador_id);
+                $unidadNuevaId  = $colabNuevo?->unidad_servicio_id;
+
+                $serieIdsActuales = $responsiva->detalles()->pluck('producto_serie_id')->all();
+
+                $seriesActuales = ProductoSerie::deEmpresa($tenantId)
+                    ->whereIn('id', $serieIdsActuales)
+                    ->lockForUpdate()
+                    ->get(['id','unidad_servicio_id']);
+
+                foreach ($seriesActuales as $serie) {
+                    if ((int)$serie->unidad_servicio_id !== (int)$unidadNuevaId) {
+                        $serie->update([
+                            'unidad_servicio_id' => $unidadNuevaId,
+                        ]);
+                    }
+                }
+            }
+
 
             /* ===================================
             🔹 DETECTAR CAMBIOS DE EDICIÓN

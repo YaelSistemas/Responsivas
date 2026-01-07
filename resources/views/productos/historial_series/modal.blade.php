@@ -70,6 +70,8 @@
   .badge-yellow { background: #fef9c3; color: #b45309; }
   .badge-red { background: #fee2e2; color: #b91c1c; }
   .badge-orange { background: #ffedd5; color: #c2410c; }
+
+  .badge-blue { background:#dbeafe; color:#1e40af; }
 </style>
 
 @php
@@ -293,8 +295,33 @@
                   </span>
               </div>
 
+              @php
+  $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
+  $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
+
+  $unidadAntesTxt = is_numeric($unidadAntesRaw)
+      ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
+      : ($unidadAntesRaw ?: 'Sin unidad');
+
+  $unidadDespTxt = is_numeric($unidadDespRaw)
+      ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
+      : ($unidadDespRaw ?: 'Sin unidad');
+@endphp
+
+@if($unidadAntesRaw !== null || $unidadDespRaw !== null)
+  @if($unidadAntesTxt !== $unidadDespTxt)
+    <div style="margin-top:.25rem;margin-bottom:.5rem;">
+      <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
+      <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
+      →
+      <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
+    </div>
+  @endif
+@endif
+
           @endif
 
+          
           {{-- ================= ESTADO ESPECIAL PARA EDICIÓN DE ASIGNACIÓN ================= --}}
           @if($accion === 'edicion_asignacion')  
   
@@ -408,6 +435,32 @@
                     </tbody>
                 </table>
             @endif
+
+            @php
+  $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
+  $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
+
+  $unidadAntesTxt = is_numeric($unidadAntesRaw)
+      ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
+      : ($unidadAntesRaw ?: 'Sin unidad');
+
+  $unidadDespTxt = is_numeric($unidadDespRaw)
+      ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
+      : ($unidadDespRaw ?: 'Sin unidad');
+@endphp
+
+@if($unidadAntesRaw !== null || $unidadDespRaw !== null)
+  @if($unidadAntesTxt !== $unidadDespTxt)
+    <div style="margin-top:.25rem;margin-bottom:.5rem;">
+      <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
+      <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
+      →
+      <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
+    </div>
+  @endif
+@endif
+
+
               @continue
           @endif
 
@@ -826,6 +879,11 @@
             @foreach($cambios as $campo => $valor)
 
                 @if(in_array($campo, ['asignado_a','entregado_por','fecha_entrega','subsidiaria']))
+                    @continue
+                @endif
+
+                {{-- ✅ Solo omitir unidad_servicio_id cuando la acción sea asignación --}}
+                @if($accion === 'asignacion' && $campo === 'unidad_servicio_id')
                     @continue
                 @endif
 
