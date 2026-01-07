@@ -103,7 +103,7 @@
     <col class="c-fecha">
     <col class="c-soli">
     <col class="c-prov">
-    <col class="c-conceptos">
+    {{-- <col class="c-conceptos"> --}}
     <col class="c-desc">
     <col class="c-monto">
     <col class="c-fact">
@@ -121,7 +121,7 @@
       <th>Fecha</th>
       <th>Solicitante</th>
       <th>Proveedor</th>
-      <th>Conceptos</th>
+      {{-- <th>Conceptos</th> --}}
       <th>Descripción</th>
       <th>Monto</th>
       <th>Adjuntos</th>
@@ -153,12 +153,12 @@
       $prov = $oc->proveedor;
       $provNombre = $prov?->nombre ?? '—';
 
-      $conceptos = collect($oc->detalles ?? [])
+      /*$conceptos = collect($oc->detalles ?? [])
         ->pluck('concepto')
         ->filter(fn($c) => filled($c))
         ->map(fn($c) => trim($c))
         ->unique()
-        ->implode(', ');
+        ->implode(', ');*/
 
       $monto = is_numeric($oc->monto) ? number_format($oc->monto, 2) : ($oc->monto ?? '0.00');
       $fact  = $oc->factura ?: '—';
@@ -187,7 +187,7 @@
       <td title="{{ $f }}">{{ $f }}</td>
       <td title="{{ $solNombre }}">{{ $solNombre }}</td>
       <td title="{{ $provNombre }}">{{ $provNombre ?: '—' }}</td>
-      <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td>
+      {{-- <td class="desc" title="{{ $conceptos }}">{{ $conceptos }}</td> --}}
       <td class="desc" title="{{ $desc }}">{{ $desc }}</td>
       <td title="{{ $monto }}">${{ $monto }}</td>
 

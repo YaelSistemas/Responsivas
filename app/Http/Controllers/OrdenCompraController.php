@@ -804,7 +804,15 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
         $pdf = $shot->pdf();
 
-        $filename = 'oc-'.($oc->numero_orden ?? Str::uuid()).'.pdf';
+        $raw = (string) ($oc->numero_orden ?? $oc->seq ?? $oc->id);
+
+        // solo dígitos (YR-0032 -> 0032)
+        $digits = preg_replace('/\D+/', '', $raw) ?: '0';
+
+        // OC-0001 (4 dígitos)
+        $folio = str_pad($digits, 4, '0', STR_PAD_LEFT);
+
+        $filename = "OC-{$folio}.pdf";
 
         return response($pdf)
             ->header('Content-Type', 'application/pdf')
