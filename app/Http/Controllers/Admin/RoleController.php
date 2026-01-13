@@ -70,10 +70,16 @@ class RoleController extends Controller
             'delete' => 'Eliminar Orden de Compra',
         ],
         'proveedores' => [
-        'view'   => 'Ver Proveedores',
-        'create' => 'Crear Proveedores',
-        'edit'   => 'Editar Proveedores',
-        'delete' => 'Eliminar Proveedores',
+            'view'   => 'Ver Proveedores',
+            'create' => 'Crear Proveedores',
+            'edit'   => 'Editar Proveedores',
+            'delete' => 'Eliminar Proveedores',
+        ],
+        'cartuchos' => [
+            'view'   => 'Ver Cartuchos',
+            'create' => 'Crear Cartuchos',
+            'edit'   => 'Editar Cartuchos',
+            'delete' => 'Eliminar Cartuchos',
         ],
     ];
 

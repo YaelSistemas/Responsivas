@@ -382,6 +382,7 @@ class ProductoController extends Controller implements HasMiddleware
             'unidad_medida'  => 'nullable|string|max:30',
             'descripcion'    => 'nullable|string|max:2000',
             'activo'         => 'sometimes|boolean',
+
             // Especificaciones
             'spec.color'                               => ['nullable','string','max:50'],
             'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
@@ -390,7 +391,7 @@ class ProductoController extends Controller implements HasMiddleware
             'spec.procesador'                          => ['nullable','string','max:120'],
         ]);
 
-         // ✅ Normalizar valor de 'activo' (checkbox)
+        // ✅ Normalizar valor de 'activo' (checkbox)
         $data['activo'] = $request->has('activo') ? 1 : 0;
 
         // ✅ Guardar snapshot antes de actualizar
@@ -399,21 +400,46 @@ class ProductoController extends Controller implements HasMiddleware
         $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
 
         $unidad = $tracking === 'cantidad'
-            ? ($data['unidad_medida'] ?: 'pieza')
+            ? (($data['unidad_medida'] ?? null) ?: 'pieza')
             : ($producto->unidad ?: 'pieza');
 
-        $specs = null;
-        if ($data['tipo'] === 'equipo_pc') {
-            $specs = array_filter([
-                'color' => $request->input('spec.color'),
-                'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
-                'almacenamiento' => array_filter([
-                    'tipo' => $request->input('spec.almacenamiento.tipo'),
-                    'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
-                        ? (int)$request->input('spec.almacenamiento.capacidad_gb') : null,
-                ], fn($v)=>$v!==null && $v!==''),
-                'procesador' => $request->input('spec.procesador'),
-            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+        /**
+         * ✅ FIX: NO borrar especificaciones si no se editaron
+         * - Si tipo != equipo_pc => conservar lo que ya tiene
+         * - Si tipo == equipo_pc:
+         *      - si viene algún campo spec.* => recalcular y guardar
+         *      - si NO viene nada => conservar
+         */
+        $specs = $producto->especificaciones; // por defecto conservar
+
+        $tipo = $data['tipo'];
+
+        $tieneAlgunaSpec = $request->hasAny([
+            'spec.color',
+            'spec.ram_gb',
+            'spec.almacenamiento.tipo',
+            'spec.almacenamiento.capacidad_gb',
+            'spec.procesador',
+        ]);
+
+        if ($tipo === 'equipo_pc') {
+            if ($tieneAlgunaSpec) {
+                $specs = array_filter([
+                    'color' => $request->input('spec.color'),
+                    'ram_gb' => $request->filled('spec.ram_gb') ? (int) $request->input('spec.ram_gb') : null,
+                    'almacenamiento' => array_filter([
+                        'tipo' => $request->input('spec.almacenamiento.tipo'),
+                        'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
+                            ? (int) $request->input('spec.almacenamiento.capacidad_gb')
+                            : null,
+                    ], fn($v) => $v !== null && $v !== ''),
+                    'procesador' => $request->input('spec.procesador'),
+                ], fn($v) => $v !== null && $v !== '' && $v !== []);
+            }
+            // si no trae nada spec.*, se conserva $producto->especificaciones
+        } else {
+            // tipo != equipo_pc => conservar siempre (no tocar)
+            $specs = $producto->especificaciones;
         }
 
         $producto->update([
@@ -448,8 +474,8 @@ class ProductoController extends Controller implements HasMiddleware
         // si quedó como cantidad, aseguramos registro de existencias
         if ($producto->tracking === 'cantidad') {
             ProductoExistencia::firstOrCreate(
-                ['empresa_tenant_id'=>$tenant,'producto_id'=>$producto->id],
-                ['cantidad'=>0]
+                ['empresa_tenant_id' => $tenant, 'producto_id' => $producto->id],
+                ['cantidad' => 0]
             );
         }
 

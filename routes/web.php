@@ -19,6 +19,7 @@ use App\Http\Controllers\OcAdjuntoController;
 use App\Http\Controllers\OcLogController;
 use App\Http\Controllers\DevolucionController;
 use App\Http\Controllers\DevolucionFirmaLinkController;
+use App\Http\Controllers\CartuchoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -50,6 +51,24 @@ Route::get('/firmar-devolucion/{token}',
 Route::post('/firmar-devolucion/{token}', 
     [DevolucionFirmaLinkController::class, 'guardarFirma']
 )->name('devoluciones.firmaExterna.store');
+
+// ===== CARTUCHOS (PUBLICO) =====
+Route::get('/firmar-cartucho/{token}', [CartuchoController::class, 'firmaPublica'])
+    ->name('cartuchos.firma.publica');
+
+Route::post('/firmar-cartucho/{token}', [CartuchoController::class, 'firmaPublicaStore'])
+    ->name('cartuchos.firma.publica.store');
+
+Route::get('/firmar-cartucho/{token}/pdf', [CartuchoController::class, 'pdfPublico'])
+    ->name('cartuchos.firma.publica.pdf');
+
+Route::get('/firmar-cartucho/{token}/thumb', [CartuchoController::class, 'thumbPublico'])
+    ->name('cartuchos.firma.publica.thumb');
+
+Route::get('/firmar-cartucho/ok/{cartucho}', [CartuchoController::class, 'firmaPublicaOk'])
+    ->middleware('signed')
+    ->name('cartuchos.firma.publica.ok');
+
 /* <<< FIN */
 
 /*
@@ -238,6 +257,32 @@ Route::middleware(['auth'])->group(function () {
             [DevolucionFirmaLinkController::class, 'generarLink']
         )->name('devoluciones.generarLinkFirma');
     });
+
+    /*
+    |--------------------  Cartuchos  --------------------
+    */
+    Route::resource('cartuchos', CartuchoController::class)
+    ->only(['index','create','store','show','edit','update','destroy']);
+
+    // PDF interno
+    Route::get('/cartuchos/{cartucho}/pdf', [CartuchoController::class, 'pdf'])
+        ->middleware('permission:cartuchos.view')
+        ->name('cartuchos.pdf');
+
+    // Firmar en sitio (canvas en show interno)
+    Route::post('/cartuchos/{cartucho}/firmar-en-sitio', [CartuchoController::class, 'firmarEnSitio'])
+        ->middleware('permission:cartuchos.edit')
+        ->name('cartuchos.firmarEnSitio');
+
+    // Generar link firma pública
+    Route::post('/cartuchos/{cartucho}/link', [CartuchoController::class, 'emitirFirma'])
+        ->middleware('permission:cartuchos.edit')
+        ->name('cartuchos.link');
+
+    // Borrar firma (opcional)
+    Route::delete('/cartuchos/{cartucho}/firma', [CartuchoController::class, 'destroyFirma'])
+        ->middleware('permission:cartuchos.edit')
+        ->name('cartuchos.firma.destroy');
 
     /*
     |--------------------  Órdenes de Compra (con permisos)  --------------------

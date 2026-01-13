@@ -31,7 +31,7 @@
     }
 
     /* ====== Estilos propios ====== */
-    .page-wrap{max-width:950px;margin:0 auto}
+    .page-wrap{max-width:1180px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
@@ -281,7 +281,12 @@
                           // 1) override de la serie si existe, 2) cae a la descripción del producto
                           $descSerie = data_get($s->especificaciones, 'descripcion');
                           $descProd  = $producto->descripcion;
-                          $desc      = $descSerie ?? $descProd;
+                          $descRaw   = $descSerie ?? $descProd;
+
+                          // NORMALIZA: quita saltos de línea y espacios dobles
+                          $desc = $descRaw
+                            ? preg_replace('/\s+/u', ' ', str_replace(["\r\n", "\n", "\r"], ' ', $descRaw))
+                            : null;
                         @endphp
                         @if($desc)
                           <div class="chips">

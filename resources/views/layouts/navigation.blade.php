@@ -66,7 +66,7 @@
 
     $isRhActive       = request()->routeIs('colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*');
     $isProductosActive= request()->routeIs('productos.*');
-    $isFormatosActive = request()->routeIs('responsivas.*', 'devoluciones.*');
+    $isFormatosActive = request()->routeIs('responsivas.*', 'devoluciones.*', 'cartuchos.*');
 
     // COMPRAS: marcar activo si estoy en oc.* o proveedores.*
     $isComprasActive  = request()->routeIs('oc.*','proveedores.*');
@@ -192,6 +192,12 @@
                 <a href="{{ route('devoluciones.index') }}"
                   class="menu-item {{ request()->routeIs('devoluciones.*') ? 'menu-item--active' : '' }}">
                   Devoluciones
+                </a>
+                @endcan
+                @can('cartuchos.view')
+                <a href="{{ route('cartuchos.index') }}"
+                  class="menu-item {{ request()->routeIs('cartuchos.*') ? 'menu-item--active' : '' }}">
+                  Entrega de Cartuchos
                 </a>
                 @endcan
               </div>
@@ -414,6 +420,12 @@
           <a href="{{ route('devoluciones.index') }}"
             class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
             Devoluciones
+          </a>
+          @endcan
+          @can('cartuchos.view')
+          <a href="{{ route('cartuchos.index') }}"
+            class="mobile-a {{ request()->routeIs('cartuchos.*') ? 'mobile-a--active' : '' }}">
+            Cartuchos
           </a>
           @endcan
         </div>
