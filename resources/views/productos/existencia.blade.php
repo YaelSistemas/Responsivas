@@ -164,7 +164,7 @@
                       $chipClass = $m->tipo==='entrada' ? 'in' : ($m->tipo==='salida' ? 'out' : 'adj');
                     @endphp
                     <tr>
-                      <td class="text-sm text-gray-600">{{ $m->created_at->format('Y-m-d H:i') }}</td>
+                      <td class="text-sm text-gray-600">{{ \Illuminate\Support\Carbon::parse($m->fecha)->format('Y-m-d H:i') }}</td>
                       <td class="text-center">
                         <span class="chip {{ $chipClass }}">{{ ucfirst($m->tipo) }}</span>
                       </td>

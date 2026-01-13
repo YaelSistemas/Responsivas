@@ -982,10 +982,37 @@ class ProductoController extends Controller implements HasMiddleware
             ['cantidad'=>0]
         );
 
-        $movs = $producto->movimientos()
-            ->deEmpresa($this->tenantId())
-            ->orderBy('id','desc')
-            ->limit(20)->get();
+        $tenant = $this->tenantId();
+
+        $movManual = DB::table('producto_movimientos')
+            ->where('empresa_tenant_id', $tenant)
+            ->where('producto_id', $producto->id)
+            ->selectRaw("
+                created_at as fecha,
+                tipo,
+                cantidad,
+                motivo,
+                referencia
+            ");
+
+        $movCartuchos = DB::table('cartucho_detalles as cd')
+            ->join('cartuchos as c', 'c.id', '=', 'cd.cartucho_id')
+            ->where('c.empresa_tenant_id', $tenant)
+            ->where('cd.producto_id', $producto->id)
+            ->groupBy('c.id', 'c.folio', 'c.fecha_solicitud')
+            ->selectRaw("
+                c.fecha_solicitud as fecha,
+                'salida' as tipo,
+                SUM(cd.cantidad) as cantidad,
+                'Entrega de cartuchos' as motivo,
+                c.folio as referencia
+            ");
+
+        $movs = DB::query()
+            ->fromSub($movManual->unionAll($movCartuchos), 'movs')
+            ->orderByDesc('fecha')
+            ->limit(20)
+            ->get();
 
         return view('productos.existencia', compact('producto','stock','movs'));
     }

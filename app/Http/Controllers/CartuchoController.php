@@ -394,7 +394,7 @@ class CartuchoController extends Controller
             }
         });
 
-        return redirect()->route('cartuchos.index')->with('created', 'Solicitud creada.');
+        return redirect()->route('cartuchos.index')->with('created', 'Entrega de Cartuchos Creada.');
     }
 
     public function edit(Cartucho $cartucho)
@@ -685,7 +685,7 @@ class CartuchoController extends Controller
             }
         });
 
-        return redirect()->route('cartuchos.index')->with('updated', 'Solicitud actualizada.');
+        return redirect()->route('cartuchos.index')->with('updated', 'Entrega de Cartuchos Actualizada.');
     }
 
     public function show(Cartucho $cartucho)
@@ -706,6 +706,47 @@ class CartuchoController extends Controller
         ]);
 
         return view('cartuchos.show', compact('cartucho'));
+    }
+
+    public function destroy(Cartucho $cartucho)
+    {
+        $tenantId = $this->tenantId();
+
+        abort_unless((int)$cartucho->empresa_tenant_id === (int)$tenantId, 404);
+
+        DB::transaction(function () use ($cartucho, $tenantId) {
+
+            // 1) Devolver existencias de los consumibles
+            $cartucho->load('detalles');
+
+            foreach ($cartucho->detalles as $detalle) {
+                $ex = ProductoExistencia::query()
+                    ->deEmpresa($tenantId)
+                    ->where('producto_id', $detalle->producto_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($ex) {
+                    $ex->cantidad += (int)$detalle->cantidad;
+                    $ex->save();
+                }
+            }
+
+            // 2) Borrar detalles
+            CartuchoDetalle::where('cartucho_id', $cartucho->id)->delete();
+
+            // 3) Borrar firmas si existen
+            if (!empty($cartucho->firma_colaborador_path)) {
+                Storage::disk('public')->delete($cartucho->firma_colaborador_path);
+            }
+
+            // 4) Borrar cartucho
+            $cartucho->delete();
+        });
+
+        return redirect()
+            ->route('cartuchos.index')
+            ->with('deleted', 'Entrega de Cartuchos Eliminada Correctamente.');
     }
 
     private function nextFolio(int $tenantId): string
