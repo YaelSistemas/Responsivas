@@ -12,7 +12,8 @@ class OrdenCompraDetalle extends Model
         'orden_compra_id',
         'cantidad','unidad','concepto',
         'moneda','precio','importe',
-        'iva_pct','iva_monto','subtotal','total',
+        'iva_pct','isr_pct','isr_monto',
+        'iva_monto','subtotal','total',
     ];
 
     public function orden()

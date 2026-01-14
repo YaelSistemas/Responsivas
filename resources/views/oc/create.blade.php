@@ -61,19 +61,24 @@
 
   @php
     $proveedores = $proveedores ?? collect();
+
     $defaultIva = old('iva_porcentaje', 16);
     $oldItems = old('items', [
       ['cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>'']
     ]);
 
-    // Solo admin puede editar No. de orden
     $isAdmin = Auth::user()->hasRole('Administrador');
-
     $canManual = Auth::user()->hasRole('Administrador') || Auth::user()->hasRole('Compras IVA');
 
-    // Viene del controlador leyendo oc_counters.last_seq + 1
     $numeroSugerido = $numeroSugerido ?? '';
     $numeroInicial  = old('numero_orden', $numeroSugerido);
+
+    // ===== ISR (Retención) =====
+    $isrEnabled = (int) old('isr_enabled', 0);
+    $isrPct     = (float) old('isr_pct', 0);
+
+    // ✅ ISR monto (para rehidratar si hubo error)
+    $isrMontoOld = old('isr', 0);
   @endphp
 
   <div class="zoom-outer">
@@ -234,10 +239,46 @@
               </div>
             </div>
 
+            {{-- === Retención ISR (debajo de totales) === --}}
+            <div class="row" style="margin-top:-6px;">
+              <div style="display:grid;grid-template-columns: 1.1fr 1fr 1fr;gap:16px;align-items:start;">
+
+                {{-- Col 1: Toggle + hint --}}
+                <div>
+                  <label style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                    <input type="checkbox" id="isrEnabled" name="isr_enabled" value="1" {{ $isrEnabled ? 'checked' : '' }}>
+                    <span>Activar retención ISR</span>
+                  </label>
+                  <div class="hint">El total será: <b>Subtotal + IVA - ISR</b></div>
+                </div>
+
+                {{-- Col 2: ISR % --}}
+                <div id="isrPctBox" style="{{ $isrEnabled ? '' : 'display:none;' }}">
+                  <label>ISR %</label>
+                  <div class="suffix-wrap">
+                    <input type="number" step="0.01" min="0" name="isr_pct" id="isrPct"
+                           value="{{ number_format($isrPct, 2, '.', '') }}">
+                    <span class="suffix">%</span>
+                  </div>
+                </div>
+
+                {{-- Col 3: ISR monto (✅ AHORA SE ENVÍA AL BACKEND) --}}
+                <div id="isrMontoBox" style="{{ $isrEnabled ? '' : 'display:none;' }}">
+                  <label>ISR</label>
+                  <input type="number" step="0.01" min="0"
+                         name="isr" id="isr"
+                         value="{{ number_format((float)$isrMontoOld, 2, '.', '') }}"
+                         readonly>
+                  <input type="hidden" name="isr_manual" id="isrManualInput" value="">
+                </div>
+
+              </div>
+            </div>
+
             <div class="row">
               <div style="width:100%">
                 <label>Notas</label>
-                <textarea name="notas" rows="4" placeholder="Notas internas u observaciones">{{ old('notas', $oc->notas ?? '') }}</textarea>
+                <textarea name="notas" rows="4" placeholder="Notas internas u observaciones">{{ old('notas') }}</textarea>
                 @error('notas') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>
@@ -252,9 +293,12 @@
     </div>
   </div>
 
+  {{-- ===========================================================
+      1) PARTIDAS: cálculo de importes, subtotal, moneda única
+      OJO: aquí solo calculamos SUBTOTAL y disparamos applyTotals()
+  ============================================================ --}}
   <script>
     (function(){
-      // Botón "Usar sugerido" (solo aparece para admin)
       document.getElementById('resetNoOrden')?.addEventListener('click', function(){
         const inp = document.querySelector('input[name="numero_orden"]');
         if(inp){ inp.value = @json($numeroSugerido); }
@@ -262,52 +306,58 @@
 
       const tbody  = document.getElementById('itemsTbody');
       const addBtn = document.getElementById('addRow');
-      const ivaPct = document.getElementById('ivaPct');
       const elSubtotal = document.getElementById('subtotal');
-      const elIva      = document.getElementById('iva');
-      const elTotal    = document.getElementById('total');
       const alertBox   = document.getElementById('currencyAlert');
 
       function getMasterSelect(){ return tbody.querySelector('.item-row .i-moneda'); }
       function getBaseCurrency(){ const ms = getMasterSelect(); return ms ? ms.value : null; }
+
       function showCurrencyAlert(){
         if(!alertBox) return;
         alertBox.classList.add('show');
         clearTimeout(showCurrencyAlert._t);
         showCurrencyAlert._t = setTimeout(()=>alertBox.classList.remove('show'), 3000);
       }
+
       function enforceCurrencyOnAll(base, exceptEl=null){
         tbody.querySelectorAll('.i-moneda').forEach(sel => {
           if(sel !== exceptEl && sel.value !== base){ sel.value = base; }
         });
       }
+
       function onCurrencyChange(e){
         const sel = e.target, master = getMasterSelect();
         if(!master) return;
+
         if(sel === master){
           enforceCurrencyOnAll(master.value, master);
         }else{
           const base = getBaseCurrency();
-          if(base && sel.value !== base){ showCurrencyAlert(); sel.value = base; }
+          if(base && sel.value !== base){
+            showCurrencyAlert();
+            sel.value = base;
+          }
         }
+
         recalc();
       }
 
       function recalc(){
         let subtotal = 0;
+
         tbody.querySelectorAll('tr.item-row').forEach(tr=>{
           const q = parseFloat(tr.querySelector('.i-cantidad')?.value || '0');
           const p = parseFloat(tr.querySelector('.i-precio')?.value || '0');
           const imp = (q*p) || 0;
+
           const iImp = tr.querySelector('.i-importe');
           if(iImp){ iImp.value = imp.toFixed(2); }
+
           subtotal += imp;
         });
-        const iva = subtotal * (parseFloat(ivaPct.value || '0')/100);
-        const total = subtotal + iva;
+
         elSubtotal.value = subtotal.toFixed(2);
-        elIva.value      = iva.toFixed(2);
-        elTotal.value    = total.toFixed(2);
+        elSubtotal.dispatchEvent(new Event('input', { bubbles:true }));
       }
 
       function rowTemplate(idx, baseMoneda){
@@ -332,14 +382,19 @@
 
       function bindRowEvents(scope=document){
         scope.querySelectorAll('.i-cantidad,.i-precio').forEach(inp=>{
-          inp.removeEventListener('input', recalc);
           inp.addEventListener('input', recalc);
         });
+
         scope.querySelectorAll('.del-row').forEach(btn=>{
-          btn.onclick = (e)=>{ e.preventDefault(); const row = btn.closest('tr'); row.remove(); recalc(); renumberNames(); };
+          btn.onclick = (e)=>{
+            e.preventDefault();
+            btn.closest('tr')?.remove();
+            recalc();
+            renumberNames();
+          };
         });
+
         scope.querySelectorAll('.i-moneda').forEach(sel=>{
-          sel.removeEventListener('change', onCurrencyChange);
           sel.addEventListener('change', onCurrencyChange);
         });
       }
@@ -358,8 +413,10 @@
         tbody.insertAdjacentHTML('beforeend', rowTemplate(idx, base));
         const newRow = tbody.lastElementChild;
         bindRowEvents(newRow);
+
         const master = getMasterSelect();
         if(master && base){ enforceCurrencyOnAll(base); }
+
         recalc();
       });
 
@@ -367,165 +424,206 @@
       const baseInit = getBaseCurrency();
       if(baseInit){ enforceCurrencyOnAll(baseInit, getMasterSelect()); }
       recalc();
-      ivaPct?.addEventListener('input', recalc);
     })();
   </script>
 
   <script>
-    // 🚫 Evitar que Enter agregue partida o envíe el formulario mientras escribe en partidas
     document.addEventListener("keydown", function(e) {
         const target = e.target;
-
-        // Solo aplica en inputs dentro de la tabla
         const isItemInput =
             target.closest("#itemsTbody") &&
             ["INPUT", "TEXTAREA"].includes(target.tagName);
 
         if (isItemInput && e.key === "Enter") {
-            e.preventDefault(); // Bloquea acción del Enter
+            e.preventDefault();
             return false;
         }
     });
   </script>
 
-<script>
-document.addEventListener("DOMContentLoaded", () => {
+  {{-- ===========================================================
+      2) TOTALES: IVA (manual/auto) + ISR (manual/auto) + Total final
+  ============================================================ --}}
+  <script>
+  document.addEventListener("DOMContentLoaded", () => {
 
-    const CAN_MANUAL = {{ $canManual ? 'true' : 'false' }};
-    const ivaPct     = document.getElementById("ivaPct");
-    const ivaInput   = document.getElementById("iva");
-    const subtotal   = document.getElementById("subtotal");
-    const total      = document.getElementById("total");
-    const ivaManualHidden = document.getElementById("ivaManualInput");
+      const CAN_MANUAL = {{ $canManual ? 'true' : 'false' }};
 
-    function applyIvaLogic() {
-        const pct = parseFloat(ivaPct.value || 0);
-        const sub = parseFloat(subtotal.value || 0);
+      // ===== IVA =====
+      const ivaPct     = document.getElementById("ivaPct");
+      const ivaInput   = document.getElementById("iva");
+      const subtotal   = document.getElementById("subtotal");
+      const total      = document.getElementById("total");
+      const ivaManualHidden = document.getElementById("ivaManualInput");
 
-        if (pct === 0) {
+      // ===== ISR =====
+      const isrEnabled = document.getElementById("isrEnabled");
+      const isrPct     = document.getElementById("isrPct");
+      const isrInput   = document.getElementById("isr");
+      const isrPctBox  = document.getElementById("isrPctBox");
+      const isrMontoBox= document.getElementById("isrMontoBox");
+      const isrManualHidden = document.getElementById("isrManualInput");
 
-            // Bloqueo para usuarios sin permisos
-            if (!CAN_MANUAL) {
-                ivaInput.readOnly = true;
-                ivaInput.value = "0.00";
-                ivaManualHidden.value = "0.00";
-                total.value = sub.toFixed(2);
-                return;
-            }
+      function applyTotals() {
+          const pctIva = parseFloat(ivaPct.value || 0);
+          const sub = parseFloat(subtotal.value || 0);
 
-            // Usuarios con permisos → IVA manual
-            ivaInput.readOnly = false;
+          // =========================
+          // IVA (igual que edit)
+          // =========================
+          let ivaFinal = 0;
 
-            // Asegurar valor inicial
-            if (ivaInput.value === "" || isNaN(parseFloat(ivaInput.value))) {
-                ivaInput.value = "0.00";
-            }
+          if (pctIva === 0) {
+              if (!CAN_MANUAL) {
+                  ivaInput.readOnly = true;
+                  ivaInput.value = "0.00";
+                  ivaManualHidden.value = "0.00";
+                  ivaFinal = 0;
+              } else {
+                  ivaInput.readOnly = false;
 
-            const ivaManual = parseFloat(ivaInput.value || 0);
+                  if (ivaInput.value === "" || isNaN(parseFloat(ivaInput.value))) {
+                      ivaInput.value = "0.00";
+                  }
 
-            // Guardamos IVA manual igual que en EDIT
-            ivaManualHidden.value = ivaManual.toFixed(2);
+                  const ivaManual = parseFloat(ivaInput.value || 0);
+                  ivaManualHidden.value = ivaManual.toFixed(2);
+                  ivaFinal = ivaManual;
+              }
+          } else {
+              ivaInput.readOnly = true;
+              const ivaCalc = sub * (pctIva / 100);
+              ivaInput.value = ivaCalc.toFixed(2);
+              ivaManualHidden.value = "";
+              ivaFinal = ivaCalc;
+          }
 
-            total.value = (sub + ivaManual).toFixed(2);
-        }
+          // =========================
+          // ISR (manual igual que IVA)
+          // =========================
+          const isrOn = !!(isrEnabled && isrEnabled.checked);
+          if (isrPctBox)   isrPctBox.style.display   = isrOn ? "" : "none";
+          if (isrMontoBox) isrMontoBox.style.display = isrOn ? "" : "none";
 
-        else {
-            // IVA automático
-            ivaInput.readOnly = true;
+          let isrFinal = 0;
 
-            const ivaCalc = sub * (pct / 100);
-            ivaInput.value = ivaCalc.toFixed(2);
+          if (!isrOn) {
+              if (isrPct) isrPct.value = "0.00";
+              if (isrInput) {
+                  isrInput.readOnly = true;
+                  isrInput.value = "0.00";
+              }
+              if (isrManualHidden) isrManualHidden.value = "";
+          } else {
+              const pctIsr = parseFloat(isrPct?.value || 0);
 
-            // En modo automático IVA manual se borra
-            ivaManualHidden.value = "";
+              if (pctIsr === 0) {
+                  // manual (solo con permiso)
+                  if (isrInput) isrInput.readOnly = !CAN_MANUAL;
 
-            total.value = (sub + ivaCalc).toFixed(2);
-        }
-    }
+                  if (!CAN_MANUAL) {
+                      if (isrInput) isrInput.value = "0.00";
+                      isrFinal = 0;
+                      if (isrManualHidden) isrManualHidden.value = "";
+                  } else {
+                      if (isrInput && (isrInput.value === "" || isNaN(parseFloat(isrInput.value)))) {
+                          isrInput.value = "0.00";
+                      }
+                      const isrManual = parseFloat(isrInput?.value || 0);
+                      isrFinal = isrManual;
+                      if (isrManualHidden) isrManualHidden.value = isrManual.toFixed(2);
+                  }
+              } else {
+                  // automático
+                  if (isrInput) isrInput.readOnly = true;
+                  const isrCalc = sub * (pctIsr / 100);
+                  if (isrInput) isrInput.value = isrCalc.toFixed(2);
+                  isrFinal = isrCalc;
+                  if (isrManualHidden) isrManualHidden.value = "";
+              }
+          }
 
-    // Eventos
-    ivaPct.addEventListener("input", applyIvaLogic);
-    ivaInput.addEventListener("input", applyIvaLogic);
+          // =========================
+          // TOTAL FINAL
+          // =========================
+          total.value = (sub + ivaFinal - isrFinal).toFixed(2);
+      }
 
-    // Recalcular siempre que cambien partidas
-    const watcher = new MutationObserver(applyIvaLogic);
-    watcher.observe(subtotal, { attributes: true, childList: true, subtree: true });
+      // Eventos IVA
+      ivaPct?.addEventListener("input", applyTotals);
+      ivaInput?.addEventListener("input", applyTotals);
 
-    applyIvaLogic();
-});
-</script>
+      // Eventos ISR
+      isrEnabled?.addEventListener("change", applyTotals);
+      isrPct?.addEventListener("input", applyTotals);
+      isrInput?.addEventListener("input", applyTotals);
 
-@push('styles')
-<link rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
+      // Subtotal cambia desde recalc()
+      subtotal?.addEventListener("input", applyTotals);
 
-<style>
-    /* Contenedor del dropdown: SIN scroll pero con fondo */
-    .ts-dropdown {
-        max-height: none;
-        overflow-y: visible;
-        z-index: 9999 !important;
+      applyTotals();
+  });
+  </script>
 
-        background: #ffffff;              /* fondo sólido */
-        border: 1px solid #d1d5db;        /* opcional, para que se vea como tu form */
-        box-shadow: 0 4px 10px rgba(0,0,0,.08);
-    }
+  @push('styles')
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
 
-    /* Contenido interno con scroll y mismo fondo */
-    .ts-dropdown .ts-dropdown-content {
-        max-height: 260px;
-        overflow-y: auto;
-        background: #ffffff;              /* asegura fondo blanco también aquí */
-    }
+  <style>
+      .ts-dropdown {
+          max-height: none;
+          overflow-y: visible;
+          z-index: 9999 !important;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          box-shadow: 0 4px 10px rgba(0,0,0,.08);
+      }
+      .ts-dropdown .ts-dropdown-content {
+          max-height: 260px;
+          overflow-y: auto;
+          background: #ffffff;
+      }
+      .ts-dropdown .option:hover,
+      .ts-dropdown .option.active {
+          background: #f3f4f6;
+      }
+  </style>
+  @endpush
 
-    /* (Opcional) mejor contraste al pasar el mouse */
-    .ts-dropdown .option:hover,
-    .ts-dropdown .option.active {
-        background: #f3f4f6;
-    }
-</style>
-@endpush
+  @push('scripts')
+      <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+      <script>
+          document.addEventListener('DOMContentLoaded', () => {
+              const baseConfig = {
+                  allowEmptyOption: true,
+                  placeholder: '— Selecciona —',
+                  maxOptions: 5000,
+                  sortField: { field: 'text', direction: 'asc' },
+                  plugins: ['dropdown_input'],
+                  dropdownParent: 'body',
+                  onDropdownOpen: function () {
+                      const rect = this.control.getBoundingClientRect();
+                      const espacioAbajo = window.innerHeight - rect.bottom - 10;
+                      const dropdown = this.dropdown;
 
-@push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const baseConfig = {
-                allowEmptyOption: true,
-                placeholder: '— Selecciona —',
-                maxOptions: 5000,
-                sortField: { field: 'text', direction: 'asc' },
-                plugins: ['dropdown_input'],   // cuadro de búsqueda dentro del menú
-                dropdownParent: 'body',        // 👈 el dropdown se monta en <body>
-                onDropdownOpen: function () {  // 👈 ajusta altura según espacio disponible
-                    const rect = this.control.getBoundingClientRect();
-                    const espacioAbajo = window.innerHeight - rect.bottom - 10; // margen inferior
-                    const dropdown = this.dropdown;
+                      if (dropdown) {
+                          const minimo = 160;
+                          const maximo = 260;
+                          let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
+                          dropdown.style.maxHeight = alto + 'px';
+                      }
+                  }
+              };
 
-                    if (dropdown) {
-                        const minimo = 160;
-                        const maximo = 260;
-                        let alto = Math.max(minimo, Math.min(espacioAbajo, maximo));
-                        dropdown.style.maxHeight = alto + 'px';
-                    }
-                }
-            };
+              if (document.getElementById('solicitante_id')) {
+                  new TomSelect('#solicitante_id', { ...baseConfig });
+              }
 
-            // Solicitante
-            if (document.getElementById('solicitante_id')) {
-                new TomSelect('#solicitante_id', {
-                    ...baseConfig
-                });
-            }
-
-            // Proveedor
-            if (document.getElementById('proveedor_id')) {
-                new TomSelect('#proveedor_id', {
-                    ...baseConfig
-                });
-            }
-        });
-    </script>
-@endpush
+              if (document.getElementById('proveedor_id')) {
+                  new TomSelect('#proveedor_id', { ...baseConfig });
+              }
+          });
+      </script>
+  @endpush
 
 </x-app-layout>

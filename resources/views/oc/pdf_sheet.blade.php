@@ -69,10 +69,17 @@
 
   /* ===== Partidas ===== */
   $detalles    = collect($oc->detalles ?? [])->values();
+
   $sumSubtotal = $detalles->sum(fn($d) => (float)($d->subtotal ?? 0));
   $sumIva      = $detalles->sum(fn($d) => (float)($d->iva_monto ?? 0));
   $sumTotal    = $detalles->sum(fn($d) => (float)($d->total ?? 0));
-  $moneda      = $detalles->first()->moneda ?? 'MXN';
+
+  /* ✅ ISR */
+  $sumIsr = $detalles->sum(fn($d) => (float)($d->isr_monto ?? 0));
+  $hasIsrPct = $detalles->contains(fn($d) => (float)($d->isr_pct ?? 0) > 0);
+  $showIsr = ($sumIsr > 0) || $hasIsrPct;
+
+  $moneda  = $detalles->first()->moneda ?? 'MXN';
 
   // 13 filas base; si hay más, se generan dinámicamente
   $baseBlocks   = 13;
@@ -313,13 +320,29 @@
     @php
       [$sSym, $sVal] = $moneyParts($sumSubtotal, $moneda);
       [$vSym, $vVal] = $moneyParts($sumIva, $moneda);
+    
+      // ✅ Si tu total NO incluye ISR en detalles, descomenta:
+      // $sumTotal = $sumTotal - $sumIsr;
+    
       [$tSym, $tVal] = $moneyParts($sumTotal, $moneda);
+    
+      // ISR money parts
+      [$rSym, $rVal] = $moneyParts($sumIsr, $moneda);
     @endphp
 
     <tr class="summary"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>SUBTOTAL</b></td>
       <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $sSym }}</b></span><span class="val"><b>{{ $sVal }}</b></span></div></td></tr>
     <tr class="summary"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>IVA</b></td>
       <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $vSym }}</b></span><span class="val"><b>{{ $vVal }}</b></span></div></td></tr>
+      @if($showIsr)
+      <tr class="summary">
+        <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+        <td class="right"><b>RET ISR</b></td>
+        <td class="money-total">
+          <div class="mwrap"><span class="sym"><b>{{ $rSym }}</b></span><span class="val"><b>{{ $rVal }}</b></span></div>
+        </td>
+      </tr>
+      @endif
     <tr class="summary last"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>TOTAL ({{ $moneda }})</b></td>
       <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $tSym }}</b></span><span class="val"><b>{{ $tVal }}</b></span></div></td></tr>
 

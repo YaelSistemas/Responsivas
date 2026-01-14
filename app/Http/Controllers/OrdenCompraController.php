@@ -154,234 +154,311 @@ class OrdenCompraController extends Controller implements HasMiddleware
     }
 
     public function store(Request $request, OrdenCompraFolioService $folios)
-{
-    $tenantId = $this->tenantId();
-    $tabla    = (new OrdenCompra)->getTable();
+    {
+        $tenantId = $this->tenantId();
+        $tabla    = (new OrdenCompra)->getTable();
 
-    // ✅ Validación cabecera
-    $data = $request->validate([
-        'fecha'           => ['required', 'date'],
-        'solicitante_id'  => ['required', 'exists:colaboradores,id'],
-        'proveedor_id'    => ['required', 'exists:proveedores,id'],
-        'descripcion'     => ['nullable', 'string'],
-        'notas'           => ['nullable','string','max:2000'],
-        'monto'           => ['nullable', 'numeric', 'min:0'],
-        'factura'         => ['nullable', 'string', 'max:100'],
-        'numero_orden'    => ['nullable', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')],
-        'iva_porcentaje'  => ['nullable','numeric','min:0','max:100'],
-    ]);
+        // ✅ Validación cabecera
+        $data = $request->validate([
+            'fecha'           => ['required', 'date'],
+            'solicitante_id'  => ['required', 'exists:colaboradores,id'],
+            'proveedor_id'    => ['required', 'exists:proveedores,id'],
+            'descripcion'     => ['nullable', 'string'],
+            'notas'           => ['nullable','string','max:2000'],
+            'monto'           => ['nullable', 'numeric', 'min:0'],
+            'factura'         => ['nullable', 'string', 'max:100'],
+            'numero_orden'    => ['nullable', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')],
+            'iva_porcentaje'  => ['nullable','numeric','min:0','max:100'],
 
-    // Validación partidas
-    $request->validate([
-        'items'            => ['required','array','min:1'],
-        'items.*.cantidad' => ['required','numeric','min:0.001'],
-        'items.*.unidad'   => ['required','string','max:50'],
-        'items.*.concepto' => ['required','string','max:500'],
-        'items.*.moneda'   => ['required','string','max:10'],
-        'items.*.precio'   => ['required','numeric','min:0'],
-    ]);
+            // ✅ ISR (retención)
+            'isr_enabled'     => ['nullable','boolean'],
+            'isr_pct'         => ['nullable','numeric','min:0','max:100'],
+            'isr'             => ['nullable','numeric','min:0'],     // monto ISR (auto o manual)
+            'isr_manual'      => ['nullable','numeric','min:0'],     // hidden cuando es manual
+        ]);
 
-    $user   = auth()->user();
-    $prefix = $this->makePrefix($user);
+        // ✅ Validación partidas
+        $request->validate([
+            'items'            => ['required','array','min:1'],
+            'items.*.cantidad' => ['required','numeric','min:0.001'],
+            'items.*.unidad'   => ['required','string','max:50'],
+            'items.*.concepto' => ['required','string','max:500'],
+            'items.*.moneda'   => ['required','string','max:10'],
+            'items.*.precio'   => ['required','numeric','min:0'],
+        ]);
 
-    $orden = DB::transaction(function () use ($tenantId, $tabla, $data, $request, $prefix) {
+        $user   = auth()->user();
+        $prefix = $this->makePrefix($user);
 
-        /* ===================== BLOQUE CRÍTICO (folios) ===================== */
-        $counter = DB::table('oc_counters')->where('tenant_id', $tenantId)->lockForUpdate()->first();
-        if (!$counter) {
-            DB::table('oc_counters')->insert([
-                'tenant_id'  => $tenantId,
-                'last_seq'   => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $counter = (object)['last_seq' => 0];
-        }
+        $orden = DB::transaction(function () use ($tenantId, $tabla, $data, $request, $prefix) {
 
-        $maxDb = (int) DB::table($tabla)
-            ->where('empresa_tenant_id', $tenantId)
-            ->selectRaw("MAX(CAST(SUBSTRING_INDEX(numero_orden,'-',-1) AS UNSIGNED)) AS m")
-            ->value('m');
-
-        $currSeq = max((int)$counter->last_seq, $maxDb);
-        $nextSeq = $currSeq + 1;
-
-        $isAdmin  = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
-        $override = null;
-        $reqSeq   = null;
-
-        if ($isAdmin && !empty($data['numero_orden'])) {
-            $override = $data['numero_orden'];
-            if (preg_match('/(\d+)$/', $override, $m)) {
-                $reqSeq = (int)$m[1];
-            }
-        }
-
-        $seq     = null;
-        $noOrden = null;
-
-        if ($override !== null && $reqSeq !== null) {
-            $yaExiste = DB::table($tabla)
-                ->where('empresa_tenant_id', $tenantId)
-                ->where('numero_orden', $override)
-                ->exists();
-            if ($yaExiste) {
-                throw ValidationException::withMessages([
-                    'numero_orden' => "El número {$override} ya está en uso por otra orden.",
+            /* ===================== BLOQUE CRÍTICO (folios) ===================== */
+            $counter = DB::table('oc_counters')->where('tenant_id', $tenantId)->lockForUpdate()->first();
+            if (!$counter) {
+                DB::table('oc_counters')->insert([
+                    'tenant_id'  => $tenantId,
+                    'last_seq'   => 0,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
+                $counter = (object)['last_seq' => 0];
             }
 
-            if ($reqSeq >= $nextSeq) {
+            $maxDb = (int) DB::table($tabla)
+                ->where('empresa_tenant_id', $tenantId)
+                ->selectRaw("MAX(CAST(SUBSTRING_INDEX(numero_orden,'-',-1) AS UNSIGNED)) AS m")
+                ->value('m');
+
+            $currSeq = max((int)$counter->last_seq, $maxDb);
+            $nextSeq = $currSeq + 1;
+
+            $isAdmin  = auth()->user()->hasRole('Administrador') || auth()->user()->can('oc.edit_prefix');
+            $override = null;
+            $reqSeq   = null;
+
+            if ($isAdmin && !empty($data['numero_orden'])) {
+                $override = $data['numero_orden'];
+                if (preg_match('/(\d+)$/', $override, $m)) {
+                    $reqSeq = (int)$m[1];
+                }
+            }
+
+            $seq     = null;
+            $noOrden = null;
+
+            if ($override !== null && $reqSeq !== null) {
+                $yaExiste = DB::table($tabla)
+                    ->where('empresa_tenant_id', $tenantId)
+                    ->where('numero_orden', $override)
+                    ->exists();
+
+                if ($yaExiste) {
+                    throw ValidationException::withMessages([
+                        'numero_orden' => "El número {$override} ya está en uso por otra orden.",
+                    ]);
+                }
+
+                if ($reqSeq >= $nextSeq) {
+                    DB::table('oc_counters')
+                        ->where('tenant_id', $tenantId)
+                        ->update(['last_seq' => $reqSeq, 'updated_at' => now()]);
+
+                    $seq     = $reqSeq;
+                    $noOrden = $override;
+                } else {
+                    $seq     = null;
+                    $noOrden = $override;
+                }
+            } else {
                 DB::table('oc_counters')
                     ->where('tenant_id', $tenantId)
-                    ->update(['last_seq' => $reqSeq, 'updated_at' => now()]);
-                $seq     = $reqSeq;
-                $noOrden = $override;
-            } else {
-                $seq     = null;
-                $noOrden = $override;
+                    ->update(['last_seq' => $nextSeq, 'updated_at' => now()]);
+
+                $seq     = $nextSeq;
+                $noOrden = sprintf('%s-%04d', $prefix, $seq);
             }
-        } else {
-            DB::table('oc_counters')
-                ->where('tenant_id', $tenantId)
-                ->update(['last_seq' => $nextSeq, 'updated_at' => now()]);
-            $seq     = $nextSeq;
-            $noOrden = sprintf('%s-%04d', $prefix, $seq);
-        }
-        /* =================== FIN BLOQUE CRÍTICO =================== */
+            /* =================== FIN BLOQUE CRÍTICO =================== */
 
-        // Cabecera
-        $payload = $data;
-        $payload['empresa_tenant_id'] = $tenantId;
-        $payload['numero_orden']      = $noOrden;
+            // =====================
+            // Cabecera
+            // =====================
+            $payload = $data;
+            $payload['empresa_tenant_id'] = $tenantId;
+            $payload['numero_orden']      = $noOrden;
 
-        if (\Schema::hasColumn($tabla, 'seq')) {
-            $payload['seq'] = $seq;
-        }
-
-        if (\Schema::hasColumn($tabla, 'proveedor')) {
-            $prov = \App\Models\Proveedor::where('empresa_tenant_id', $tenantId)
-                ->findOrFail($payload['proveedor_id']);
-            $payload['proveedor'] = $prov->nombre;
-        }
-
-        // Normalización correcta de IVA
-        if (\Schema::hasColumn($tabla, 'iva_porcentaje')) {
-
-            if ($data['iva_porcentaje'] === null || $data['iva_porcentaje'] === '') {
-                // Usuario dejó vacío → tratar como NULL (IVA manual)
-                $payload['iva_porcentaje'] = null;
-            } else {
-                // Valor numérico válido
-                $payload['iva_porcentaje'] = (float)$data['iva_porcentaje'];
+            if (\Schema::hasColumn($tabla, 'seq')) {
+                $payload['seq'] = $seq;
             }
-        }
 
-        $payload['created_by'] = Auth::id();
+            if (\Schema::hasColumn($tabla, 'proveedor')) {
+                $prov = \App\Models\Proveedor::where('empresa_tenant_id', $tenantId)
+                    ->findOrFail($payload['proveedor_id']);
+                $payload['proveedor'] = $prov->nombre;
+            }
 
-        /** @var \App\Models\OrdenCompra $oc */
-        $oc = \App\Models\OrdenCompra::create($payload);
+            // =====================
+            // Normalización IVA%
+            // =====================
+            if (\Schema::hasColumn($tabla, 'iva_porcentaje')) {
+                if ($data['iva_porcentaje'] === null || $data['iva_porcentaje'] === '') {
+                    $payload['iva_porcentaje'] = null; // IVA manual (en tu lógica: IVA% vacío)
+                } else {
+                    $payload['iva_porcentaje'] = (float)$data['iva_porcentaje'];
+                }
+            }
 
-        /* ============================================================
-           NUEVA LÓGICA CORREGIDA PARA PARTIDAS + IVA MANUAL
-        ============================================================ */
+            // =====================
+            // Normalización ISR (cabecera)
+            // =====================
+            $isrEnabled   = (int) $request->boolean('isr_enabled', false);
+            $isrPctReqRaw = $request->input('isr_pct');
+            $isrPctReq    = ($isrPctReqRaw === null || $isrPctReqRaw === '') ? 0 : (float)$isrPctReqRaw;
 
-        // Normalización IVA%
-        $ivaPctOC = $data['iva_porcentaje'] === null || $data['iva_porcentaje'] === ''
-            ? 0
-            : (float)$data['iva_porcentaje'];
+            $isrMontoReqRaw = $request->input('isr'); // input readonly (auto) o editable (manual)
+            $isrMontoReq    = ($isrMontoReqRaw === null || $isrMontoReqRaw === '') ? 0 : (float)$isrMontoReqRaw;
 
-        // Tomar IVA manual enviado
-        $ivaManual = $request->input('iva_manual');
+            $isrManualHidden = $request->input('isr_manual'); // hidden cuando manual
 
-        // Verificar permisos
-        $canManual = auth()->user()->hasRole('Administrador') 
-                || auth()->user()->hasRole('Compras IVA');
+            // Si ISR no está activo, forzar ceros
+            if (!$isrEnabled) {
+                $isrPctReq = 0;
+                $isrMontoReq = 0;
+                $isrManualHidden = null;
+            }
 
-        // Si no puede usar IVA manual → forzar a 0
-        if (!$canManual) {
-            $ivaManual = 0;
-        }
+            if (\Schema::hasColumn($tabla, 'isr_enabled')) $payload['isr_enabled'] = $isrEnabled;
+            if (\Schema::hasColumn($tabla, 'isr_pct'))     $payload['isr_pct']     = $isrPctReq;
+            if (\Schema::hasColumn($tabla, 'isr_monto'))   $payload['isr_monto']   = $isrMontoReq;
+            if (\Schema::hasColumn($tabla, 'isr_manual'))  $payload['isr_manual']  = $isrManualHidden;
 
-        // Usar IVA manual solo si IVA% = 0 y el valor es numérico
-        $usarIvaManual = ($ivaPctOC == 0 && is_numeric($ivaManual));
+            $payload['created_by'] = Auth::id();
 
-        // 1) Generar subtotales
-        $subtotalOC = 0;
-        $temp = [];
+            /** @var \App\Models\OrdenCompra $oc */
+            $oc = \App\Models\OrdenCompra::create($payload);
 
-        foreach ($request->items as $row) {
-            $cantidad = (float) ($row['cantidad'] ?? 0);
-            $precio   = (float) ($row['precio'] ?? 0);
-            $subtotal = round($cantidad * $precio, 4);
+            /* ============================================================
+            PARTIDAS + IVA MANUAL (tu lógica actual, intacta)
+            ============================================================ */
 
-            $temp[] = [
-                'cantidad' => $cantidad,
-                'unidad'   => $row['unidad'] ?? null,
-                'concepto' => $row['concepto'],
-                'moneda'   => $row['moneda'],
-                'precio'   => $precio,
-                'subtotal' => $subtotal,
-            ];
+            // IVA%
+            $ivaPctOC = $data['iva_porcentaje'] === null || $data['iva_porcentaje'] === ''
+                ? 0
+                : (float)$data['iva_porcentaje'];
 
-            $subtotalOC += $subtotal;
-        }
+            // IVA manual (hidden)
+            $ivaManual = $request->input('iva_manual');
 
-        // 2) Crear filas con IVA correcto
-        foreach ($temp as $d) {
+            // Permisos IVA manual
+            $canManual = auth()->user()->hasRole('Administrador')
+                    || auth()->user()->hasRole('Compras IVA');
 
+            if (!$canManual) {
+                $ivaManual = 0;
+            }
+
+            // Usar IVA manual solo si IVA% = 0 y el valor es numérico
+            $usarIvaManual = ($ivaPctOC == 0 && is_numeric($ivaManual));
+
+            // 1) Subtotales
+            $subtotalOC = 0;
+            $temp = [];
+
+            foreach ($request->items as $row) {
+                $cantidad = (float) ($row['cantidad'] ?? 0);
+                $precio   = (float) ($row['precio'] ?? 0);
+                $subtotal = round($cantidad * $precio, 4);
+
+                $temp[] = [
+                    'cantidad' => $cantidad,
+                    'unidad'   => $row['unidad'] ?? null,
+                    'concepto' => $row['concepto'],
+                    'moneda'   => $row['moneda'],
+                    'precio'   => $precio,
+                    'subtotal' => $subtotal,
+                ];
+
+                $subtotalOC += $subtotal;
+            }
+
+            // 2) Crear filas con IVA correcto + ISR proporcional
+            foreach ($temp as $d) {
+
+                // ===== IVA fila =====
+                if ($usarIvaManual) {
+                    $ivaMonto = $subtotalOC > 0
+                        ? round(($d['subtotal'] / $subtotalOC) * (float)$ivaManual, 4)
+                        : 0;
+
+                    $ivaPctFila = 0;
+                } else {
+                    $ivaPctFila = $ivaPctOC;
+                    $ivaMonto   = round($d['subtotal'] * ($ivaPctOC / 100), 4);
+                }
+
+                // ===== ISR fila =====
+                $isrPctFila   = 0;
+                $isrMontoFila = 0;
+
+                if ($isrEnabled) {
+                    if ($isrPctReq > 0) {
+                        // automático por % en cada fila
+                        $isrPctFila   = $isrPctReq;
+                        $isrMontoFila = round($d['subtotal'] * ($isrPctReq / 100), 4);
+                    } else {
+                        // manual: repartir proporcional al subtotal
+                        $isrPctFila = 0;
+                        $isrMontoFila = $subtotalOC > 0
+                            ? round(($d['subtotal'] / $subtotalOC) * (float)$isrMontoReq, 4)
+                            : 0;
+                    }
+                }
+
+                // Total fila (Subtotal + IVA - ISR)
+                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila, 4);
+
+                $detallePayload = [
+                    'orden_compra_id' => $oc->id,
+                    'cantidad'        => $d['cantidad'],
+                    'unidad'          => $d['unidad'],
+                    'concepto'        => $d['concepto'],
+                    'moneda'          => $d['moneda'],
+                    'precio'          => $d['precio'],
+                    'importe'         => $d['subtotal'],
+                    'iva_pct'         => $ivaPctFila,
+                    'iva_monto'       => $ivaMonto,
+                    'subtotal'        => $d['subtotal'],
+                    'total'           => $totalFila,
+                ];
+
+                // Guardar ISR en detalles solo si existen columnas
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'isr_pct')) {
+                    $detallePayload['isr_pct'] = $isrPctFila;
+                }
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'isr_monto')) {
+                    $detallePayload['isr_monto'] = $isrMontoFila;
+                }
+
+                OrdenCompraDetalle::create($detallePayload);
+            }
+
+            // ===== IVA cabecera =====
             if ($usarIvaManual) {
-                // IVA proporcional
-                $ivaMonto = $subtotalOC > 0
-                    ? round(($d['subtotal'] / $subtotalOC) * (float)$ivaManual, 4)
-                    : 0;
-
-                $ivaPctFila = 0;
-
+                $ivaMontoOC = (float)$ivaManual;
             } else {
-                // IVA automático
-                $ivaPctFila = $ivaPctOC;
-                $ivaMonto   = round($d['subtotal'] * ($ivaPctOC / 100), 4);
+                $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
             }
 
-            $totalFila = round($d['subtotal'] + $ivaMonto, 4);
+            // ===== ISR cabecera =====
+            $isrMontoOC = 0;
+            if ($isrEnabled) {
+                if ($isrPctReq > 0) {
+                    $isrMontoOC = round($subtotalOC * ($isrPctReq / 100), 4);
+                } else {
+                    $isrMontoOC = round((float)$isrMontoReq, 4);
+                }
+            }
 
-            OrdenCompraDetalle::create([
-                'orden_compra_id' => $oc->id,
-                'cantidad'        => $d['cantidad'],
-                'unidad'          => $d['unidad'],
-                'concepto'        => $d['concepto'],
-                'moneda'          => $d['moneda'],
-                'precio'          => $d['precio'],
-                'importe'         => $d['subtotal'],
-                'iva_pct'         => $ivaPctFila,
-                'iva_monto'       => $ivaMonto,
-                'subtotal'        => $d['subtotal'],
-                'total'           => $totalFila,
-            ]);
-        }
+            // Total cabecera (Subtotal + IVA - ISR)
+            $totalOC = round($subtotalOC + $ivaMontoOC - $isrMontoOC, 4);
 
-        // Calcular IVA cabecera
-        if ($usarIvaManual) {
-            $ivaMontoOC = (float)$ivaManual;
-        } else {
-            $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
-        }
+            // Guardar cabecera calculada
+            if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotalOC;
+            if (\Schema::hasColumn($tabla, 'iva_monto'))  $oc->iva_monto  = $ivaMontoOC;
 
-        $totalOC = round($subtotalOC + $ivaMontoOC, 4);
+            // ISR cabecera (si existen columnas)
+            if (\Schema::hasColumn($tabla, 'isr_enabled')) $oc->isr_enabled = $isrEnabled;
+            if (\Schema::hasColumn($tabla, 'isr_pct'))     $oc->isr_pct     = $isrEnabled ? $isrPctReq : 0;
+            if (\Schema::hasColumn($tabla, 'isr_monto'))   $oc->isr_monto   = $isrMontoOC;
+            if (\Schema::hasColumn($tabla, 'isr_manual'))  $oc->isr_manual  = $isrEnabled ? $isrManualHidden : null;
 
-        // Guardar cabecera
-        if (\Schema::hasColumn($tabla, 'subtotal'))  $oc->subtotal  = $subtotalOC;
-        if (\Schema::hasColumn($tabla, 'iva_monto')) $oc->iva_monto = $ivaMontoOC;
+            $oc->monto = $totalOC;
+            $oc->saveQuietly();
 
-        $oc->monto = $totalOC;
-        $oc->saveQuietly();
+            return $oc;
+        });
 
-        return $oc;
-    });
-
-    return redirect()->route('oc.show', $orden)->with('ok', 'Orden creada.');
-}
+        return redirect()->route('oc.show', $orden)->with('ok', 'Orden creada.');
+    }
 
     /* ===================== Editar ===================== */
 
@@ -418,231 +495,314 @@ class OrdenCompraController extends Controller implements HasMiddleware
     }
 
     public function update(Request $request, OrdenCompra $oc, OrdenCompraFolioService $folios)
-{
-    $this->authorizeCompany($oc);
+    {
+        $this->authorizeCompany($oc);
 
-    $tabla = (new OrdenCompra)->getTable();
+        $tabla = (new OrdenCompra)->getTable();
 
-    $puedeCambiarFolio = auth()->user()->hasRole('Administrador')
-        || auth()->user()->can('oc.edit_prefix');
+        $puedeCambiarFolio = auth()->user()->hasRole('Administrador')
+            || auth()->user()->can('oc.edit_prefix');
 
-    // Validación cabecera
-    $data = $request->validate([
-        'numero_orden'   => [$puedeCambiarFolio ? 'required' : 'sometimes', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')->ignore($oc->id)],
-        'fecha'          => ['required', 'date'],
-        'solicitante_id' => ['required', 'exists:colaboradores,id'],
-        'proveedor_id'   => ['required', 'exists:proveedores,id'],
-        'descripcion'    => ['nullable', 'string'],
-        'notas'          => ['nullable','string','max:2000'],
-        'factura'        => ['nullable', 'string', 'max:100'],
-        'iva_porcentaje' => ['nullable','numeric','min:0','max:100'],
-    ]);
+        // Validación cabecera
+        $data = $request->validate([
+            'numero_orden'   => [$puedeCambiarFolio ? 'required' : 'sometimes', 'string', 'max:50', Rule::unique($tabla, 'numero_orden')->ignore($oc->id)],
+            'fecha'          => ['required', 'date'],
+            'solicitante_id' => ['required', 'exists:colaboradores,id'],
+            'proveedor_id'   => ['required', 'exists:proveedores,id'],
+            'descripcion'    => ['nullable', 'string'],
+            'notas'          => ['nullable','string','max:2000'],
+            'factura'        => ['nullable', 'string', 'max:100'],
+            'iva_porcentaje' => ['nullable','numeric','min:0','max:100'],
+            // ==== ISR (cabecera solo para validar entrada) ====
+            'isr_enabled'    => ['nullable', 'in:1'],
+            'isr_pct'        => ['nullable','numeric','min:0','max:100'],
+            'isr'            => ['nullable','numeric','min:0'], // monto ISR (cuando manual)
+        ]);
 
-    // Validación partidas
-    $request->validate([
-        'items'            => ['required','array','min:1'],
-        'items.*.id'       => ['nullable','integer','min:1'],
-        'items.*.cantidad' => ['required','numeric','min:0.001'],
-        'items.*.unidad'   => ['required','string','max:50'],
-        'items.*.concepto' => ['required','string','max:500'],
-        'items.*.moneda'   => ['required','string','max:10'],
-        'items.*.precio'   => ['required','numeric','min:0'],
-    ]);
+        // Validación partidas
+        $request->validate([
+            'items'            => ['required','array','min:1'],
+            'items.*.id'       => ['nullable','integer','min:1'],
+            'items.*.cantidad' => ['required','numeric','min:0.001'],
+            'items.*.unidad'   => ['required','string','max:50'],
+            'items.*.concepto' => ['required','string','max:500'],
+            'items.*.moneda'   => ['required','string','max:10'],
+            'items.*.precio'   => ['required','numeric','min:0'],
+        ]);
 
-    $tenantId = $this->tenantId();
+        $tenantId = $this->tenantId();
 
-    DB::transaction(function () use ($request, $oc, $tabla, $data, $tenantId, $puedeCambiarFolio, $folios) {
+        DB::transaction(function () use ($request, $oc, $tabla, $data, $tenantId, $puedeCambiarFolio, $folios) {
 
-        /* ========== FOLIO ========== */
-        $mueveAtras = false;
+            /* ========== FOLIO ========== */
+            $mueveAtras = false;
 
-        if ($puedeCambiarFolio && !empty($data['numero_orden'])) {
-            if (preg_match('/(\d+)$/', $data['numero_orden'], $m)) {
-                $requestedSeq = (int) $m[1];
-                $currentNext = $folios->peekNext($tenantId);
+            if ($puedeCambiarFolio && !empty($data['numero_orden'])) {
+                if (preg_match('/(\d+)$/', $data['numero_orden'], $m)) {
+                    $requestedSeq = (int) $m[1];
+                    $currentNext = $folios->peekNext($tenantId);
 
-                if ($requestedSeq >= $currentNext) {
-                    $folios->bumpTo($tenantId, $requestedSeq);
+                    if ($requestedSeq >= $currentNext) {
+                        $folios->bumpTo($tenantId, $requestedSeq);
+                    } else {
+                        $mueveAtras = true;
+                    }
+
+                    if (\Schema::hasColumn($tabla, 'seq')) {
+                        $data['seq'] = $requestedSeq;
+                    }
+                }
+            } else {
+                unset($data['numero_orden']);
+            }
+
+            /* ========== PROVEEDOR ========== */
+            if (\Schema::hasColumn($tabla, 'proveedor')) {
+                $prov = Proveedor::find($data['proveedor_id']);
+                $data['proveedor'] = $prov?->nombre ?? '';
+            }
+
+            /* ========== Normalizar IVA% ========== */
+            $rawIva = $request->input('iva_porcentaje');
+
+            if ($rawIva === null || $rawIva === '') {
+                $data['iva_porcentaje'] = null;
+            } else {
+                $data['iva_porcentaje'] = (float)$rawIva;
+            }
+
+            $ivaPctOC = $data['iva_porcentaje'];
+
+            /* ============================================================
+            PERMISOS PARA MANUAL (IVA e ISR)
+            ============================================================ */
+            $canManual = auth()->user()->hasRole('Administrador')
+                        || auth()->user()->hasRole('Compras IVA');
+
+            /* ============================================================
+            IVA MANUAL (tu bloque actual, sin cambios funcionales)
+            ============================================================ */
+            $ivaManualMonto = (float)$request->input('iva');
+            $ivaManualFlag  = $request->input('iva_manual');
+
+            if (!$canManual) {
+
+                if ($ivaPctOC == 0) {
+
+                    $ivaPctOC = 0;
+                    $ivaManualMonto = 0;
+
+                    $request->merge([
+                        'iva_porcentaje' => 0,
+                        'iva'            => 0,
+                        'iva_manual'     => null,
+                    ]);
+
+                    $usarIvaManual = false;
                 } else {
-                    $mueveAtras = true;
-                }
 
-                if (\Schema::hasColumn($tabla, 'seq')) {
-                    $data['seq'] = $requestedSeq;
+                    $subtotalTmp = 0;
+                    foreach ($request->items as $r) {
+                        $subtotalTmp += ((float)$r['cantidad'] * (float)$r['precio']);
+                    }
+
+                    $ivaManualMonto = round($subtotalTmp * ($ivaPctOC / 100), 4);
+
+                    $request->merge([
+                        'iva_porcentaje' => $ivaPctOC,
+                        'iva'            => $ivaManualMonto,
+                        'iva_manual'     => null,
+                    ]);
+
+                    $usarIvaManual = false;
                 }
+            } else {
+                $usarIvaManual = ($ivaPctOC == 0);
             }
-        } else {
-            unset($data['numero_orden']);
-        }
 
-        /* ========== PROVEEDOR ========== */
-        if (\Schema::hasColumn($tabla, 'proveedor')) {
-            $prov = Proveedor::find($data['proveedor_id']);
-            $data['proveedor'] = $prov?->nombre ?? '';
-        }
+            /* ============================================================
+            ISR: detectar escenario (OFF / AUTO / MANUAL) + permisos
+            ============================================================ */
+            $isrOn   = $request->boolean('isr_enabled'); // si no viene el check => false
+            $isrPct  = (float) ($request->input('isr_pct') ?? 0);
+            $isrMontoManual = (float) ($request->input('isr') ?? 0);
 
-        /* ========== Normalizar IVA% ========== */
-        $rawIva = $request->input('iva_porcentaje');
+            // Si NO está activo -> forzar 0
+            if (!$isrOn) {
+                $isrPct = 0;
+                $isrMontoManual = 0;
 
-        if ($rawIva === null || $rawIva === '') {
-            $data['iva_porcentaje'] = null;
-        } else {
-            $data['iva_porcentaje'] = (float)$rawIva;
-        }
-
-        $ivaPctOC = $data['iva_porcentaje'];
-
-        /* ============================================================
-           VALIDACIÓN DE PERMISOS PARA IVA MANUAL  (ÚNICO BLOQUE)
-        ============================================================ */
-        $canManual = auth()->user()->hasRole('Administrador')
-                    || auth()->user()->hasRole('Compras IVA');
-
-        $ivaManualMonto = (float)$request->input('iva'); 
-        $ivaManualFlag  = $request->input('iva_manual'); 
-
-        $usuarioQuiereManual = ($ivaManualFlag !== null && $ivaManualFlag !== '' && $ivaPctOC == 0);
-
-        if (!$canManual) {
-
-            // Si el usuario NO tiene permiso y coloca IVA% = 0:
-            // Debe ser un IVA completamente CERO.
-            if ($ivaPctOC == 0) {
-
-                $ivaPctOC = 0;           // IVA% permitido = 0
-                $ivaManualMonto = 0;     // IVA monto debe ser CERO
-
-                // Forzar en request para que no arrastre valores anteriores
+                // para evitar arrastres raros en request
                 $request->merge([
-                    'iva_porcentaje' => 0,
-                    'iva'            => 0,
-                    'iva_manual'     => null,
+                    'isr_pct'     => 0,
+                    'isr'         => 0,
+                    'isr_manual'  => null,
+                    'isr_enabled' => null,
                 ]);
 
-                $usarIvaManual = false;  // No puede ser modo manual
-            }
-            else {
+                $usarIsrManual = false;
+                $usarIsrAuto   = false;
+            } else {
+                // Está activo
+                if ($isrPct > 0) {
+                    // AUTO
+                    $usarIsrAuto   = true;
+                    $usarIsrManual = false;
+                } else {
+                    // MANUAL (pct = 0)
+                    if (!$canManual) {
+                        // sin permiso => forzar 0
+                        $isrPct = 0;
+                        $isrMontoManual = 0;
 
-                // IVA automático normal (casos IVA% > 0)
-                $subtotalTmp = 0;
-                foreach ($request->items as $r) {
-                    $subtotalTmp += ((float)$r['cantidad'] * (float)$r['precio']);
+                        $request->merge([
+                            'isr_pct'    => 0,
+                            'isr'        => 0,
+                            'isr_manual' => null,
+                        ]);
+
+                        $usarIsrManual = false;
+                        $usarIsrAuto   = false;
+                    } else {
+                        $usarIsrManual = true;
+                        $usarIsrAuto   = false;
+                    }
                 }
-
-                $ivaManualMonto = round($subtotalTmp * ($ivaPctOC / 100), 4);
-
-                // Asegurar valores correctos en request
-                $request->merge([
-                    'iva_porcentaje' => $ivaPctOC,
-                    'iva'            => $ivaManualMonto,
-                    'iva_manual'     => null,
-                ]);
-
-                $usarIvaManual = false;
             }
-        }
-        else {
-            // Usuarios autorizados SÍ pueden editar manualmente
-            $usarIvaManual = ($ivaPctOC == 0);
-        }
 
-        /* ============================================================
-           PROCESAR PARTIDAS (YA CON PERMISOS)
-        ============================================================ */
+            /* ============================================================
+            PROCESAR PARTIDAS (IVA + ISR por fila)
+            ============================================================ */
+            $existentes = $oc->detalles()->get()->keyBy('id');
+            $vistos = [];
 
-        $existentes = $oc->detalles()->get()->keyBy('id');
-        $vistos = [];
+            $subtotalOC = 0;
+            $temp = [];
 
-        $subtotalOC = 0;
-        $temp = [];
+            foreach ($request->items as $row) {
+                $id = $row['id'] ?? null;
 
-        foreach ($request->items as $row) {
-            $id = $row['id'] ?? null;
+                $cantidad = (float) $row['cantidad'];
+                $precio   = (float) $row['precio'];
+                $subtotal = round($cantidad * $precio, 4);
 
-            $cantidad = (float) $row['cantidad'];
-            $precio   = (float) $row['precio'];
-            $subtotal = round($cantidad * $precio, 4);
+                $temp[] = [
+                    'id'       => $id,
+                    'cantidad' => $cantidad,
+                    'unidad'   => $row['unidad'],
+                    'concepto' => $row['concepto'],
+                    'moneda'   => $row['moneda'],
+                    'precio'   => $precio,
+                    'subtotal' => $subtotal,
+                ];
 
-            $temp[] = [
-                'id'       => $id,
-                'cantidad' => $cantidad,
-                'unidad'   => $row['unidad'],
-                'concepto' => $row['concepto'],
-                'moneda'   => $row['moneda'],
-                'precio'   => $precio,
-                'subtotal' => $subtotal,
-            ];
+                $subtotalOC += $subtotal;
+            }
 
-            $subtotalOC += $subtotal;
-        }
-
-        foreach ($temp as $d) {
-
+            // ====== IVA total OC ======
             if ($usarIvaManual) {
-                $ivaMonto = $subtotalOC > 0
-                    ? round(($d['subtotal'] / $subtotalOC) * (float)$ivaManualMonto, 4)
-                    : 0;
-
-                $ivaPctFila = 0;
-
+                $ivaMontoOC = (float)$ivaManualMonto;
             } else {
-
-                $ivaPctFila = $ivaPctOC ?? 16;
-                $ivaMonto   = round($d['subtotal'] * ($ivaPctFila / 100), 4);
+                $ivaMontoOC = round($subtotalOC * (($ivaPctOC ?? 0) / 100), 4);
             }
 
-            $totalFila = round($d['subtotal'] + $ivaMonto, 4);
-
-            $payload = [
-                'cantidad'  => $d['cantidad'],
-                'unidad'    => $d['unidad'],
-                'concepto'  => $d['concepto'],
-                'moneda'    => $d['moneda'],
-                'precio'    => $d['precio'],
-                'importe'   => $d['subtotal'],
-                'iva_pct'   => $ivaPctFila,
-                'iva_monto' => $ivaMonto,
-                'subtotal'  => $d['subtotal'],
-                'total'     => $totalFila,
-            ];
-
-            if ($d['id'] && $existentes->has($d['id'])) {
-                $existentes[$d['id']]->update($payload);
-                $vistos[] = $d['id'];
+            // ====== ISR total OC ======
+            if (!$isrOn) {
+                $isrMontoOC = 0;
+            } elseif ($usarIsrAuto) {
+                $isrMontoOC = round($subtotalOC * ($isrPct / 100), 4);
+            } elseif ($usarIsrManual) {
+                $isrMontoOC = round($isrMontoManual, 4);
             } else {
-                $oc->detalles()->create($payload);
+                $isrMontoOC = 0;
             }
-        }
 
-        $toDelete = $existentes->keys()->diff($vistos);
-        foreach ($toDelete as $delId) {
-            $existentes[$delId]->delete();
-        }
+            foreach ($temp as $d) {
 
-        if ($usarIvaManual) {
-            $ivaMontoOC = (float)$ivaManualMonto;
-        } else {
-            $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
-        }
+                // ================= IVA por fila =================
+                if ($usarIvaManual) {
+                    $ivaMonto = $subtotalOC > 0
+                        ? round(($d['subtotal'] / $subtotalOC) * (float)$ivaMontoOC, 4)
+                        : 0;
+                    $ivaPctFila = 0;
+                } else {
+                    $ivaPctFila = (float)($ivaPctOC ?? 16);
+                    $ivaMonto   = round($d['subtotal'] * ($ivaPctFila / 100), 4);
+                }
 
-        $totalOC = round($subtotalOC + $ivaMontoOC, 4);
+                // ================= ISR por fila =================
+                if (!$isrOn) {
+                    $isrPctFila  = 0;
+                    $isrMontoFila = 0;
+                } elseif ($usarIsrAuto) {
+                    $isrPctFila  = (float)$isrPct;
+                    $isrMontoFila = round($d['subtotal'] * ($isrPctFila / 100), 4);
+                } elseif ($usarIsrManual) {
+                    $isrPctFila  = 0;
+                    $isrMontoFila = ($subtotalOC > 0)
+                        ? round(($d['subtotal'] / $subtotalOC) * (float)$isrMontoOC, 4)
+                        : 0;
+                } else {
+                    $isrPctFila  = 0;
+                    $isrMontoFila = 0;
+                }
 
-        if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotalOC;
-        if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $ivaMontoOC;
+                // ================= Total fila =================
+                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila, 4);
 
-        $data['monto']      = $totalOC;
-        $data['updated_by'] = auth()->id();
+                $payload = [
+                    'cantidad'  => $d['cantidad'],
+                    'unidad'    => $d['unidad'],
+                    'concepto'  => $d['concepto'],
+                    'moneda'    => $d['moneda'],
+                    'precio'    => $d['precio'],
+                    'importe'   => $d['subtotal'],
 
-        $oc->fill($data);
-        $oc->save();
+                    'iva_pct'   => $ivaPctFila,
+                    'iva_monto' => $ivaMonto,
+                    'isr_pct'   => $isrPctFila,
+                    'isr_monto' => $isrMontoFila,
 
-        if ($mueveAtras) {
-            $folios->reconcileToDbMax($tenantId);
-        }
-    });
+                    'subtotal'  => $d['subtotal'],
+                    'total'     => $totalFila,
+                ];
 
-    return redirect()->route('oc.show', $oc)->with('updated', true);
-}
+                if ($d['id'] && $existentes->has($d['id'])) {
+                    $existentes[$d['id']]->update($payload);
+                    $vistos[] = $d['id'];
+                } else {
+                    $oc->detalles()->create($payload);
+                }
+            }
+
+            $toDelete = $existentes->keys()->diff($vistos);
+            foreach ($toDelete as $delId) {
+                $existentes[$delId]->delete();
+            }
+
+            // ===== Totales cabecera =====
+            $totalOC = round($subtotalOC + $ivaMontoOC - $isrMontoOC, 4);
+
+            if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotalOC;
+            if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $ivaMontoOC;
+
+            // (Opcional) si tienes columnas en cabecera:
+            if (\Schema::hasColumn($tabla, 'isr_pct'))   $data['isr_pct']   = $isrOn ? ($usarIsrAuto ? $isrPct : 0) : 0;
+            if (\Schema::hasColumn($tabla, 'isr_monto')) $data['isr_monto'] = $isrMontoOC;
+
+            $data['monto']      = $totalOC;
+            $data['updated_by'] = auth()->id();
+
+            $oc->fill($data);
+            $oc->save();
+
+            if ($mueveAtras) {
+                $folios->reconcileToDbMax($tenantId);
+            }
+        });
+
+        return redirect()->route('oc.show', $oc)->with('updated', true);
+    }
 
     /**
      * Resuelve la ruta de Chrome/Chromium según el entorno.

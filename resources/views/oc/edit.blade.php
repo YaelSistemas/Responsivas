@@ -61,142 +61,161 @@
   </style>
 
 @php
-$fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDateString());
+  $fechaDefault = old('fecha', \Illuminate\Support\Carbon::parse($oc->fecha)->toDateString());
 
-$isAdminCanEditFolio = auth()->user()->hasRole('Administrador')
-    || auth()->user()->can('oc.edit_prefix');
+  $isAdminCanEditFolio = auth()->user()->hasRole('Administrador')
+      || auth()->user()->can('oc.edit_prefix');
 
-$canManual = auth()->user()->hasRole('Administrador')
-             || auth()->user()->hasRole('Compras IVA');
+  // Permisos (misma regla para IVA manual e ISR manual)
+  $canManual = auth()->user()->hasRole('Administrador')
+              || auth()->user()->hasRole('Compras IVA');
 
-// ====================================================
-// 1) OBTENER IVA% REAL
-// ====================================================
-$ivaPct = $oc->iva_porcentaje;
+  // ====================================================
+  // 1) OBTENER IVA% REAL
+  // ====================================================
+  $ivaPct = $oc->iva_porcentaje;
 
-// Si la cabecera no tiene IVA, intentar deducirlo de partidas
-if ($ivaPct === null) {
+  if ($ivaPct === null) {
+      $detalles = $oc->relationLoaded('detalles')
+          ? $oc->detalles
+          : $oc->detalles()->get();
 
-    $detalles = $oc->relationLoaded('detalles')
-        ? $oc->detalles
-        : $oc->detalles()->get();
+      if ($detalles->count() > 0) {
+          $distinct = $detalles->pluck('iva_pct')->unique()->values();
+          if ($distinct->count() === 1) {
+              $ivaPct = (float)$distinct->first();
+          }
+      }
+  }
 
-    if ($detalles->count() > 0) {
+  if ($ivaPct === null) $ivaPct = 0;
 
-        // Ver si todas las partidas tienen el mismo IVA%
-        $distinct = $detalles->pluck('iva_pct')->unique()->values();
+  // =======================
+  // 2) PREFILL PARTIDAS
+  // =======================
+  $prefill = old('items');
 
-        if ($distinct->count() === 1) {
-            $ivaPct = (float)$distinct->first();   // Ejemplo: 16
-        }
-    }
-}
+  if (!$prefill) {
+      $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
+          ->map(function($d){
+              return [
+                  'id'       => $d->id,
+                  'cantidad' => $d->cantidad ?? '',
+                  'unidad'   => $d->unidad ?? '',
+                  'concepto' => $d->concepto ?? '',
+                  'moneda'   => $d->moneda ?? 'MXN',
+                  'precio'   => $d->precio ?? '',
+                  'importe'  => $d->importe ?? '',
+              ];
+          })->values()->all();
+  }
 
-// Si sigue null → utilizar 0 (modo manual)
-if ($ivaPct === null) {
-    $ivaPct = 0;
-}
+  if (empty($prefill)) {
+      $prefill = [[
+          'id' => null,
+          'cantidad' => '',
+          'unidad'   => '',
+          'concepto' => '',
+          'moneda'   => 'MXN',
+          'precio'   => '',
+          'importe'  => ''
+      ]];
+  }
 
+  // =======================
+  // 3) Calcular subtotal
+  // =======================
+  $phpSubtotal = 0;
+  foreach ($prefill as $r) {
+      $phpSubtotal += (float)$r['cantidad'] * (float)$r['precio'];
+  }
 
-// =======================
-// 2) PREFILL PARTIDAS
-// =======================
-$prefill = old('items');
+  // =======================
+  // 4) Detectar IVA manual
+  // =======================
+  $sumIvaDetalles = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())->sum('iva_monto');
+  $isManual = ($ivaPct == 0);
 
-if (!$prefill) {
-    $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
-        ->map(function($d){
-            return [
-                'id'       => $d->id,
-                'cantidad' => $d->cantidad ?? '',
-                'unidad'   => $d->unidad ?? '',
-                'concepto' => $d->concepto ?? '',
-                'moneda'   => $d->moneda ?? 'MXN',
-                'precio'   => $d->precio ?? '',
-                'importe'  => $d->importe ?? '',
-            ];
-        })->values()->all();
-}
+  // =======================
+  // 5) Calcular IVA monto
+  // =======================
+  if ($isManual) {
+      $defaultIva = 0;
+      $defaultIvaMonto = $sumIvaDetalles;
+  } else {
+      $defaultIva = $ivaPct;
+      $defaultIvaMonto = $phpSubtotal * ($defaultIva / 100);
+  }
 
-if (empty($prefill)) {
-    $prefill = [[
-        'id' => null,
-        'cantidad' => '',
-        'unidad'   => '',
-        'concepto' => '',
-        'moneda'   => 'MXN',
-        'precio'   => '',
-        'importe'  => ''
-    ]];
-}
+  // =======================
+  // 6) Total base (sin ISR)
+  // =======================
+  $phpTotal = $phpSubtotal + $defaultIvaMonto;
 
+  // =======================
+  // 7) ISR (Retención) - detección correcta (auto o manual)
+  // =======================
+  $detallesISR = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get());
 
-// =======================
-// 3) Calcular subtotal
-// =======================
-$phpSubtotal = 0;
-foreach ($prefill as $r) {
-    $phpSubtotal += (float)$r['cantidad'] * (float)$r['precio'];
-}
+  $sumIsrMonto = (float) $detallesISR->sum('isr_monto');
 
+  // pct > 0 (AUTO). Tomamos todos los pct > 0 y vemos si es único
+  $distinctIsrPctPos = $detallesISR->pluck('isr_pct')
+      ->map(fn($v) => (float)$v)
+      ->filter(fn($v) => $v > 0)
+      ->unique()
+      ->values();
 
-// =======================
-// 4) Detectar si es IVA manual
-// =======================
-$sumIvaDetalles = $oc->detalles->sum('iva_monto');
+  // ✅ Reglas:
+  // - ISR activo si (hay pct>0) o (hay monto>0)
+  // - Si ambos 0 -> NO activo
+  $inferIsrEnabled = ($distinctIsrPctPos->count() > 0) || ($sumIsrMonto > 0);
 
-// Modo manual cuando IVA% es 0
-$isManual = ($ivaPct == 0);
+  // Si el usuario viene de un submit fallido, respetar old(); si no, inferir:
+  $isrEnabled = (int) old('isr_enabled', $inferIsrEnabled ? 1 : 0);
 
+  // ✅ Inferir pct:
+  // - Si hay un único pct>0 -> usarlo (AUTO)
+  // - Si no hay pct>0 -> 0 (MANUAL)
+  $inferIsrPct = ($distinctIsrPctPos->count() === 1) ? (float)$distinctIsrPctPos->first() : 0;
+  $isrPct      = (float) old('isr_pct', $inferIsrPct);
 
-// =======================
-// 5) Calcular IVA monto
-// =======================
-if ($isManual) {
-    // Usuario controla IVA monto
-    $defaultIva = 0;
-    $defaultIvaMonto = $sumIvaDetalles;
+  // ✅ Manual si:
+  // - está activo
+  // - pct == 0
+  // - y hay monto > 0 (porque si ambos son 0, no queremos “activar”)
+  $isrIsManual = ($isrEnabled && ((float)$isrPct == 0) && ($sumIsrMonto > 0));
 
-} else {
-    // IVA automático basado en % detectado
-    $defaultIva = $ivaPct;
-    $defaultIvaMonto = $phpSubtotal * ($defaultIva / 100);
-}
+  // ✅ Monto precargado:
+  // - Manual -> sumatoria guardada
+  // - Automático -> 0 (JS lo recalcula con el %)
+  $defaultIsrMonto = $isrIsManual ? $sumIsrMonto : 0;
 
+  // ============================
+  // FORMATEADORES NUMÉRICOS
+  // ============================
+  $fmt2 = fn($n) => number_format((float)$n, 2, '.', '');
 
-// =======================
-// 6) Total
-// =======================
-$phpTotal = $phpSubtotal + $defaultIvaMonto;
+  $hasNonZeroDecimals = function($val): bool {
+      if ($val === null || $val === '') return false;
+      $p = explode('.', (string)$val, 2);
+      return isset($p[1]) && rtrim($p[1], '0') !== '';
+  };
 
+  $precioDisplay = function($val) use ($hasNonZeroDecimals) {
+      if ($val === null || $val === '') return '';
+      return $hasNonZeroDecimals($val)
+          ? rtrim(rtrim((string)$val, '0'), '.')
+          : number_format((float)$val, 2, '.', '');
+  };
 
-// ============================
-// FORMATEADORES NUMÉRICOS
-// ============================
-$fmt2 = fn($n) => number_format((float)$n, 2, '.', '');
-
-$hasNonZeroDecimals = function($val): bool {
-    if ($val === null || $val === '') return false;
-    $p = explode('.', (string)$val, 2);
-    return isset($p[1]) && rtrim($p[1], '0') !== '';
-};
-
-$precioDisplay = function($val) use ($hasNonZeroDecimals) {
-    if ($val === null || $val === '') return '';
-    return $hasNonZeroDecimals($val)
-        ? rtrim(rtrim((string)$val, '0'), '.')
-        : number_format((float)$val, 2, '.', '');
-};
-
-$cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
-    if ($val === null || $val === '') return '';
-    return $hasNonZeroDecimals($val)
-        ? rtrim(rtrim((string)$val, '0'), '.')
-        : (string)intval((float)$val);
-};
-
+  $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
+      if ($val === null || $val === '') return '';
+      return $hasNonZeroDecimals($val)
+          ? rtrim(rtrim((string)$val, '0'), '.')
+          : (string)intval((float)$val);
+  };
 @endphp
-
 
   <div class="zoom-outer">
     <div class="zoom-inner">
@@ -354,15 +373,11 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
                     <input type="number" step="0.01" min="0" name="subtotal" id="subtotal" value="{{ $fmt2(old('subtotal', $phpSubtotal)) }}" readonly>
                   </div>
                   <div class="w-18">
-
                     @php
-                        // Tomamos old() si existe, sino el IVA correcto de BD
-                        $ivaFieldValue = old('iva_porcentaje', $ivaPct);
-
-                        // Pero si old() está vacío → debemos regresar a $defaultIva
-                        if ($ivaFieldValue === null || $ivaFieldValue === '') {
-                            $ivaFieldValue = $defaultIva;
-                        }
+                      $ivaFieldValue = old('iva_porcentaje', $ivaPct);
+                      if ($ivaFieldValue === null || $ivaFieldValue === '') {
+                          $ivaFieldValue = $defaultIva;
+                      }
                     @endphp
 
                     <label>IVA %</label>
@@ -376,26 +391,69 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
 
               {{-- IVA MONTO --}}
               <div>
-                  <label>IVA</label>
+                <label>IVA</label>
 
-                  @if($canManual)
-                      {{-- Admin y Compras IVA pueden modificar si IVA% == 0 --}}
-                      <input type="number" step="0.01" min="0" name="iva" id="iva"
-                            value="{{ $fmt2($defaultIvaMonto) }}"
-                            @if($defaultIva != 0) readonly @endif>
-                  @else
-                      {{-- Otros usuarios: solo lectura SIEMPRE --}}
-                      <input type="number" step="0.01" min="0" name="iva" id="iva"
-                            value="{{ $fmt2($defaultIvaMonto) }}" readonly>
-                  @endif
+                @if($canManual)
+                  <input type="number" step="0.01" min="0" name="iva" id="iva"
+                         value="{{ $fmt2($defaultIvaMonto) }}"
+                         @if($defaultIva != 0) readonly @endif>
+                @else
+                  <input type="number" step="0.01" min="0" name="iva" id="iva"
+                         value="{{ $fmt2($defaultIvaMonto) }}" readonly>
+                @endif
 
-                  <input type="hidden" name="iva_manual" id="ivaManualInput"
-                        value="{{ $defaultIva == 0 ? $fmt2($defaultIvaMonto) : '' }}">
+                <input type="hidden" name="iva_manual" id="ivaManualInput"
+                       value="{{ $defaultIva == 0 ? $fmt2($defaultIvaMonto) : '' }}">
               </div>
 
               <div>
                 <label>Total</label>
                 <input type="number" step="0.01" min="0" name="total" id="total" value="{{ $fmt2(old('total', $phpTotal)) }}" readonly>
+              </div>
+            </div>
+
+            {{-- === Retención ISR (debajo de totales) === --}}
+            <div class="row" style="margin-top:-6px;">
+              <div style="display:grid;grid-template-columns: 1.1fr 1fr 1fr;gap:16px;align-items:start;">
+
+                <div>
+                  <label style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                    <input type="checkbox" id="isrEnabled" name="isr_enabled" value="1" {{ $isrEnabled ? 'checked' : '' }}>
+                    <span>Activar retención ISR</span>
+                  </label>
+                  <div class="hint">El total será: <b>Subtotal + IVA - ISR</b></div>
+                </div>
+
+                <div id="isrPctBox" style="{{ $isrEnabled ? '' : 'display:none;' }}">
+                  <label>ISR %</label>
+                  <div class="suffix-wrap">
+                    <input type="number" step="0.01" min="0" name="isr_pct" id="isrPct"
+                           value="{{ number_format($isrPct, 2, '.', '') }}">
+                    <span class="suffix">%</span>
+                  </div>
+                </div>
+
+                {{-- ✅ ISR monto ahora funciona igual que IVA --}}
+                <div id="isrMontoBox" style="{{ $isrEnabled ? '' : 'display:none;' }}">
+                  <label>ISR</label>
+
+                  <input
+                    type="number" step="0.01" min="0"
+                    name="isr" id="isrMonto"
+                    value="{{ $fmt2(old('isr', $defaultIsrMonto)) }}"
+                    {{-- si ISR% != 0 => automático (readonly) --}}
+                    @if(!$isrIsManual) readonly @endif
+                  >
+
+                  {{-- bandera para detectar modo manual (igual que iva_manual) --}}
+                  <input
+                    type="hidden"
+                    name="isr_manual"
+                    id="isrManualInput"
+                    value="{{ $isrIsManual ? $fmt2(old('isr', $defaultIsrMonto)) : '' }}"
+                  >
+                </div>
+
               </div>
             </div>
 
@@ -420,255 +478,295 @@ $cantidadDisplay = function($val) use ($hasNonZeroDecimals) {
   <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-  const canManual = {{ $canManual ? 'true' : 'false' }};
+  const CAN_MANUAL = {{ $canManual ? 'true' : 'false' }};
 
-    /* ============================================================
-       VARIABLES DE DOM
-    ============================================================ */
-    const tbody     = document.getElementById('itemsTbody');
-    const addBtn    = document.getElementById('addRow');
-    const ivaPct    = document.getElementById('ivaPct');
-    const elSub     = document.getElementById('subtotal');
-    const elIva     = document.getElementById('iva');
-    const elTotal   = document.getElementById('total');
-    const alertBox  = document.getElementById('currencyAlert');
+  // DOM
+  const tbody     = document.getElementById('itemsTbody');
+  const addBtn    = document.getElementById('addRow');
+  const ivaPct    = document.getElementById('ivaPct');
+  const elSub     = document.getElementById('subtotal');
+  const elIva     = document.getElementById('iva');
+  const elTotal   = document.getElementById('total');
+  const alertBox  = document.getElementById('currencyAlert');
 
-    /* ============================================================
-       FUNCIONES DE UTILIDAD
-    ============================================================ */
-    function getMasterSelect() {
-        return tbody.querySelector('.item-row .i-moneda');
-    }
+  // IVA hidden
+  const ivaManualHidden = document.getElementById("ivaManualInput");
 
-    function getBaseCurrency() {
-        const s = getMasterSelect();
-        return s ? s.value : null;
-    }
+  // ISR DOM
+  const isrEnabled  = document.getElementById("isrEnabled");
+  const isrPctEl    = document.getElementById("isrPct");
+  const isrMontoEl  = document.getElementById("isrMonto");       // ahora ES input name="isr"
+  const isrManualEl = document.getElementById("isrManualInput"); // hidden bandera
+  const isrPctBox   = document.getElementById("isrPctBox");
+  const isrMontoBox = document.getElementById("isrMontoBox");
 
-    function showCurrencyAlert() {
-        if (!alertBox) return;
-        alertBox.classList.add("show");
-        clearTimeout(showCurrencyAlert._timer);
-        showCurrencyAlert._timer = setTimeout(() => alertBox.classList.remove("show"), 3000);
-    }
+  /* =========================
+     MONEDA (una sola)
+  ========================= */
+  function getMasterSelect() {
+      return tbody.querySelector('.item-row .i-moneda');
+  }
 
-    function enforceCurrencyOnAll(base, except=null) {
-        tbody.querySelectorAll(".i-moneda").forEach(sel => {
-            if (sel !== except) sel.value = base;
-        });
-    }
+  function getBaseCurrency() {
+      const s = getMasterSelect();
+      return s ? s.value : null;
+  }
 
-    function onCurrencyChange(e) {
-        const sel = e.target;
-        const master = getMasterSelect();
-        if (!master) return;
+  function showCurrencyAlert() {
+      if (!alertBox) return;
+      alertBox.classList.add("show");
+      clearTimeout(showCurrencyAlert._timer);
+      showCurrencyAlert._timer = setTimeout(() => alertBox.classList.remove("show"), 3000);
+  }
 
-        if (sel === master) {
-            enforceCurrencyOnAll(master.value, master);
-        } else {
-            const base = getBaseCurrency();
-            if (base && sel.value !== base) {
-                showCurrencyAlert();
-                sel.value = base;
-            }
-        }
+  function enforceCurrencyOnAll(base, except=null) {
+      tbody.querySelectorAll(".i-moneda").forEach(sel => {
+          if (sel !== except) sel.value = base;
+      });
+  }
 
-        recalc();
-    }
+  function onCurrencyChange(e) {
+      const sel = e.target;
+      const master = getMasterSelect();
+      if (!master) return;
 
-    /* ============================================================
-       RECÁLCULO GENERAL (Subtotal, IVA y Total)
-    ============================================================ */
-    function recalc() {
-        let subtotal = 0;
+      if (sel === master) {
+          enforceCurrencyOnAll(master.value, master);
+      } else {
+          const base = getBaseCurrency();
+          if (base && sel.value !== base) {
+              showCurrencyAlert();
+              sel.value = base;
+          }
+      }
 
-        tbody.querySelectorAll("tr.item-row").forEach(tr => {
-            const q = parseFloat(tr.querySelector(".i-cantidad")?.value || "0");
-            const p = parseFloat(tr.querySelector(".i-precio")?.value || "0");
-            const imp = (q * p) || 0;
+      recalc();
+  }
 
-            const impInput = tr.querySelector(".i-importe");
-            if (impInput) impInput.value = imp.toFixed(2);
+  /* =========================
+     RECALC: SOLO SUBTOTAL + IMPORTES
+  ========================= */
+  function recalc() {
+      let subtotal = 0;
 
-            subtotal += imp;
-        });
+      tbody.querySelectorAll("tr.item-row").forEach(tr => {
+          const q = parseFloat(tr.querySelector(".i-cantidad")?.value || "0");
+          const p = parseFloat(tr.querySelector(".i-precio")?.value || "0");
+          const imp = (q * p) || 0;
 
-        elSub.value = subtotal.toFixed(2);
+          const impInput = tr.querySelector(".i-importe");
+          if (impInput) impInput.value = imp.toFixed(2);
 
-        /* ======================================
-          NUEVA LÓGICA:
-          MODO MANUAL = cuando IVA% es 0
-        ======================================= */
-        const pct = parseFloat(ivaPct.value || "0");
-        const isManual = (pct === 0);
+          subtotal += imp;
+      });
 
-        if (isManual) {
-            // IVA MONTO editable SOLO si tiene permiso
-            elIva.readOnly = !canManual;
+      elSub.value = subtotal.toFixed(2);
 
-            const ivaUser = parseFloat(elIva.value || 0);
-            elTotal.value = (subtotal + ivaUser).toFixed(2);
-            return;
-        }
+      // Dispara cálculo final
+      elSub.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 
-        // IVA automático
-        elIva.readOnly = true;
-        const ivaCalc = subtotal * (pct / 100);
-        elIva.value = ivaCalc.toFixed(2);
-        elTotal.value = (subtotal + ivaCalc).toFixed(2);
-    }
+  /* =========================
+     TOTALS: IVA + ISR + TOTAL
+     Total = Subtotal + IVA - ISR
+     - IVA manual cuando IVA% = 0 y tiene permiso
+     - ISR manual cuando ISR% = 0, ISR activo y tiene permiso
+  ========================= */
+  function applyTotals() {
+      const sub = parseFloat(elSub.value || 0);
 
-    /* ============================================================
-       RENOMBRAR FILAS CUANDO SE ELIMINA UNA
-    ============================================================ */
-    function renumberNames() {
-        Array.from(tbody.querySelectorAll("tr.item-row")).forEach((tr, i) => {
-            tr.querySelectorAll("input, select").forEach(el => {
-                el.name = el.name.replace(/items\[\d+\]/, `items[${i}]`);
-            });
-        });
-    }
+      // =========================
+      // IVA (igual que antes)
+      // =========================
+      const pctIva = parseFloat(ivaPct.value || 0);
+      let ivaFinal = 0;
 
-    /* ============================================================
-       PLANTILLA DE FILA NUEVA
-    ============================================================ */
-    function rowTemplate(idx, baseMoneda) {
-        const mMXN = (!baseMoneda || baseMoneda === "MXN") ? "selected" : "";
-        const mUSD = (baseMoneda === "USD") ? "selected" : "";
+      if (pctIva === 0) {
+          if (!CAN_MANUAL) {
+              elIva.readOnly = true;
+              elIva.value = "0.00";
+              if (ivaManualHidden) ivaManualHidden.value = "0.00";
+              ivaFinal = 0;
+          } else {
+              elIva.readOnly = false;
 
-        return `
-        <tr class="item-row">
-            <input type="hidden" name="items[${idx}][id]" value="">
-            <td><input type="number" step="0.0001" min="0" name="items[${idx}][cantidad]" class="i-cantidad right"></td>
-            <td><input type="text" name="items[${idx}][unidad]"></td>
-            <td><input type="text" name="items[${idx}][concepto]"></td>
-            <td>
-                <select name="items[${idx}][moneda]" class="i-moneda">
-                    <option value="MXN" ${mMXN}>MXN</option>
-                    <option value="USD" ${mUSD}>USD</option>
-                </select>
-            </td>
-            <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
-            <td><input type="number" step="0.01" min="0" name="items[${idx}][importe]" class="i-importe right" readonly></td>
-            <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
-        </tr>`;
-    }
+              if (elIva.value === "" || isNaN(parseFloat(elIva.value))) {
+                  elIva.value = "0.00";
+              }
 
-    /* ============================================================
-       ENLAZAR EVENTOS A UNA FILA
-    ============================================================ */
-    function bindRowEvents(scope = document) {
-        scope.querySelectorAll(".i-cantidad, .i-precio").forEach(inp => {
-            inp.addEventListener("input", recalc);
-        });
+              const ivaUser = parseFloat(elIva.value || 0);
+              ivaFinal = ivaUser;
 
-        scope.querySelectorAll(".i-moneda").forEach(sel => {
-            sel.addEventListener("change", onCurrencyChange);
-        });
+              if (ivaManualHidden) ivaManualHidden.value = ivaUser.toFixed(2);
+          }
+      } else {
+          elIva.readOnly = true;
+          const ivaCalc = sub * (pctIva / 100);
+          elIva.value = ivaCalc.toFixed(2);
+          ivaFinal = ivaCalc;
 
-        scope.querySelectorAll(".del-row").forEach(btn => {
-            btn.onclick = e => {
-                e.preventDefault();
-                btn.closest("tr").remove();
-                renumberNames();
-                recalc();
-            };
-        });
-    }
+          if (ivaManualHidden) ivaManualHidden.value = "";
+      }
 
-    /* ============================================================
-       AGREGAR FILA
-    ============================================================ */
-    addBtn?.addEventListener("click", () => {
-        const idx = tbody.querySelectorAll("tr.item-row").length;
-        const base = getBaseCurrency();
-        tbody.insertAdjacentHTML("beforeend", rowTemplate(idx, base));
-        const newRow = tbody.lastElementChild;
+      // =========================
+      // ISR (manual/auto como IVA)
+      // =========================
+      const isrOn = !!(isrEnabled && isrEnabled.checked);
 
-        bindRowEvents(newRow);
-        if (base) enforceCurrencyOnAll(base);
+      if (isrPctBox)   isrPctBox.style.display   = isrOn ? "" : "none";
+      if (isrMontoBox) isrMontoBox.style.display = isrOn ? "" : "none";
 
-        recalc();
-    });
+      let isrFinal = 0;
 
-    /* ============================================================
-       ACTIVAR EVENTOS EN FILAS EXISTENTES
-    ============================================================ */
-    bindRowEvents();
+      if (!isrOn) {
+          if (isrPctEl) isrPctEl.value = "0.00";
+          if (isrMontoEl) {
+              isrMontoEl.readOnly = true;
+              isrMontoEl.value = "0.00";
+          }
+          if (isrManualEl) isrManualEl.value = "";
+          isrFinal = 0;
+      } else {
+          const pctIsr = parseFloat(isrPctEl?.value || 0);
 
-    /* ============================================================
-       ENFORZAR MONEDA AL INICIO Y RECALCULAR
-    ============================================================ */
-    const baseInit = getBaseCurrency();
-    if (baseInit) enforceCurrencyOnAll(baseInit);
+          // --- ISR manual cuando ISR% = 0 ---
+          if (pctIsr === 0) {
 
-    recalc(); // cálculo inicial
+              if (!CAN_MANUAL) {
+                  // sin permiso: forzar a 0
+                  if (isrMontoEl) {
+                      isrMontoEl.readOnly = true;
+                      isrMontoEl.value = "0.00";
+                  }
+                  if (isrManualEl) isrManualEl.value = "0.00";
+                  isrFinal = 0;
+              } else {
+                  // con permiso: editable manual
+                  if (isrMontoEl) isrMontoEl.readOnly = false;
 
-    // ============================================================
-    // CONFIGURAR ESTADO INICIAL DE IVA SEGÚN PERMISOS Y IVA%
-    // ============================================================
-    const pctInit = parseFloat(ivaPct.value || "0");
+                  if (isrMontoEl && (isrMontoEl.value === "" || isNaN(parseFloat(isrMontoEl.value)))) {
+                      isrMontoEl.value = "0.00";
+                  }
 
-    if (pctInit === 0) {
-        // Modo manual → respetar valor cargado desde Blade
-        elIva.readOnly = !canManual;
-    } else {
-        // IVA automático
-        elIva.readOnly = true;
-        // recalcular por si subtotal cambió
-        elIva.value = ((parseFloat(elSub.value || 0) * pctInit) / 100).toFixed(2);
-    }
+                  const isrUser = parseFloat(isrMontoEl?.value || 0);
+                  isrFinal = isrUser;
 
-    // Activar modo manual al inicio si IVA% = 0, pero solo si tiene permisos
-    if (parseFloat(ivaPct.value || "0") === 0) {
-        elIva.readOnly = !canManual; // ← SOLO usuarios con permiso pueden editar
-    } else {
-        elIva.readOnly = true; // IVA automático siempre bloqueado
-    }
+                  // bandera manual (igual que iva_manual)
+                  if (isrManualEl) isrManualEl.value = isrUser.toFixed(2);
+              }
 
-    /* ============================================================
-       EVITAR DOBLE SUBMIT
-    ============================================================ */
-    const form = document.querySelector('form[action*="oc"][method="post"]');
-    if (form) {
-        let sent = false;
-        form.addEventListener("submit", e => {
-            if (sent) { e.preventDefault(); return; }
-            sent = true;
+          } else {
+              // --- ISR automático por % ---
+              if (isrMontoEl) isrMontoEl.readOnly = true;
 
-            const btn = form.querySelector('button[type="submit"]');
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = "Guardando...";
-            }
-        });
-    }
+              const isrCalc = sub * (pctIsr / 100);
+              if (isrMontoEl) isrMontoEl.value = isrCalc.toFixed(2);
 
-    /* ============================================================
-       CUANDO EL USUARIO MODIFICA EL IVA MANUALMENTE
-    ============================================================ */
-    elIva.addEventListener("input", () => {
-        const subtotal = parseFloat(elSub.value || 0);
-        const iva      = parseFloat(elIva.value || 0);
-        elTotal.value  = (subtotal + iva).toFixed(2);
-    });
+              if (isrManualEl) isrManualEl.value = "";
+              isrFinal = isrCalc;
+          }
+      }
 
-    ivaPct.addEventListener("input", () => {
-        const pct = parseFloat(ivaPct.value || "0");
+      // =========================
+      // Total final
+      // =========================
+      elTotal.value = (sub + ivaFinal - isrFinal).toFixed(2);
+  }
 
-        if (pct === 0) {
-            // IVA% = 0 → siempre poner IVA monto en 0
-            elIva.value = "0.00";
-            elIva.readOnly = !canManual;
-        } else {
-            // IVA automático
-            elIva.readOnly = true;
-            elIva.value = ((parseFloat(elSub.value || 0) * pct) / 100).toFixed(2);
-        }
+  /* =========================
+     RENOMBRAR FILAS
+  ========================= */
+  function renumberNames() {
+      Array.from(tbody.querySelectorAll("tr.item-row")).forEach((tr, i) => {
+          tr.querySelectorAll("input, select").forEach(el => {
+              el.name = el.name.replace(/items\[\d+\]/, `items[${i}]`);
+          });
+      });
+  }
 
-        recalc();
-    });
+  /* =========================
+     PLANTILLA FILA NUEVA
+  ========================= */
+  function rowTemplate(idx, baseMoneda) {
+      const mMXN = (!baseMoneda || baseMoneda === "MXN") ? "selected" : "";
+      const mUSD = (baseMoneda === "USD") ? "selected" : "";
 
+      return `
+      <tr class="item-row">
+          <input type="hidden" name="items[${idx}][id]" value="">
+          <td><input type="number" step="0.0001" min="0" name="items[${idx}][cantidad]" class="i-cantidad right"></td>
+          <td><input type="text" name="items[${idx}][unidad]"></td>
+          <td><input type="text" name="items[${idx}][concepto]"></td>
+          <td>
+              <select name="items[${idx}][moneda]" class="i-moneda">
+                  <option value="MXN" ${mMXN}>MXN</option>
+                  <option value="USD" ${mUSD}>USD</option>
+              </select>
+          </td>
+          <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
+          <td><input type="number" step="0.01" min="0" name="items[${idx}][importe]" class="i-importe right" readonly></td>
+          <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
+      </tr>`;
+  }
+
+  /* =========================
+     BIND EVENTS FILAS
+  ========================= */
+  function bindRowEvents(scope = document) {
+      scope.querySelectorAll(".i-cantidad, .i-precio").forEach(inp => {
+          inp.addEventListener("input", recalc);
+      });
+
+      scope.querySelectorAll(".i-moneda").forEach(sel => {
+          sel.addEventListener("change", onCurrencyChange);
+      });
+
+      scope.querySelectorAll(".del-row").forEach(btn => {
+          btn.onclick = e => {
+              e.preventDefault();
+              btn.closest("tr").remove();
+              renumberNames();
+              recalc();
+          };
+      });
+  }
+
+  /* =========================
+     AGREGAR FILA
+  ========================= */
+  addBtn?.addEventListener("click", () => {
+      const idx = tbody.querySelectorAll("tr.item-row").length;
+      const base = getBaseCurrency();
+      tbody.insertAdjacentHTML("beforeend", rowTemplate(idx, base));
+      const newRow = tbody.lastElementChild;
+
+      bindRowEvents(newRow);
+      if (base) enforceCurrencyOnAll(base);
+
+      recalc();
+  });
+
+  /* =========================
+     EVENTOS TOTALES
+  ========================= */
+  elSub.addEventListener("input", applyTotals);
+  ivaPct.addEventListener("input", applyTotals);
+  elIva.addEventListener("input", applyTotals);
+
+  isrEnabled?.addEventListener("change", applyTotals);
+  isrPctEl?.addEventListener("input", applyTotals);
+  isrMontoEl?.addEventListener("input", applyTotals); // ✅ para recalcular total cuando ISR manual cambia
+
+  /* =========================
+     INIT
+  ========================= */
+  bindRowEvents();
+
+  const baseInit = getBaseCurrency();
+  if (baseInit) enforceCurrencyOnAll(baseInit);
+
+  recalc();
+  applyTotals();
 });
   </script>
 
@@ -676,13 +774,11 @@ document.addEventListener("DOMContentLoaded", () => {
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
     <style>
-        /* Altura máxima del menú de Tom Select y scroll interno */
         .ts-dropdown {
             max-height: 260px;
             overflow-y: auto;
-            z-index: 9999 !important; /* por encima del footer/nav */
+            z-index: 9999 !important;
         }
-
         .ts-dropdown .ts-dropdown-content {
             max-height: inherit;
             overflow-y: auto;
@@ -699,9 +795,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 placeholder: '— Selecciona —',
                 maxOptions: 5000,
                 sortField: { field: 'text', direction: 'asc' },
-                plugins: ['dropdown_input'],   // buscador interno
-                dropdownParent: 'body',        // se monta en <body>
-                onDropdownOpen: function () {  // ajusta altura al espacio disponible
+                plugins: ['dropdown_input'],
+                dropdownParent: 'body',
+                onDropdownOpen: function () {
                     const rect = this.control.getBoundingClientRect();
                     const espacioAbajo = window.innerHeight - rect.bottom - 10;
                     const dropdown = this.dropdown;
@@ -715,18 +811,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             };
 
-            // Solicitante
             if (document.getElementById('solicitante_id')) {
-                new TomSelect('#solicitante_id', {
-                    ...baseConfig
-                });
+                new TomSelect('#solicitante_id', { ...baseConfig });
             }
 
-            // Proveedor
             if (document.getElementById('proveedor_id')) {
-                new TomSelect('#proveedor_id', {
-                    ...baseConfig
-                });
+                new TomSelect('#proveedor_id', { ...baseConfig });
             }
         });
     </script>

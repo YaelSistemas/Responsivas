@@ -365,6 +365,15 @@
             $sumIva      = $detalles->sum(fn($d) => (float)($d->iva_monto ?? 0));
             $sumTotal    = $detalles->sum(fn($d) => (float)($d->total ?? 0));
 
+            $sumIsr = $detalles->sum(fn($d) => (float)($d->isr_monto ?? 0));
+
+            $hasIsrPct = $detalles->contains(function($d){
+              return (float)($d->isr_pct ?? 0) > 0;
+            });
+
+            // ✅ Se muestra si hay ISR por % o por monto manual (>0)
+            $showIsr = ($sumIsr > 0) || $hasIsrPct;
+
             $moneda = $detalles->first()->moneda ?? 'MXN';
 
             $baseBlocks   = 9;                            // ← mínimo visible
@@ -462,6 +471,22 @@
                 <div class="mwrap"><span class="sym"><b>{{ $vSym }}</b></span><span class="val"><b>{{ $vVal }}</b></span></div>
               </td>
             </tr>
+            @php
+              [$rSym, $rVal] = $moneyParts($sumIsr, $moneda);
+            @endphp
+            
+            @if($showIsr)
+            <tr class="summary">
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+              <td class="right"><b>RET ISR</b></td>
+              <td class="money-total">
+                <div class="mwrap">
+                  <span class="sym"><b>{{ $rSym }}</b></span>
+                  <span class="val"><b>{{ $rVal }}</b></span>
+                </div>
+              </td>
+            </tr>
+            @endif
             <tr class="summary last">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
               <td class="right"><b>TOTAL ({{ $moneda }})</b></td>
