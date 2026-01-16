@@ -70,12 +70,35 @@
   /* ===== Partidas ===== */
   $detalles    = collect($oc->detalles ?? [])->values();
 
-  $sumSubtotal = $detalles->sum(fn($d) => (float)($d->subtotal ?? 0));
-  $sumIva      = $detalles->sum(fn($d) => (float)($d->iva_monto ?? 0));
-  $sumTotal    = $detalles->sum(fn($d) => (float)($d->total ?? 0));
+  $r2 = function($n){
+    $n = (float)($n ?? 0);
+    return round($n, 2);
+  };
 
-  /* ✅ ISR */
-  $sumIsr = $detalles->sum(fn($d) => (float)($d->isr_monto ?? 0));
+  $sumSubtotal = 0;
+  $sumIva      = 0;
+  $sumIsr      = 0;
+  $sumTotal    = 0;
+
+  foreach ($detalles as $d) {
+    // valores "visibles" por fila (2 decimales)
+    $sub = $r2($d->subtotal ?? $d->importe ?? 0);
+    $iva = $r2($d->iva_monto ?? 0);
+    $isr = $r2($d->isr_monto ?? 0);
+    $tot = $r2($sub + $iva - $isr);
+
+    $sumSubtotal += $sub;
+    $sumIva      += $iva;
+    $sumIsr      += $isr;
+    $sumTotal    += $tot;
+  }
+
+  // redondeo final de seguridad
+  $sumSubtotal = $r2($sumSubtotal);
+  $sumIva      = $r2($sumIva);
+  $sumIsr      = $r2($sumIsr);
+  $sumTotal    = $r2($sumTotal);
+
   $hasIsrPct = $detalles->contains(fn($d) => (float)($d->isr_pct ?? 0) > 0);
   $showIsr = ($sumIsr > 0) || $hasIsrPct;
 

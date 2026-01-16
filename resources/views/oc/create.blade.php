@@ -464,9 +464,17 @@
       const isrMontoBox= document.getElementById("isrMontoBox");
       const isrManualHidden = document.getElementById("isrManualInput");
 
+      function r2(n){
+        n = Number(n || 0);
+        return Math.round((n + Number.EPSILON) * 100) / 100;
+      }
+      function fmt2(n){
+        return r2(n).toFixed(2);
+      }
+
       function applyTotals() {
           const pctIva = parseFloat(ivaPct.value || 0);
-          const sub = parseFloat(subtotal.value || 0);
+          const sub = r2(parseFloat(subtotal.value || 0)); // subtotal a 2 decimales
 
           // =========================
           // IVA (igual que edit)
@@ -486,14 +494,14 @@
                       ivaInput.value = "0.00";
                   }
 
-                  const ivaManual = parseFloat(ivaInput.value || 0);
-                  ivaManualHidden.value = ivaManual.toFixed(2);
+                  const ivaManual = r2(parseFloat(ivaInput.value || 0));
+                  ivaManualHidden.value = fmt2(ivaManual);
                   ivaFinal = ivaManual;
               }
           } else {
               ivaInput.readOnly = true;
-              const ivaCalc = sub * (pctIva / 100);
-              ivaInput.value = ivaCalc.toFixed(2);
+              const ivaCalc = r2(sub * (pctIva / 100));
+              ivaInput.value = fmt2(ivaCalc);
               ivaManualHidden.value = "";
               ivaFinal = ivaCalc;
           }
@@ -529,15 +537,15 @@
                       if (isrInput && (isrInput.value === "" || isNaN(parseFloat(isrInput.value)))) {
                           isrInput.value = "0.00";
                       }
-                      const isrManual = parseFloat(isrInput?.value || 0);
+                      const isrManual = r2(parseFloat(isrInput?.value || 0));
                       isrFinal = isrManual;
-                      if (isrManualHidden) isrManualHidden.value = isrManual.toFixed(2);
+                      if (isrManualHidden) isrManualHidden.value = fmt2(isrManual);
                   }
               } else {
                   // automático
                   if (isrInput) isrInput.readOnly = true;
-                  const isrCalc = sub * (pctIsr / 100);
-                  if (isrInput) isrInput.value = isrCalc.toFixed(2);
+                  const isrCalc = r2(sub * (pctIsr / 100));
+                  if (isrInput) isrInput.value = fmt2(isrCalc);
                   isrFinal = isrCalc;
                   if (isrManualHidden) isrManualHidden.value = "";
               }
@@ -546,7 +554,8 @@
           // =========================
           // TOTAL FINAL
           // =========================
-          total.value = (sub + ivaFinal - isrFinal).toFixed(2);
+          const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal));
+          total.value = fmt2(totalCalc);
       }
 
       // Eventos IVA

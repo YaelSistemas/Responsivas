@@ -500,6 +500,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const isrPctBox   = document.getElementById("isrPctBox");
   const isrMontoBox = document.getElementById("isrMontoBox");
 
+  function r2(n){
+    n = Number(n || 0);
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+  function fmt2(n){
+    return r2(n).toFixed(2);
+  }
+
   /* =========================
      MONEDA (una sola)
   ========================= */
@@ -552,15 +560,15 @@ document.addEventListener("DOMContentLoaded", () => {
       tbody.querySelectorAll("tr.item-row").forEach(tr => {
           const q = parseFloat(tr.querySelector(".i-cantidad")?.value || "0");
           const p = parseFloat(tr.querySelector(".i-precio")?.value || "0");
-          const imp = (q * p) || 0;
+          const imp = r2((q * p) || 0);
 
           const impInput = tr.querySelector(".i-importe");
-          if (impInput) impInput.value = imp.toFixed(2);
+          if (impInput) impInput.value = fmt2(imp);
 
           subtotal += imp;
       });
 
-      elSub.value = subtotal.toFixed(2);
+      elSub.value = fmt2(subtotal);
 
       // Dispara cálculo final
       elSub.dispatchEvent(new Event("input", { bubbles: true }));
@@ -573,7 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
      - ISR manual cuando ISR% = 0, ISR activo y tiene permiso
   ========================= */
   function applyTotals() {
-      const sub = parseFloat(elSub.value || 0);
+      const sub = r2(parseFloat(elSub.value || 0));
 
       // =========================
       // IVA (igual que antes)
@@ -594,15 +602,15 @@ document.addEventListener("DOMContentLoaded", () => {
                   elIva.value = "0.00";
               }
 
-              const ivaUser = parseFloat(elIva.value || 0);
+              const ivaUser = r2(parseFloat(elIva.value || 0));
               ivaFinal = ivaUser;
 
-              if (ivaManualHidden) ivaManualHidden.value = ivaUser.toFixed(2);
+              if (ivaManualHidden) ivaManualHidden.value = fmt2(ivaUser);
           }
       } else {
           elIva.readOnly = true;
-          const ivaCalc = sub * (pctIva / 100);
-          elIva.value = ivaCalc.toFixed(2);
+          const ivaCalc = r2(sub * (pctIva / 100));
+          elIva.value = fmt2(ivaCalc);
           ivaFinal = ivaCalc;
 
           if (ivaManualHidden) ivaManualHidden.value = "";
@@ -648,19 +656,18 @@ document.addEventListener("DOMContentLoaded", () => {
                       isrMontoEl.value = "0.00";
                   }
 
-                  const isrUser = parseFloat(isrMontoEl?.value || 0);
+                  const isrUser = r2(parseFloat(isrMontoEl?.value || 0));
                   isrFinal = isrUser;
 
-                  // bandera manual (igual que iva_manual)
-                  if (isrManualEl) isrManualEl.value = isrUser.toFixed(2);
+                  if (isrManualEl) isrManualEl.value = fmt2(isrUser);
               }
 
           } else {
               // --- ISR automático por % ---
               if (isrMontoEl) isrMontoEl.readOnly = true;
 
-              const isrCalc = sub * (pctIsr / 100);
-              if (isrMontoEl) isrMontoEl.value = isrCalc.toFixed(2);
+              const isrCalc = r2(sub * (pctIsr / 100));
+              if (isrMontoEl) isrMontoEl.value = fmt2(isrCalc);
 
               if (isrManualEl) isrManualEl.value = "";
               isrFinal = isrCalc;
@@ -670,7 +677,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // =========================
       // Total final
       // =========================
-      elTotal.value = (sub + ivaFinal - isrFinal).toFixed(2);
+      const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal));
+      elTotal.value = fmt2(totalCalc);
   }
 
   /* =========================
