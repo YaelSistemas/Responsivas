@@ -438,20 +438,24 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 }
             }
 
-            // Total cabecera (Subtotal + IVA - ISR)
-            $totalOC = round($subtotalOC + $ivaMontoOC - $isrMontoOC, 4);
+            // ===== Totales cabecera (2 decimales, lo que SIEMPRE se mostrará) =====
+            $subtotal2 = round($subtotalOC, 2);
+            $iva2      = round($ivaMontoOC, 2);
+            $isr2      = round($isrMontoOC, 2);
 
-            // Guardar cabecera calculada
-            if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotalOC;
-            if (\Schema::hasColumn($tabla, 'iva_monto'))  $oc->iva_monto  = $ivaMontoOC;
+            $totalOC2  = round($subtotal2 + $iva2 - $isr2, 2);
+
+            // Guardar cabecera calculada (redondeada)
+            if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotal2;
+            if (\Schema::hasColumn($tabla, 'iva_monto'))  $oc->iva_monto  = $iva2;
 
             // ISR cabecera (si existen columnas)
             if (\Schema::hasColumn($tabla, 'isr_enabled')) $oc->isr_enabled = $isrEnabled;
             if (\Schema::hasColumn($tabla, 'isr_pct'))     $oc->isr_pct     = $isrEnabled ? $isrPctReq : 0;
-            if (\Schema::hasColumn($tabla, 'isr_monto'))   $oc->isr_monto   = $isrMontoOC;
+            if (\Schema::hasColumn($tabla, 'isr_monto'))   $oc->isr_monto   = $isr2;
             if (\Schema::hasColumn($tabla, 'isr_manual'))  $oc->isr_manual  = $isrEnabled ? $isrManualHidden : null;
 
-            $oc->monto = $totalOC;
+            $oc->monto = $totalOC2;
             $oc->saveQuietly();
 
             return $oc;
@@ -780,17 +784,21 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 $existentes[$delId]->delete();
             }
 
-            // ===== Totales cabecera =====
-            $totalOC = round($subtotalOC + $ivaMontoOC - $isrMontoOC, 4);
+            // ===== Totales cabecera (2 decimales, consistente con show/pdf/index) =====
+            $subtotal2 = round($subtotalOC, 2);
+            $iva2      = round($ivaMontoOC, 2);
+            $isr2      = round($isrMontoOC, 2);
 
-            if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotalOC;
-            if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $ivaMontoOC;
+            $totalOC2  = round($subtotal2 + $iva2 - $isr2, 2);
+
+            if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotal2;
+            if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $iva2;
 
             // (Opcional) si tienes columnas en cabecera:
             if (\Schema::hasColumn($tabla, 'isr_pct'))   $data['isr_pct']   = $isrOn ? ($usarIsrAuto ? $isrPct : 0) : 0;
-            if (\Schema::hasColumn($tabla, 'isr_monto')) $data['isr_monto'] = $isrMontoOC;
+            if (\Schema::hasColumn($tabla, 'isr_monto')) $data['isr_monto'] = $isr2;
 
-            $data['monto']      = $totalOC;
+            $data['monto']      = $totalOC2;
             $data['updated_by'] = auth()->id();
 
             $oc->fill($data);
