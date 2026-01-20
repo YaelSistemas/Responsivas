@@ -175,6 +175,12 @@ class OrdenCompraController extends Controller implements HasMiddleware
             'isr_pct'         => ['nullable','numeric','min:0','max:100'],
             'isr'             => ['nullable','numeric','min:0'],     // monto ISR (auto o manual)
             'isr_manual'      => ['nullable','numeric','min:0'],     // hidden cuando es manual
+
+            // ✅ RET IVA (retención)
+            'ret_iva_enabled' => ['nullable','boolean'],
+            'ret_iva_pct'     => ['nullable','numeric','min:0','max:100'],
+            'ret_iva_monto'   => ['nullable','numeric','min:0'], // monto ret IVA (auto o manual)
+            'ret_iva_manual'  => ['nullable','numeric','min:0'], // hidden cuando es manual
         ]);
 
         // ✅ Validación partidas
@@ -311,6 +317,30 @@ class OrdenCompraController extends Controller implements HasMiddleware
             if (\Schema::hasColumn($tabla, 'isr_monto'))   $payload['isr_monto']   = $isrMontoReq;
             if (\Schema::hasColumn($tabla, 'isr_manual'))  $payload['isr_manual']  = $isrManualHidden;
 
+            // =====================
+            // Normalización Ret IVA (cabecera)
+            // =====================
+            $retIvaEnabled   = (int) $request->boolean('ret_iva_enabled', false);
+            $retIvaPctReqRaw = $request->input('ret_iva_pct');
+            $retIvaPctReq    = ($retIvaPctReqRaw === null || $retIvaPctReqRaw === '') ? 0 : (float)$retIvaPctReqRaw;
+
+            $retIvaMontoReqRaw = $request->input('ret_iva_monto'); // readonly (auto) o editable (manual)
+            $retIvaMontoReq    = ($retIvaMontoReqRaw === null || $retIvaMontoReqRaw === '') ? 0 : (float)$retIvaMontoReqRaw;
+
+            $retIvaManualHidden = $request->input('ret_iva_manual');
+
+            // Si Ret IVA no está activo, forzar ceros
+            if (!$retIvaEnabled) {
+                $retIvaPctReq = 0;
+                $retIvaMontoReq = 0;
+                $retIvaManualHidden = null;
+            }
+
+            if (\Schema::hasColumn($tabla, 'ret_iva_enabled')) $payload['ret_iva_enabled'] = $retIvaEnabled;
+            if (\Schema::hasColumn($tabla, 'ret_iva_pct'))     $payload['ret_iva_pct']     = $retIvaPctReq;
+            if (\Schema::hasColumn($tabla, 'ret_iva_monto'))   $payload['ret_iva_monto']   = $retIvaMontoReq;
+            if (\Schema::hasColumn($tabla, 'ret_iva_manual'))  $payload['ret_iva_manual']  = $retIvaManualHidden;
+
             $payload['created_by'] = Auth::id();
 
             /** @var \App\Models\OrdenCompra $oc */
@@ -360,6 +390,13 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 $subtotalOC += $subtotal;
             }
 
+            // ===== IVA cabecera (NECESARIO antes de Ret IVA manual por fila) =====
+            if ($usarIvaManual) {
+                $ivaMontoOC = (float)$ivaManual;
+            } else {
+                $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
+            }
+
             // 2) Crear filas con IVA correcto + ISR proporcional
             foreach ($temp as $d) {
 
@@ -393,8 +430,26 @@ class OrdenCompraController extends Controller implements HasMiddleware
                     }
                 }
 
-                // Total fila (Subtotal + IVA - ISR)
-                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila, 4);
+                // ===== RET IVA fila (calculada sobre SUBTOTAL, igual que ISR) =====
+                $retIvaPctFila   = 0;
+                $retIvaMontoFila = 0;
+
+                if ($retIvaEnabled) {
+                    if ($retIvaPctReq > 0) {
+                        // automático: % sobre SUBTOTAL
+                        $retIvaPctFila   = $retIvaPctReq;
+                        $retIvaMontoFila = round($d['subtotal'] * ($retIvaPctReq / 100), 4);
+                    } else {
+                        // manual: repartir proporcional al subtotal
+                        $retIvaPctFila = 0;
+                        $retIvaMontoFila = $subtotalOC > 0
+                            ? round(($d['subtotal'] / $subtotalOC) * (float)$retIvaMontoReq, 4)
+                            : 0;
+                    }
+                }
+
+                // Total fila (Subtotal + IVA - ISR - Ret IVA)
+                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila - $retIvaMontoFila, 4);
 
                 $detallePayload = [
                     'orden_compra_id' => $oc->id,
@@ -418,6 +473,14 @@ class OrdenCompraController extends Controller implements HasMiddleware
                     $detallePayload['isr_monto'] = $isrMontoFila;
                 }
 
+                // Guardar Retencion del IVA en detalles solo si existen columnas
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'ret_iva_pct')) {
+                    $detallePayload['ret_iva_pct'] = $retIvaPctFila;
+                }
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'ret_iva_monto')) {
+                    $detallePayload['ret_iva_monto'] = $retIvaMontoFila;
+                }
+
                 OrdenCompraDetalle::create($detallePayload);
             }
 
@@ -438,12 +501,23 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 }
             }
 
+            // ===== Ret IVA cabecera (sobre SUBTOTAL) =====
+            $retIvaMontoOC = 0;
+            if ($retIvaEnabled) {
+                if ($retIvaPctReq > 0) {
+                    $retIvaMontoOC = round($subtotalOC * ($retIvaPctReq / 100), 4);
+                } else {
+                    $retIvaMontoOC = round((float)$retIvaMontoReq, 4);
+                }
+            }
+
             // ===== Totales cabecera (2 decimales, lo que SIEMPRE se mostrará) =====
             $subtotal2 = round($subtotalOC, 2);
             $iva2      = round($ivaMontoOC, 2);
             $isr2      = round($isrMontoOC, 2);
+            $retIva2 = round($retIvaMontoOC, 2);
 
-            $totalOC2  = round($subtotal2 + $iva2 - $isr2, 2);
+            $totalOC2  = round($subtotal2 + $iva2 - $isr2 - $retIva2, 2);
 
             // Guardar cabecera calculada (redondeada)
             if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotal2;
@@ -454,6 +528,12 @@ class OrdenCompraController extends Controller implements HasMiddleware
             if (\Schema::hasColumn($tabla, 'isr_pct'))     $oc->isr_pct     = $isrEnabled ? $isrPctReq : 0;
             if (\Schema::hasColumn($tabla, 'isr_monto'))   $oc->isr_monto   = $isr2;
             if (\Schema::hasColumn($tabla, 'isr_manual'))  $oc->isr_manual  = $isrEnabled ? $isrManualHidden : null;
+
+            // Ret IVA cabecera (si existen columnas)
+            if (\Schema::hasColumn($tabla, 'ret_iva_enabled')) $oc->ret_iva_enabled = $retIvaEnabled;
+            if (\Schema::hasColumn($tabla, 'ret_iva_pct'))     $oc->ret_iva_pct     = $retIvaEnabled ? $retIvaPctReq : 0;
+            if (\Schema::hasColumn($tabla, 'ret_iva_monto'))   $oc->ret_iva_monto   = $retIva2;
+            if (\Schema::hasColumn($tabla, 'ret_iva_manual'))  $oc->ret_iva_manual  = $retIvaEnabled ? $retIvaManualHidden : null;
 
             $oc->monto = $totalOC2;
             $oc->saveQuietly();
@@ -521,6 +601,10 @@ class OrdenCompraController extends Controller implements HasMiddleware
             'isr_enabled'    => ['nullable', 'in:1'],
             'isr_pct'        => ['nullable','numeric','min:0','max:100'],
             'isr'            => ['nullable','numeric','min:0'], // monto ISR (cuando manual)
+            // ==== RET IVA (cabecera solo para validar entrada) ====
+            'ret_iva_enabled' => ['nullable', 'in:1'],
+            'ret_iva_pct'     => ['nullable','numeric','min:0','max:100'],
+            'ret_iva_monto'   => ['nullable','numeric','min:0'], // monto Ret IVA (cuando manual)
         ]);
 
         // Validación partidas
@@ -675,6 +759,55 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
 
             /* ============================================================
+            RET IVA: detectar escenario (OFF / AUTO / MANUAL) + permisos
+            ============================================================ */
+            $retIvaOn   = $request->boolean('ret_iva_enabled'); // si no viene el check => false
+            $retIvaPct  = (float) ($request->input('ret_iva_pct') ?? 0);
+            $retIvaMontoManual = (float) ($request->input('ret_iva_monto') ?? 0);
+
+            // Si NO está activo -> forzar 0
+            if (!$retIvaOn) {
+                $retIvaPct = 0;
+                $retIvaMontoManual = 0;
+
+                $request->merge([
+                    'ret_iva_pct'     => 0,
+                    'ret_iva_monto'   => 0,
+                    'ret_iva_manual'  => null,
+                    'ret_iva_enabled' => null,
+                ]);
+
+                $usarRetIvaManual = false;
+                $usarRetIvaAuto   = false;
+            } else {
+                // Está activo
+                if ($retIvaPct > 0) {
+                    // AUTO
+                    $usarRetIvaAuto   = true;
+                    $usarRetIvaManual = false;
+                } else {
+                    // MANUAL (pct = 0)
+                    if (!$canManual) {
+                        // sin permiso => forzar 0
+                        $retIvaPct = 0;
+                        $retIvaMontoManual = 0;
+
+                        $request->merge([
+                            'ret_iva_pct'    => 0,
+                            'ret_iva_monto'  => 0,
+                            'ret_iva_manual' => null,
+                        ]);
+
+                        $usarRetIvaManual = false;
+                        $usarRetIvaAuto   = false;
+                    } else {
+                        $usarRetIvaManual = true;
+                        $usarRetIvaAuto   = false;
+                    }
+                }
+            }
+
+            /* ============================================================
             PROCESAR PARTIDAS (IVA + ISR por fila)
             ============================================================ */
             $existentes = $oc->detalles()->get()->keyBy('id');
@@ -721,6 +854,17 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 $isrMontoOC = 0;
             }
 
+            // ====== RET IVA total OC (sobre SUBTOTAL, igual que ISR) ======
+            if (!$retIvaOn) {
+                $retIvaMontoOC = 0;
+            } elseif ($usarRetIvaAuto) {
+                $retIvaMontoOC = round($subtotalOC * ($retIvaPct / 100), 4);
+            } elseif ($usarRetIvaManual) {
+                $retIvaMontoOC = round($retIvaMontoManual, 4);
+            } else {
+                $retIvaMontoOC = 0;
+            }
+
             foreach ($temp as $d) {
 
                 // ================= IVA por fila =================
@@ -751,8 +895,25 @@ class OrdenCompraController extends Controller implements HasMiddleware
                     $isrMontoFila = 0;
                 }
 
+                // ================= RET IVA por fila (sobre SUBTOTAL) =================
+                if (!$retIvaOn) {
+                    $retIvaPctFila   = 0;
+                    $retIvaMontoFila = 0;
+                } elseif ($usarRetIvaAuto) {
+                    $retIvaPctFila   = (float)$retIvaPct;
+                    $retIvaMontoFila = round($d['subtotal'] * ($retIvaPctFila / 100), 4);
+                } elseif ($usarRetIvaManual) {
+                    $retIvaPctFila   = 0;
+                    $retIvaMontoFila = ($subtotalOC > 0)
+                        ? round(($d['subtotal'] / $subtotalOC) * (float)$retIvaMontoOC, 4)
+                        : 0;
+                } else {
+                    $retIvaPctFila   = 0;
+                    $retIvaMontoFila = 0;
+                }
+
                 // ================= Total fila =================
-                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila, 4);
+                $totalFila = round($d['subtotal'] + $ivaMonto - $isrMontoFila - $retIvaMontoFila, 4);
 
                 $payload = [
                     'cantidad'  => $d['cantidad'],
@@ -764,8 +925,12 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
                     'iva_pct'   => $ivaPctFila,
                     'iva_monto' => $ivaMonto,
+
                     'isr_pct'   => $isrPctFila,
                     'isr_monto' => $isrMontoFila,
+
+                    'ret_iva_pct'   => $retIvaPctFila,
+                    'ret_iva_monto' => $retIvaMontoFila,
 
                     'subtotal'  => $d['subtotal'],
                     'total'     => $totalFila,
@@ -788,8 +953,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
             $subtotal2 = round($subtotalOC, 2);
             $iva2      = round($ivaMontoOC, 2);
             $isr2      = round($isrMontoOC, 2);
+            $retIva2   = round($retIvaMontoOC, 2);
 
-            $totalOC2  = round($subtotal2 + $iva2 - $isr2, 2);
+            $totalOC2  = round($subtotal2 + $iva2 - $isr2 - $retIva2, 2);
 
             if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotal2;
             if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $iva2;
@@ -797,6 +963,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
             // (Opcional) si tienes columnas en cabecera:
             if (\Schema::hasColumn($tabla, 'isr_pct'))   $data['isr_pct']   = $isrOn ? ($usarIsrAuto ? $isrPct : 0) : 0;
             if (\Schema::hasColumn($tabla, 'isr_monto')) $data['isr_monto'] = $isr2;
+
+            if (\Schema::hasColumn($tabla, 'ret_iva_pct'))   $data['ret_iva_pct']   = $retIvaOn ? ($usarRetIvaAuto ? $retIvaPct : 0) : 0;
+            if (\Schema::hasColumn($tabla, 'ret_iva_monto')) $data['ret_iva_monto'] = $retIva2;
 
             $data['monto']      = $totalOC2;
             $data['updated_by'] = auth()->id();

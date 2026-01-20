@@ -191,6 +191,39 @@
   // - Automático -> 0 (JS lo recalcula con el %)
   $defaultIsrMonto = $isrIsManual ? $sumIsrMonto : 0;
 
+  // =======================
+  // 8) RET IVA (Retención IVA) - detección correcta (auto o manual)
+  // =======================
+  $detallesRetIva = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get());
+
+  $sumRetIvaMonto = (float) $detallesRetIva->sum('ret_iva_monto');
+
+  $distinctRetIvaPctPos = $detallesRetIva->pluck('ret_iva_pct')
+      ->map(fn($v) => (float)$v)
+      ->filter(fn($v) => $v > 0)
+      ->unique()
+      ->values();
+
+  // Ret IVA activo si (hay pct>0) o (hay monto>0)
+  $inferRetIvaEnabled = ($distinctRetIvaPctPos->count() > 0) || ($sumRetIvaMonto > 0);
+
+  // si viene de submit fallido, respeta old(); si no, inferimos:
+  $retIvaEnabled = (int) old('ret_iva_enabled', $inferRetIvaEnabled ? 1 : 0);
+
+  // Inferir pct:
+  // - si hay 1 pct>0 -> AUTO
+  // - si no -> 0 (MANUAL)
+  $inferRetIvaPct = ($distinctRetIvaPctPos->count() === 1) ? (float)$distinctRetIvaPctPos->first() : 0;
+  $retIvaPct      = (float) old('ret_iva_pct', $inferRetIvaPct);
+
+  // Manual si: activo + pct == 0 + monto > 0
+  $retIvaIsManual = ($retIvaEnabled && ((float)$retIvaPct == 0) && ($sumRetIvaMonto > 0));
+
+  // Monto precargado:
+  // - Manual -> sumatoria guardada
+  // - Automático -> 0 (JS lo recalcula con el %)
+  $defaultRetIvaMonto = $retIvaIsManual ? $sumRetIvaMonto : 0;
+
   // ============================
   // FORMATEADORES NUMÉRICOS
   // ============================
@@ -421,7 +454,7 @@
                     <input type="checkbox" id="isrEnabled" name="isr_enabled" value="1" {{ $isrEnabled ? 'checked' : '' }}>
                     <span>Activar retención ISR</span>
                   </label>
-                  <div class="hint">El total será: <b>Subtotal + IVA - ISR</b></div>
+                  <div class="hint" id="isrHint">El total será: <b>Subtotal + IVA - ISR</b></div>
                 </div>
 
                 <div id="isrPctBox" style="{{ $isrEnabled ? '' : 'display:none;' }}">
@@ -439,7 +472,7 @@
 
                   <input
                     type="number" step="0.01" min="0"
-                    name="isr" id="isrMonto"
+                    name="isr" id="isr"
                     value="{{ $fmt2(old('isr', $defaultIsrMonto)) }}"
                     {{-- si ISR% != 0 => automático (readonly) --}}
                     @if(!$isrIsManual) readonly @endif
@@ -452,6 +485,40 @@
                     id="isrManualInput"
                     value="{{ $isrIsManual ? $fmt2(old('isr', $defaultIsrMonto)) : '' }}"
                   >
+                </div>
+
+              </div>
+            </div>
+
+            {{-- === Retención IVA (debajo de ISR) === --}}
+            <div class="row" style="margin-top:-6px;">
+              <div style="display:grid;grid-template-columns: 1.1fr 1fr 1fr;gap:16px;align-items:start;">
+
+                <div>
+                  <label style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                    <input type="checkbox" id="retIvaEnabled" name="ret_iva_enabled" value="1" {{ $retIvaEnabled ? 'checked' : '' }}>
+                    <span>Activar retención IVA</span>
+                  </label>
+                  <div class="hint" id="retIvaHint">El total será: <b>Subtotal + IVA - Ret IVA</b></div>
+                </div>
+
+                <div id="retIvaPctBox" style="{{ $retIvaEnabled ? '' : 'display:none;' }}">
+                  <label>Ret IVA %</label>
+                  <div class="suffix-wrap">
+                    <input type="number" step="0.01" min="0" name="ret_iva_pct" id="retIvaPct"
+                          value="{{ number_format((float)$retIvaPct, 2, '.', '') }}">
+                    <span class="suffix">%</span>
+                  </div>
+                </div>
+
+                <div id="retIvaMontoBox" style="{{ $retIvaEnabled ? '' : 'display:none;' }}">
+                  <label>Ret IVA</label>
+                  <input type="number" step="0.01" min="0"
+                        name="ret_iva_monto" id="retIvaMonto"
+                        value="{{ $fmt2(old('ret_iva_monto', $defaultRetIvaMonto ?? 0)) }}"
+                        @if(empty($retIvaIsManual)) readonly @endif>
+                  <input type="hidden" name="ret_iva_manual" id="retIvaManualInput"
+                        value="{{ !empty($retIvaIsManual) ? $fmt2(old('ret_iva_monto', $defaultRetIvaMonto ?? 0)) : '' }}">
                 </div>
 
               </div>
@@ -495,10 +562,18 @@ document.addEventListener("DOMContentLoaded", () => {
   // ISR DOM
   const isrEnabled  = document.getElementById("isrEnabled");
   const isrPctEl    = document.getElementById("isrPct");
-  const isrMontoEl  = document.getElementById("isrMonto");       // ahora ES input name="isr"
+  const isrMontoEl  = document.getElementById("isr");   // ahora ES input name="isr"
   const isrManualEl = document.getElementById("isrManualInput"); // hidden bandera
   const isrPctBox   = document.getElementById("isrPctBox");
   const isrMontoBox = document.getElementById("isrMontoBox");
+
+  // RET IVA DOM
+  const retIvaEnabled  = document.getElementById("retIvaEnabled");
+  const retIvaPctEl    = document.getElementById("retIvaPct");
+  const retIvaMontoEl  = document.getElementById("retIvaMonto");
+  const retIvaManualEl = document.getElementById("retIvaManualInput");
+  const retIvaPctBox   = document.getElementById("retIvaPctBox");
+  const retIvaMontoBox = document.getElementById("retIvaMontoBox");
 
   function r2(n){
     n = Number(n || 0);
@@ -675,10 +750,85 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       // =========================
+      // RET IVA (manual/auto)
+      // base: SUBTOTAL (como ISR)
+      // =========================
+      const retIvaOn = !!(retIvaEnabled && retIvaEnabled.checked);
+
+      if (retIvaPctBox)   retIvaPctBox.style.display   = retIvaOn ? "" : "none";
+      if (retIvaMontoBox) retIvaMontoBox.style.display = retIvaOn ? "" : "none";
+
+      let retIvaFinal = 0;
+
+      if (!retIvaOn) {
+          if (retIvaPctEl) retIvaPctEl.value = "0.00";
+          if (retIvaMontoEl) {
+              retIvaMontoEl.readOnly = true;
+              retIvaMontoEl.value = "0.00";
+          }
+          if (retIvaManualEl) retIvaManualEl.value = "";
+          retIvaFinal = 0;
+      } else {
+          const pctRetIva = parseFloat(retIvaPctEl?.value || 0);
+
+          if (pctRetIva === 0) {
+              // manual
+              if (!CAN_MANUAL) {
+                  if (retIvaMontoEl) {
+                      retIvaMontoEl.readOnly = true;
+                      retIvaMontoEl.value = "0.00";
+                  }
+                  if (retIvaManualEl) retIvaManualEl.value = "0.00";
+                  retIvaFinal = 0;
+              } else {
+                  if (retIvaMontoEl) retIvaMontoEl.readOnly = false;
+
+                  if (retIvaMontoEl && (retIvaMontoEl.value === "" || isNaN(parseFloat(retIvaMontoEl.value)))) {
+                      retIvaMontoEl.value = "0.00";
+                  }
+
+                  const user = r2(parseFloat(retIvaMontoEl?.value || 0));
+                  retIvaFinal = user;
+
+                  if (retIvaManualEl) retIvaManualEl.value = fmt2(user);
+              }
+          } else {
+              // automático sobre SUBTOTAL
+              if (retIvaMontoEl) retIvaMontoEl.readOnly = true;
+
+              const calc = r2(sub * (pctRetIva / 100));
+              if (retIvaMontoEl) retIvaMontoEl.value = fmt2(calc);
+
+              if (retIvaManualEl) retIvaManualEl.value = "";
+              retIvaFinal = calc;
+          }
+      }
+
+      // =========================
       // Total final
       // =========================
-      const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal));
+      const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal) - r2(retIvaFinal));
       elTotal.value = fmt2(totalCalc);
+
+      // =========================
+      // HINTS dinámicos
+      // =========================
+      const isrHintEl = document.getElementById("isrHint");
+      const retIvaHintEl = document.getElementById("retIvaHint");
+      const bothOn = isrOn && retIvaOn;
+
+      if (isrHintEl) {
+        isrHintEl.innerHTML = bothOn
+          ? 'El total será: <b>Subtotal + IVA - ISR - Ret IVA</b>'
+          : 'El total será: <b>Subtotal + IVA - ISR</b>';
+      }
+
+      if (retIvaHintEl) {
+        retIvaHintEl.innerHTML = bothOn
+          ? 'El total será: <b>Subtotal + IVA - ISR - Ret IVA</b>'
+          : 'El total será: <b>Subtotal + IVA - Ret IVA</b>';
+      }
+
   }
 
   /* =========================
@@ -764,6 +914,10 @@ document.addEventListener("DOMContentLoaded", () => {
   isrEnabled?.addEventListener("change", applyTotals);
   isrPctEl?.addEventListener("input", applyTotals);
   isrMontoEl?.addEventListener("input", applyTotals); // ✅ para recalcular total cuando ISR manual cambia
+
+  retIvaEnabled?.addEventListener("change", applyTotals);
+  retIvaPctEl?.addEventListener("input", applyTotals);
+  retIvaMontoEl?.addEventListener("input", applyTotals);
 
   /* =========================
      INIT

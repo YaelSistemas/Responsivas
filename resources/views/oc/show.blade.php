@@ -369,6 +369,7 @@
             $sumSubtotal = 0;
             $sumIva      = 0;
             $sumIsr      = 0;
+            $sumRetIva   = 0;
             $sumTotal    = 0;
 
             foreach ($detalles as $d) {
@@ -376,11 +377,14 @@
               $sub = $r2($d->subtotal ?? $d->importe ?? 0);
               $iva = $r2($d->iva_monto ?? 0);
               $isr = $r2($d->isr_monto ?? 0);
-              $tot = $r2($sub + $iva - $isr);
+              $ret = $r2($d->ret_iva_monto ?? 0);
+
+              $tot = $r2($sub + $iva - $isr - $ret);
 
               $sumSubtotal += $sub;
               $sumIva      += $iva;
               $sumIsr      += $isr;
+              $sumRetIva   += $ret;
               $sumTotal    += $tot;
             }
 
@@ -388,6 +392,7 @@
             $sumSubtotal = $r2($sumSubtotal);
             $sumIva      = $r2($sumIva);
             $sumIsr      = $r2($sumIsr);
+            $sumRetIva   = $r2($sumRetIva);
             $sumTotal    = $r2($sumTotal);
 
             $hasIsrPct = $detalles->contains(function($d){
@@ -396,6 +401,13 @@
 
             // ✅ Se muestra si hay ISR por % o por monto manual (>0)
             $showIsr = ($sumIsr > 0) || $hasIsrPct;
+
+            $hasRetIvaPct = $detalles->contains(function($d){
+              return (float)($d->ret_iva_pct ?? 0) > 0;
+            });
+
+            // ✅ Se muestra si hay Ret IVA por % o por monto manual (>0)
+            $showRetIva = ($sumRetIva > 0) || $hasRetIvaPct;
 
             $moneda = $detalles->first()->moneda ?? 'MXN';
 
@@ -510,6 +522,24 @@
               </td>
             </tr>
             @endif
+
+            @php
+              [$riSym, $riVal] = $moneyParts($sumRetIva, $moneda);
+            @endphp
+
+            @if($showRetIva)
+            <tr class="summary">
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+              <td class="right"><b>RET IVA</b></td>
+              <td class="money-total">
+                <div class="mwrap">
+                  <span class="sym"><b>{{ $riSym }}</b></span>
+                  <span class="val"><b>{{ $riVal }}</b></span>
+                </div>
+              </td>
+            </tr>
+            @endif
+
             <tr class="summary last">
               <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
               <td class="right"><b>TOTAL ({{ $moneda }})</b></td>

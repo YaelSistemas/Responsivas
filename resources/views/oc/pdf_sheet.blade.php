@@ -33,12 +33,18 @@
     }
   }
 
-  /* ===== Firma ===== */
-  $userName    = trim(auth()->user()->name ?? '');
-  $nombreFirma = '';
-  if ($userName !== '') {
-    $parts = preg_split('/\s+/', $userName);
-    $nombreFirma = count($parts) >= 2 ? $parts[0].' '.$parts[count($parts)-2] : $userName;
+  /* ===== Firma (CREADOR de la OC, igual que en SHOW) ===== */
+  $full = trim($oc->creator?->name ?? '');
+  $nombreFirma = '—';
+
+  if ($full !== '') {
+    $parts = preg_split('/\s+/', $full, -1, PREG_SPLIT_NO_EMPTY);
+
+    // Arturo Gerardo Gomez Cruz => Arturo Gomez
+    // Arturo Gomez => Arturo Gomez
+    $nombreFirma = count($parts) >= 2
+      ? ($parts[0] . ' ' . $parts[count($parts) - 2])
+      : $parts[0];
   }
 
   /* ===== Footer ===== */
@@ -78,6 +84,7 @@
   $sumSubtotal = 0;
   $sumIva      = 0;
   $sumIsr      = 0;
+  $sumRetIva   = 0;
   $sumTotal    = 0;
 
   foreach ($detalles as $d) {
@@ -85,11 +92,14 @@
     $sub = $r2($d->subtotal ?? $d->importe ?? 0);
     $iva = $r2($d->iva_monto ?? 0);
     $isr = $r2($d->isr_monto ?? 0);
-    $tot = $r2($sub + $iva - $isr);
+    $ret = $r2($d->ret_iva_monto ?? 0); 
+
+    $tot = $r2($sub + $iva - $isr - $ret); 
 
     $sumSubtotal += $sub;
     $sumIva      += $iva;
     $sumIsr      += $isr;
+    $sumRetIva   += $ret; 
     $sumTotal    += $tot;
   }
 
@@ -97,10 +107,14 @@
   $sumSubtotal = $r2($sumSubtotal);
   $sumIva      = $r2($sumIva);
   $sumIsr      = $r2($sumIsr);
+  $sumRetIva   = $r2($sumRetIva);
   $sumTotal    = $r2($sumTotal);
 
   $hasIsrPct = $detalles->contains(fn($d) => (float)($d->isr_pct ?? 0) > 0);
   $showIsr = ($sumIsr > 0) || $hasIsrPct;
+
+  $hasRetIvaPct = $detalles->contains(fn($d) => (float)($d->ret_iva_pct ?? 0) > 0);
+  $showRetIva = ($sumRetIva > 0) || $hasRetIvaPct;
 
   $moneda  = $detalles->first()->moneda ?? 'MXN';
 
@@ -351,6 +365,8 @@
     
       // ISR money parts
       [$rSym, $rVal] = $moneyParts($sumIsr, $moneda);
+      // Ret IVA money parts
+      [$riSym, $riVal] = $moneyParts($sumRetIva, $moneda);
     @endphp
 
     <tr class="summary"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>SUBTOTAL</b></td>
@@ -363,6 +379,18 @@
         <td class="right"><b>RET ISR</b></td>
         <td class="money-total">
           <div class="mwrap"><span class="sym"><b>{{ $rSym }}</b></span><span class="val"><b>{{ $rVal }}</b></span></div>
+        </td>
+      </tr>
+      @endif
+      @if($showRetIva)
+      <tr class="summary">
+        <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+        <td class="right"><b>RET IVA</b></td>
+        <td class="money-total">
+          <div class="mwrap">
+            <span class="sym"><b>{{ $riSym }}</b></span>
+            <span class="val"><b>{{ $riVal }}</b></span>
+          </div>
         </td>
       </tr>
       @endif
