@@ -11,6 +11,9 @@ class Responsiva extends Model
     protected $fillable = [
         'empresa_tenant_id',
         'folio',
+        'tipo_documento',
+        'folio_tipo',
+
         'colaborador_id',
         'user_id',
         'fecha_solicitud',

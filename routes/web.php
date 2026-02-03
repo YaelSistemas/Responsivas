@@ -236,6 +236,21 @@ Route::middleware(['auth'])->group(function () {
         ->name('responsivas.firma.destroy');
     
     /*
+    |--------------------  Responsivas (Celulares)  --------------------
+    */
+    Route::get('/celulares/responsivas', [ResponsivaController::class, 'indexCelulares'])
+        ->name('celulares.responsivas.index');
+    Route::get('/celulares/responsivas/create', [ResponsivaController::class, 'createCelulares'])
+        ->name('celulares.responsivas.create');
+    Route::post('/celulares/responsivas', [ResponsivaController::class, 'storeCelulares'])
+        ->name('celulares.responsivas.store');
+
+    // Devoluciones Responsivas (Celulares)
+    Route::get('/celulares/devoluciones/create', [DevolucionController::class, 'create'])
+        ->name('celulares.devoluciones.create');
+
+    
+    /*
     |--------------------  Devoluciones  --------------------
     */
     Route::resource('devoluciones', DevolucionController::class)

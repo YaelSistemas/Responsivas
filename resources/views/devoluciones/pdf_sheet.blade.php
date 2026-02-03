@@ -68,8 +68,16 @@
   $razonSocial = $razonSocial ?: '—';
 
   $motivo = strtolower(trim($devolucion->motivo ?? ''));
-  $isBaja = $motivo === 'baja_colaborador' || $motivo === 'baja de colaborador';
+
+  // ✅ detectar si es devolución de CEL- (igual que show)
+  $isCel = Str::startsWith((string)($devolucion->responsiva?->folio ?? ''), 'CEL-');
+
+  // ✅ flags normales
+  $isBaja       = $motivo === 'baja_colaborador' || $motivo === 'baja de colaborador';
   $isRenovacion = $motivo === 'renovacion';
+
+  // ✅ resguardo (celulares)
+  $isResguardo  = $motivo === 'resguardo';
 
   $fechaDevolucion = $devolucion->fecha_devolucion ?? null;
   $fechaDevolucionFmt = $fechaDevolucion
@@ -311,15 +319,32 @@
     </table>
 
     <table class="meta-2">
-      <tr>
-        <td class="label">Área/Departamento</td>
-        <td>{{ $unidadServicio }}</td>
-        <td class="label">Motivo de Devolución</td>
-        <td class="label">Baja de Colaborador</td>
-        <td class="mark-cell">{!! $isBaja ? 'X' : '&#160;' !!}</td>
-        <td class="label">Renovación</td>
-        <td class="mark-cell">{!! $isRenovacion ? 'X' : '&#160;' !!}</td>
-      </tr>
+      @if($isCel)
+        {{-- ✅ CELULARES: solo RESGUARDO --}}
+        <tr>
+          <td class="label">Área/Departamento</td>
+          <td>{{ $unidadServicio }}</td>
+
+          <td class="label">Motivo de Devolución</td>
+          <td class="label">Resguardo</td>
+          <td class="mark-cell">{!! $isResguardo ? 'X' : '&#160;' !!}</td>
+
+          {{-- relleno para mantener estructura --}}
+          <td class="label">&#160;</td>
+          <td class="mark-cell">&#160;</td>
+        </tr>
+      @else
+        {{-- ✅ NORMAL: igual que antes --}}
+        <tr>
+          <td class="label">Área/Departamento</td>
+          <td>{{ $unidadServicio }}</td>
+          <td class="label">Motivo de Devolución</td>
+          <td class="label">Baja de Colaborador</td>
+          <td class="mark-cell">{!! $isBaja ? 'X' : '&#160;' !!}</td>
+          <td class="label">Renovación</td>
+          <td class="mark-cell">{!! $isRenovacion ? 'X' : '&#160;' !!}</td>
+        </tr>
+      @endif
     </table>
 
     <br>

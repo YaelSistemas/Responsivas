@@ -3,6 +3,10 @@
     <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Editar devolución</h2>
   </x-slot>
 
+  @php
+    $isCel = \Illuminate\Support\Str::startsWith((string)($devolucion->responsiva?->folio ?? ''), 'CEL-');
+  @endphp
+
   <style>
     .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
@@ -101,11 +105,24 @@
               {{-- Columna derecha --}}
               <div>
                 <label>Motivo de devolución</label>
-                <select name="motivo" required>
-                  <option value="" disabled>— Selecciona —</option>
-                  <option value="baja_colaborador" {{ $devolucion->motivo == 'baja_colaborador' ? 'selected' : '' }}>Baja de colaborador</option>
-                  <option value="renovacion" {{ $devolucion->motivo == 'renovacion' ? 'selected' : '' }}>Renovación</option>
-                </select>
+
+                @if($isCel)
+                  {{-- ✅ CELULARES: fijo en RESGUARDO (no editable) --}}
+                  <select name="motivo" required disabled>
+                    <option value="resguardo" selected>Resguardo</option>
+                  </select>
+
+                  {{-- ✅ como el select está disabled, mandamos el valor real --}}
+                  <input type="hidden" name="motivo" value="resguardo">
+                @else
+                  {{-- ✅ NORMAL: igual que siempre --}}
+                  <select name="motivo" required>
+                    <option value="" disabled>— Selecciona —</option>
+                    <option value="baja_colaborador" {{ $devolucion->motivo == 'baja_colaborador' ? 'selected' : '' }}>Baja de colaborador</option>
+                    <option value="renovacion" {{ $devolucion->motivo == 'renovacion' ? 'selected' : '' }}>Renovación</option>
+                  </select>
+                @endif
+
                 @error('motivo') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>

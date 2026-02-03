@@ -65,6 +65,7 @@
     $motivo          = $responsiva->motivo_entrega;
     $isAsignacion    = $motivo === 'asignacion';
     $isPrestamoProv  = $motivo === 'prestamo_provisional';
+    $isCel = ($responsiva->tipo_documento ?? null) === 'CEL';
 
     // Detalles / frases
     $detalles = $responsiva->detalles ?? collect();
@@ -76,9 +77,24 @@
       return $nombre !== '' ? $nombre : null;
     })->filter()->unique()->values()->all();
 
+    $obs = trim((string)($responsiva->observaciones ?? ''));
+
     $fraseEntrega = $productosLista
       ? ('Se hace entrega de '.implode(', ', $productosLista).'.')
       : 'Se hace entrega de equipo y accesorios.';
+
+    if ($isCel) {
+      // ✅ Celulares: "Se hace entrega de equipo {producto}." + "Observaciones: {obs}"
+      $productoCel = $productosLista
+        ? implode(', ', $productosLista)   // si hay varios, los lista
+        : 'celular';                       // fallback si no hay productos
+
+      $fraseEntrega = 'Se hace entrega de equipo '.$productoCel.',';
+
+      if ($obs !== '') {
+        $fraseEntrega .= ' para '.$obs.'.';
+      }
+    }
 
     // Razón social emisor
     $emisorRazon = $empresaNombre;
@@ -268,7 +284,15 @@
       <div class="py-6 sheet">
         <div class="actions">
           {{-- IZQUIERDA: botones normales --}}
-          <a href="{{ url('/responsivas') }}" class="btn btn-secondary">← Responsivas</a>
+          @php
+            // 1) Si te mandan ?from=cel (o from=responsivas), respétalo
+            $from = request('from');
+
+            // 2) Si no viene "from", usamos el tipo_documento
+            $backHref  = ($from === 'cel' || $isCel) ? route('celulares.responsivas.index') : route('responsivas.index');
+            $backLabel = ($from === 'cel' || $isCel) ? '← Celulares' : '← Responsivas';
+          @endphp
+          <a href="{{ $backHref }}" class="btn btn-secondary">{{ $backLabel }}</a>
           <a href="{{ route('responsivas.pdf', $responsiva) }}" class="btn btn-primary" target="_blank" rel="noopener">
             Descargar PDF
           </a>
@@ -325,7 +349,7 @@
             <tr>
               <td class="label">No. de salida</td>
               <td class="val center">{{ $responsiva->folio }}</td>
-              <td class="label nowrap">Fecha de solicitud</td>
+              <td class="label nowrap">{{ $isCel ? 'Fecha de salida' : 'Fecha de solicitud' }}</td>
               <td class="val nowrap center">{{ $fechaSolicitudFmt }}</td>
               <td class="label">Nombre del usuario</td>
               <td class="val center">{{ $nombreCompleto }}</td>

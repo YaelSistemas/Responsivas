@@ -163,8 +163,39 @@
               </div>
             </div>
 
+            {{-- ====== Especificaciones (solo si tipo = celular) ====== --}}
+            <div id="celular-specs" style="{{ old('tipo')==='celular' ? '' : 'display:none' }}">
+              <div style="font-weight:700;margin:10px 0 6px;">Especificaciones de Celular / Teléfono</div>
+
+              <div class="grid-2">
+                <div>
+                  <label>Descripción o Color</label>
+                  <input name="spec_cel[color]" value="{{ old('spec_cel.color') }}">
+                  @error('spec_cel.color') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                  <label>Almacenamiento (GB)</label>
+                  <input type="number" min="1" name="spec_cel[almacenamiento_gb]" value="{{ old('spec_cel.almacenamiento_gb') }}">
+                  @error('spec_cel.almacenamiento_gb') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                  <label>RAM (GB) <span class="hint">(opcional)</span></label>
+                  <input type="number" min="1" name="spec_cel[ram_gb]" value="{{ old('spec_cel.ram_gb') }}">
+                  @error('spec_cel.ram_gb') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                  <label>IMEI</label>
+                  <input name="spec_cel[imei]" value="{{ old('spec_cel.imei') }}" placeholder="Ej. 356xxxxxxxxxxxxx">
+                  @error('spec_cel.imei') <div class="err">{{ $message }}</div> @enderror
+                </div>
+              </div>
+            </div>
+
             {{-- Descripción (visible impresora | monitor | pantalla | periférico | otro) --}}
-            <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora', 'celular','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
+            <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
               <label>Descripción</label>
               <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
@@ -265,6 +296,7 @@
     const cantWrap     = document.getElementById('cantidad-wrap');
     const equipoSpecs  = document.getElementById('equipo-specs');
     const descWrap     = document.getElementById('descripcion-wrap');
+    const celularSpecs = document.getElementById('celular-specs');
 
     const colorInput   = document.getElementById('colorInput');
     const descripcion  = document.getElementById('descripcion');
@@ -331,6 +363,7 @@
       cantWrap.style.display  = 'none';
       equipoSpecs.style.display = 'none';
       descWrap.style.display  = 'none';
+      celularSpecs.style.display = 'none';
       colorConsumibleWrap.style.display = 'none';
     }
 
@@ -372,8 +405,11 @@
       // Especificaciones solo para Equipo de Cómputo
       equipoSpecs.style.display = (t === 'equipo_pc') ? '' : 'none';
 
+      // Especificaciones solo para Celulares
+      celularSpecs.style.display = (t === 'celular') ? '' : 'none';
+
       // Descripción visible para impresora, monitor, pantalla, periférico u "otro"
-      const showDesc = (t === 'impresora' || t === 'celular' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
+      const showDesc = (t === 'impresora' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
       descWrap.style.display = showDesc ? '' : 'none';
 
       // Tracking solo visible si tipo = "otro"
@@ -409,6 +445,9 @@
       syncColorToDescripcion();
     }
   })();
+
+  const form = document.getElementById('productoForm');
+  const tipo = document.getElementById('tipo');
 
   // === Validar almacenamiento (tipo requerido si hay capacidad) ===
   form?.addEventListener('submit', (e) => {

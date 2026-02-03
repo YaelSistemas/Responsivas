@@ -99,6 +99,10 @@
             </div>
           @endif
 
+          @php
+            $isCelCreate = request()->routeIs('celulares.devoluciones.create');
+          @endphp
+
           <form method="POST" action="{{ route('devoluciones.store') }}">
             @csrf
 
@@ -129,11 +133,20 @@
               {{-- Columna derecha: Motivo de devolución --}}
               <div>
                 <label>Motivo de devolución</label>
-                <select name="motivo" id="motivoSelect" required>
-                  <option value="" disabled {{ old('motivo') ? '' : 'selected' }}>— Selecciona —</option>
-                  <option value="baja_colaborador" {{ old('motivo')==='baja_colaborador' ? 'selected' : '' }}>Baja de colaborador</option>
-                  <option value="renovacion" {{ old('motivo')==='renovacion' ? 'selected' : '' }}>Renovación</option>
-                </select>
+
+                @if($isCelCreate)
+                  {{-- ✅ Celulares: motivo fijo --}}
+                  <input type="text" value="Resguardo" disabled>
+                  <input type="hidden" name="motivo" value="resguardo">
+                @else
+                  {{-- ✅ Normal: selector --}}
+                  <select name="motivo" id="motivoSelect" required>
+                    <option value="" disabled {{ old('motivo') ? '' : 'selected' }}>— Selecciona —</option>
+                    <option value="baja_colaborador" {{ old('motivo')==='baja_colaborador' ? 'selected' : '' }}>Baja de colaborador</option>
+                    <option value="renovacion" {{ old('motivo')==='renovacion' ? 'selected' : '' }}>Renovación</option>
+                  </select>
+                @endif
+
                 @error('motivo') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>

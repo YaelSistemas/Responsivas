@@ -335,18 +335,43 @@
               <col style="width:14%"><col style="width:4%">
             </colgroup>
             @php
-              $isRenovacion = strtolower($devolucion->motivo) === 'renovacion';
-              $isBaja       = strtolower($devolucion->motivo) === 'baja_colaborador';
+              // ✅ detectar si la responsiva es CEL-
+              $isCel = \Illuminate\Support\Str::startsWith((string)($responsiva?->folio ?? ''), 'CEL-');
+
+              // ✅ flags normales
+              $isRenovacion = strtolower((string)$devolucion->motivo) === 'renovacion';
+              $isBaja       = strtolower((string)$devolucion->motivo) === 'baja_colaborador';
+
+              // ✅ resguardo (celulares)
+              $isResguardo  = strtolower((string)$devolucion->motivo) === 'resguardo';
             @endphp
-            <tr>
-              <td class="label">ÁREA/DEPARTAMENTO</td>
-              <td class="val center">{{ $unidadServicio ?? '—' }}</td>
-              <td class="label center">MOTIVO DE DEVOLUCIÓN</td>
-              <td class="label center">BAJA DE COLABORADOR</td>
-              <td class="val center mark-x">{{ $isBaja ? 'X' : '' }}</td>
-              <td class="label center">RENOVACIÓN</td>
-              <td class="val center mark-x">{{ $isRenovacion ? 'X' : '' }}</td>
-            </tr>
+
+            @if($isCel)
+              {{-- ✅ CELULARES: solo RESGUARDO --}}
+              <tr>
+                <td class="label">ÁREA/DEPARTAMENTO</td>
+                <td class="val center">{{ $unidadServicio ?? '—' }}</td>
+
+                <td class="label center">MOTIVO DE DEVOLUCIÓN</td>
+                <td class="label center">RESGUARDO</td>
+                <td class="val center mark-x">{{ $isResguardo ? 'X' : '' }}</td>
+
+                {{-- Relleno para conservar el ancho/tabla igual --}}
+                <td class="label center">&nbsp;</td>
+                <td class="val center mark-x">&nbsp;</td>
+              </tr>
+            @else
+              {{-- ✅ NORMAL: se queda igual --}}
+              <tr>
+                <td class="label">ÁREA/DEPARTAMENTO</td>
+                <td class="val center">{{ $unidadServicio ?? '—' }}</td>
+                <td class="label center">MOTIVO DE DEVOLUCIÓN</td>
+                <td class="label center">BAJA DE COLABORADOR</td>
+                <td class="val center mark-x">{{ $isBaja ? 'X' : '' }}</td>
+                <td class="label center">RENOVACIÓN</td>
+                <td class="val center mark-x">{{ $isRenovacion ? 'X' : '' }}</td>
+              </tr>
+            @endif
           </table>
           
           <br>

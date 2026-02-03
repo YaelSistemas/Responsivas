@@ -184,6 +184,12 @@ class ProductoController extends Controller implements HasMiddleware
                 }
             ],
             'spec.procesador'                          => ['nullable','string','max:120'],
+
+            // Especificaciones celular
+            'spec_cel.color'             => ['nullable','string','max:255'],
+            'spec_cel.almacenamiento_gb' => ['nullable','integer','min:1','max:50000'],
+            'spec_cel.ram_gb'            => ['nullable','integer','min:1','max:32767'],
+            'spec_cel.imei'              => ['nullable','string','max:30'],
         ]);
 
         $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
@@ -193,6 +199,8 @@ class ProductoController extends Controller implements HasMiddleware
             : 'pieza';
 
         $specs = null;
+
+        // ✅ PC / Consumible (lo que ya tenías)
         if (in_array($data['tipo'], ['equipo_pc', 'consumible'])) {
             $specs = array_filter([
                 'color' => $request->input('spec.color') ?? $request->input('color_consumible'),
@@ -206,7 +214,41 @@ class ProductoController extends Controller implements HasMiddleware
             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
         }
 
-        DB::transaction(function () use ($tenant, $data, $unidad, $specs, $tracking) {
+        // ✅ Celular (nuevo)
+        if ($data['tipo'] === 'celular') {
+            $specs = array_filter([
+                'color'             => $request->input('spec_cel.color'),
+                'almacenamiento_gb' => $request->filled('spec_cel.almacenamiento_gb')
+                    ? (int) $request->input('spec_cel.almacenamiento_gb') : null,
+                'ram_gb'            => $request->filled('spec_cel.ram_gb')
+                    ? (int) $request->input('spec_cel.ram_gb') : null,
+                'imei'              => $request->input('spec_cel.imei'),
+            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+        }
+
+        // ✅ Descripción FINAL (independiente del JS/textarea)
+        $descripcionFinal = $data['descripcion'] ?? null;
+
+        // si viene vacía, la tomamos del campo correcto según tipo
+        if ($descripcionFinal === null || trim((string)$descripcionFinal) === '') {
+
+            // Equipo PC: tomar el input name="spec[color]"
+            if ($data['tipo'] === 'equipo_pc') {
+                $descripcionFinal = $request->input('spec.color');
+            }
+
+            // Consumible: usar color_consumible
+            if ($data['tipo'] === 'consumible') {
+                $descripcionFinal = $request->input('color_consumible');
+            }
+
+            // Celular (opcional): si quieres que también llene descripcion
+            if ($data['tipo'] === 'celular') {
+                $descripcionFinal = $request->input('spec_cel.color');
+            }
+        }
+
+        DB::transaction(function () use ($tenant, $data, $unidad, $specs, $tracking, $descripcionFinal) {
             $maxFolio = Producto::where('empresa_tenant_id', $tenant)->lockForUpdate()->max('folio');
 
             $producto = Producto::create([
@@ -220,7 +262,7 @@ class ProductoController extends Controller implements HasMiddleware
                 'tipo'              => $data['tipo'],
                 'unidad'            => $unidad,
                 'activo'            => true,
-                'descripcion'       => $data['descripcion'] ?? null,
+                'descripcion'       => $descripcionFinal,
                 'especificaciones'  => $specs,
             ]);
 

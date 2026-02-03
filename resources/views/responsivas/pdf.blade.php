@@ -64,6 +64,10 @@
   $isAsignacion   = $motivo === 'asignacion';
   $isPrestamoProv = $motivo === 'prestamo_provisional';
 
+  // ✅ SOLO para Celulares (no afecta responsiva normal)
+  $isCel = (($responsiva->tipo_documento ?? null) === 'CEL');
+  $obs   = trim((string)($responsiva->observaciones ?? ''));
+
   // Motivo / frases
   $detalles = $responsiva->detalles ?? collect();
 
@@ -75,6 +79,21 @@
   $fraseEntrega = $productosLista
     ? ('Se hace entrega de '.implode(', ', $productosLista).'.')
     : 'Se hace entrega de equipo y accesorios.';
+
+    // ✅ SOLO si es CEL: agrega producto(s) y luego observaciones
+    if ($isCel) {
+      $productoCel = $productosLista
+        ? implode(', ', $productosLista)
+        : 'celular';
+
+      // "Se hace entrega de equipo {producto}."
+      $fraseEntrega = 'Se hace entrega de equipo '.$productoCel.',';
+
+      // "Observaciones: {obs}."
+      if ($obs !== '') {
+        $fraseEntrega .= ' para '.$obs.'.';
+      }
+    }
 
   // Razón social emisor (igual que tu show/pdf anterior)
   $emisorRazon = $empresaNombre;
@@ -369,7 +388,7 @@
       <tr>
         <td class="label">No. de salida</td>
         <td>{{ $responsiva->folio ?? '—' }}</td>
-        <td class="label">Fecha de solicitud</td>
+        <td class="label">{{ $isCel ? 'Fecha de salida' : 'Fecha de solicitud' }}</td>
         <td>{{ $fechaSolicitudFmt }}</td>
         <td class="label">Nombre del usuario</td>
         <td>{{ $usuarioNombre }}</td>

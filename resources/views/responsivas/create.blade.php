@@ -139,6 +139,10 @@
 
             <form method="POST" action="{{ route('responsivas.store') }}">
               @csrf
+              @php $isCel = request('tipo_documento') === 'CEL'; @endphp
+
+              {{-- Ajuste para Mandar a CEL desde Celulares y OES desde Responsivas--}}
+              <input type="hidden" name="tipo_documento" value="{{ $isCel ? 'CEL' : 'OES' }}">
 
               {{-- ======= Datos ======= --}}
               <div class="section-sep"><div class="line"></div><div class="label">Datos</div><div class="line"></div></div>
@@ -146,12 +150,22 @@
               <div class="grid2 row">
                 <div>
                   <label>Motivo de entrega</label>
-                  <select name="motivo_entrega" required>
-                    <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
-                    <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
-                    <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
-                  </select>
-                  <div class="hint">No se asume por defecto: elige el motivo.</div>
+
+                  @if($isCel)
+                    {{-- ✅ Celulares: fijo y no editable --}}
+                    <input type="hidden" name="motivo_entrega" value="prestamo_provisional">
+                    <input type="text" value="Préstamo provisional" disabled>
+                    <div class="hint">Motivo asignado automáticamente para celulares.</div>
+                  @else
+                    {{-- ✅ Responsivas: se queda igual --}}
+                    <select name="motivo_entrega" required>
+                      <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
+                      <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
+                      <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
+                    </select>
+                    <div class="hint">No se asume por defecto: elige el motivo.</div>
+                  @endif
+
                   @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
                 <div>
@@ -168,7 +182,7 @@
 
               <div class="grid2 row">
                 <div>
-                  <label>Fecha de solicitud</label>
+                  <label>{{ $isCel ? 'Fecha de salida' : 'Fecha de solicitud' }}</label>
                   <input type="date" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}" required>
                   @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                 </div>
@@ -178,6 +192,14 @@
                   @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>
+
+              @if($isCel)
+                <div class="row">
+                  <label>Observaciones</label>
+                  <textarea name="observaciones" rows="4" placeholder="Escribe observaciones...">{{ old('observaciones') }}</textarea>
+                  @error('observaciones') <div class="err">{{ $message }}</div> @enderror
+                </div>
+              @endif
 
               {{-- ======= Productos ======= --}}
               <div class="section-sep"><div class="line"></div><div class="label">Productos</div><div class="line"></div></div>
@@ -237,7 +259,9 @@
               </div>
 
               <div class="grid2">
-                <a href="{{ route('responsivas.index') }}" class="btn-cancel">Cancelar</a>
+                <a href="{{ $isCel ? route('celulares.responsivas.index') : route('responsivas.index') }}" class="btn-cancel">
+                  Cancelar
+                </a>
                 <button type="submit" class="btn">Crear responsiva</button>
               </div>
             </form>

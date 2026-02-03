@@ -38,8 +38,16 @@ class Devolucion extends Model
 
         static::creating(function ($model) {
             $empresaId = (int) session('empresa_activa', auth()->user()?->empresa_id);
-            $model->empresa_tenant_id = $empresaId;
-            $model->folio = self::makeNextFolio($empresaId);
+
+            // ✅ Siempre asegurar empresa_tenant_id si viene vacío
+            if (empty($model->empresa_tenant_id)) {
+                $model->empresa_tenant_id = $empresaId;
+            }
+
+            // ✅ Solo generar folio si viene vacío (NO pisar el que manda el controller)
+            if (empty($model->folio)) {
+                $model->folio = self::makeNextFolio($empresaId);
+            }
         });
     }
 

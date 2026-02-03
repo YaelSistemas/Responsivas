@@ -118,9 +118,12 @@ class ResponsivaController extends Controller implements HasMiddleware
     }
 
     /* ===================== CREATE ===================== */
-    public function create()
+    public function create(Request $request)
     {
         $tenantId = $this->tenantId();
+
+        $tipoDoc = $request->query('tipo_documento', 'OES');
+        $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
 
         // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colabQ = Colaborador::query()
@@ -141,7 +144,14 @@ class ResponsivaController extends Controller implements HasMiddleware
         // 🔹 Solo series disponibles de productos ACTIVOS
         $series = ProductoSerie::deEmpresa($tenantId)
             ->disponibles()
-            ->whereHas('producto', fn($q) => $q->where('activo', true))
+            ->whereHas('producto', function ($q) use ($tipoDoc) {
+                $q->where('activo', true);
+
+                // ✅ si es CEL solo productos tipo celular
+                if ($tipoDoc === 'CEL') {
+                    $q->where('tipo', 'celular');
+                }
+            })
             ->with('producto:id,nombre,marca,modelo,tipo,descripcion,especificaciones,activo')
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado','especificaciones']);
@@ -155,7 +165,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             ? $erasto->id
             : null;
 
-        return view('responsivas.create', compact('colaboradores', 'series', 'admins', 'autorizaDefaultId'));
+        return view('responsivas.create', compact('colaboradores', 'series', 'admins', 'autorizaDefaultId', 'tipoDoc'));
     }
 
     /* ===================== STORE ===================== */
@@ -171,8 +181,23 @@ class ResponsivaController extends Controller implements HasMiddleware
             $colExists = $colExists->where('empresa_tenant_id', $tenantId);
         }
 
+        // ✅ Detectar tipo_doc desde el create (query) y store (hidden)
+        $tipoDoc = $req->input('tipo_documento') ?: 'OES';
+        $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
+
+        // ✅ Si es CEL: forzar motivo y no depender de fecha_solicitud
+        if ($tipoDoc === 'CEL') {
+            // Motivo fijo en celulares
+            $req->merge(['motivo_entrega' => 'prestamo_provisional']);
+
+            // Si no viene fecha_solicitud, setear hoy (porque tu tabla lo trae y tu create CEL no lo pedirá)
+            if (!$req->filled('fecha_solicitud')) {
+                $req->merge(['fecha_solicitud' => now()->toDateString()]);
+            }
+        }
+
         $req->validate([
-            'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
+            'motivo_entrega'        => ['required', Rule::in($tipoDoc === 'CEL' ? ['prestamo_provisional'] : ['asignacion','prestamo_provisional']),],
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['required', $colExists],              // ← obligatorio
             'entrego_user_id'       => ['required', Rule::in($adminIds)],     // ← obligatorio
@@ -180,15 +205,41 @@ class ResponsivaController extends Controller implements HasMiddleware
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
             'observaciones'         => ['nullable','string','max:2000'],
-            'fecha_solicitud'       => ['required','date'],                   // ← obligatorio
+            'fecha_solicitud' => [$tipoDoc === 'CEL' ? 'nullable' : 'required', 'date'],                   
             'fecha_entrega'         => ['required','date'],                   // ← obligatorio
+            'tipo_documento' => ['nullable', Rule::in(['OES','CEL'])],
         ]);
+
+        $tipoDoc = $req->input('tipo_documento') ?: 'OES';
+        $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
+
+        if ($tipoDoc === 'CEL') {
+            $countCel = ProductoSerie::deEmpresa($tenantId)
+                ->whereIn('id', $req->series_ids)
+                ->whereHas('producto', fn($q) => $q->where('tipo', 'celular'))
+                ->count();
+
+            if ($countCel !== count($req->series_ids)) {
+                throw ValidationException::withMessages([
+                    'series_ids' => 'Solo puedes seleccionar equipos tipo Celular para una responsiva CEL.',
+                ]);
+            }
+        }
 
         $resp = null;
 
         DB::transaction(function() use ($req, $tenantId, &$resp) {
 
-            $folio = $this->nextFolio($tenantId);
+            $tipoDoc = $req->input('tipo_documento') ?: 'OES'; // default para no afectar nada
+
+            $next = Responsiva::where('empresa_tenant_id', $tenantId)
+                ->where('tipo_documento', $tipoDoc)
+                ->lockForUpdate()
+                ->max('folio_tipo');
+
+            $folioTipo = ((int) $next) + 1;
+
+            $folio = $tipoDoc . '-' . str_pad((string) $folioTipo, 5, '0', STR_PAD_LEFT);
 
             $colabAsignado = Colaborador::with(['unidadServicio'])
                 ->findOrFail($req->colaborador_id);
@@ -198,6 +249,8 @@ class ResponsivaController extends Controller implements HasMiddleware
             $resp = Responsiva::create([
                 'empresa_tenant_id'     => $tenantId,
                 'folio'                 => $folio,
+                'tipo_documento' => $tipoDoc,
+                'folio_tipo'     => $folioTipo,
                 'colaborador_id'        => $req->colaborador_id,
                 'recibi_colaborador_id' => $req->recibi_colaborador_id,  // ← ya no se “rellena”
                 'user_id'               => $req->entrego_user_id,        // ← entregó requerido
@@ -979,21 +1032,21 @@ class ResponsivaController extends Controller implements HasMiddleware
         return view('responsivas.show', compact('responsiva'));
     }
 
-    /* ===================== FOLIO: OES-00001 por tenant ===================== */
-    private function nextFolio(int $tenantId): string
+    //* ===================== FOLIO por tipo (OES / CEL) ===================== */
+    private function nextFolio(int $tenantId, ?string $tipoDocumento = null): array
     {
-        $last = Responsiva::where('empresa_tenant_id', $tenantId)
-            ->where('folio', 'like', 'OES-%')
-            ->orderByDesc('id')
+        $tipo = $tipoDocumento ?: 'OES';
+        $tipo = in_array($tipo, ['OES','CEL'], true) ? $tipo : 'OES';
+
+        $max = Responsiva::where('empresa_tenant_id', $tenantId)
+            ->where('tipo_documento', $tipo)
             ->lockForUpdate()
-            ->value('folio');
+            ->max('folio_tipo');
 
-        $n = 1;
-        if ($last && preg_match('/^OES-(\d{5,})$/', $last, $m)) {
-            $n = (int)$m[1] + 1;
-        }
+        $folioTipo = ((int) $max) + 1;
+        $folio = $tipo . '-' . str_pad((string) $folioTipo, 5, '0', STR_PAD_LEFT);
 
-        return 'OES-'.str_pad((string)$n, 5, '0', STR_PAD_LEFT);
+        return [$folio, $folioTipo, $tipo];
     }
 
     /* ===================== PDF ===================== */
@@ -1009,14 +1062,17 @@ class ResponsivaController extends Controller implements HasMiddleware
     }
 
     /* ===================== DESTROY ===================== */
-    public function destroy(Responsiva $responsiva)
+    public function destroy(\Illuminate\Http\Request $request, Responsiva $responsiva)
     {
         abort_if($responsiva->empresa_tenant_id !== $this->tenantId(), 404);
 
         // 🚫 Verificar si tiene devoluciones asociadas
         if ($responsiva->devoluciones()->exists()) {
+
+            $redirect = (string) $request->input('redirect_to', url()->previous());
+
             return redirect()
-                ->route('responsivas.index')
+                ->to($redirect)
                 ->with('error', 'No se puede eliminar esta responsiva porque ya tiene una devolución asociada.');
         }
 
@@ -1115,10 +1171,13 @@ class ResponsivaController extends Controller implements HasMiddleware
             $responsiva->delete();
         });
 
+        $redirect = (string) $request->input('redirect_to', url()->previous());
+
         return redirect()
-            ->route('responsivas.index')
+            ->to($redirect)
             ->with('deleted', 'Responsiva eliminada. Los equipos quedaron disponibles.');
     }
+
 
     public function emitirFirma(Responsiva $responsiva)
     {
@@ -1271,5 +1330,46 @@ class ResponsivaController extends Controller implements HasMiddleware
     return redirect()->route('responsivas.index');
 }
 
+    public function indexCelulares(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $perPage  = (int) $request->query('per_page', 50);
+        $q        = trim((string) $request->query('q', ''));
+
+        $rows = Responsiva::query()
+            ->with([
+                'usuario:id,name',
+                'colaborador:id,nombre,apellidos',
+                'detalles.producto:id,nombre,marca,modelo,tipo',
+            ])
+            ->withCount('detalles')
+            ->where('empresa_tenant_id', $tenantId)
+            ->where('tipo_documento', 'CEL')
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($w) use ($q) {
+                    $w->where('folio', 'like', "%{$q}%")
+                    ->orWhereHas('colaborador', function ($c) use ($q) {
+                        $c->where('nombre', 'like', "%{$q}%")
+                            ->orWhere('apellidos', 'like', "%{$q}%");
+                    })
+                    ->orWhereHas('usuario', fn($u) => $u->where('name', 'like', "%{$q}%"));
+                });
+            })
+            ->orderByDesc('folio_tipo')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        // ✅ igual que Productos: si viene partial retorna SOLO la tabla
+        if ($request->boolean('partial')) {
+            return view('celulares.responsivas.partials.table', ['rows' => $rows])->render();
+        }
+
+        return view('celulares.responsivas.index', [
+            'rows'    => $rows,
+            'perPage' => $perPage,
+            'q'       => $q,
+        ]);
+    }
 
 }

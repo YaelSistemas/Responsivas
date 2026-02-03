@@ -73,9 +73,12 @@ class DevolucionController extends Controller implements HasMiddleware
 
     /* ===================== CREAR ===================== */
 
-    public function create()
+    public function create(Request $request)
     {
         $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
+
+        // ✅ Si vienes desde /celulares/devoluciones/create
+        $isCel = $request->routeIs('celulares.devoluciones.create');
 
         $seriesAsignadas = ProductoSerie::where('estado', 'Asignado')
             ->whereHas('producto', fn($q) => $q->where('empresa_tenant_id', $tenant))
@@ -100,6 +103,10 @@ class DevolucionController extends Controller implements HasMiddleware
             $responsivas = Responsiva::with('colaborador')
                 ->whereIn('id', $detallesPorResponsiva->keys())
                 ->where('empresa_tenant_id', $tenant)
+                // ✅ si es modo celular, solo CEL-
+                ->when($isCel, fn($q) => $q->where('folio', 'like', 'CEL-%'))
+                // ✅ opcional: si NO es celular y quieres restringir a OES-
+                // ->when(!$isCel, fn($q) => $q->where('folio', 'like', 'OES-%'))
                 ->get()
                 ->map(function ($r) use ($detallesPorResponsiva) {
                     $r->setRelation('detalles', $detallesPorResponsiva->get($r->id, collect()));
@@ -122,7 +129,7 @@ class DevolucionController extends Controller implements HasMiddleware
         $user = auth()->user();
         $adminDefault = ($user && $user->hasRole('Administrador')) ? $user->id : null;
 
-        return view('devoluciones.create', compact('responsivas', 'admins', 'colaboradores', 'adminDefault'));
+        return view('devoluciones.create', compact('responsivas', 'admins', 'colaboradores', 'adminDefault', 'isCel'));
     }
 
     /* ===================== GUARDAR ===================== */
@@ -132,21 +139,59 @@ class DevolucionController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'responsiva_id'           => 'required|exists:responsivas,id',
             'fecha_devolucion'        => 'required|date',
-            'motivo'                  => 'required|in:baja_colaborador,renovacion',
+            'motivo'                  => 'required|in:baja_colaborador,renovacion,resguardo',
             'recibi_id'               => 'required|exists:users,id',
             'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
             'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
             'productos'               => 'required|array|min:1',
         ]);
 
+        $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
+
+        // ✅ Traer la responsiva para saber si es CEL-
+        $responsiva = Responsiva::where('empresa_tenant_id', $tenant)
+            ->findOrFail($validated['responsiva_id']);
+
+        $isCel = str_starts_with((string) $responsiva->folio, 'CEL-');
+
+        // ✅ Si es celular, el motivo SIEMPRE debe ser resguardo (aunque manipulen el form)
+        if ($isCel) {
+            $validated['motivo'] = 'resguardo';
+        }
+
+        // ✅ Prefijos (celular debe ser DEVCEL-00000)
+        $prefix = $isCel ? 'DEVCEL-' : 'DEV-';   // si tu normal usa otro prefijo, cámbialo aquí
+
         $devolucion = null;
 
         // ================================
         //      TRANSACCIÓN PRINCIPAL
         // ================================
-        $devolucion = DB::transaction(function () use ($validated, $request) {
+        $devolucion = DB::transaction(function () use ($validated, $request, $tenant, $prefix, $isCel) {
 
-            $devolucion = Devolucion::create($validated);
+            // ✅ Generar folio por prefijo y tenant (con lock para evitar empalmes)
+            $last = Devolucion::where('empresa_tenant_id', $tenant)
+                ->where('folio', 'like', $prefix . '%')
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->value('folio');
+
+            $next = 1;
+            if ($last) {
+                // extrae el número final del folio: DEVCEL-00012 => 12
+                $num = (int) preg_replace('/\D+/', '', $last);
+                $next = $num + 1;
+            }
+
+            // ✅ Asegurar campos obligatorios en BD
+            $validated['empresa_tenant_id'] = $tenant;
+            $validated['folio'] = $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+            unset($validated['productos']); // ✅ productos NO es columna de devoluciones
+
+            // ✅ Ahora sí crear
+            $devolucion = new Devolucion();
+            $devolucion->forceFill($validated);
+            $devolucion->save();
 
             foreach ($request->productos as $productoId => $series) {
 

@@ -46,6 +46,25 @@
   </style>
 
   @php
+    // ✅ Detecta si esta responsiva es de celulares (CEL)
+    $isCel = (($responsiva->tipo_documento ?? null) === 'CEL');
+
+    // ✅ Si es CEL: filtrar SOLO series de productos tipo celular/telefono
+    if ($isCel) {
+      $series = $series->filter(function ($s) {
+        $tipo = strtolower((string) optional($s->producto)->tipo);
+
+        // Ajusta aquí los tipos exactos que uses en tu BD
+        return in_array($tipo, [
+          'celular',
+          'telefono',
+          'teléfono',
+          'movil',
+          'móvil',
+        ], true);
+      })->values();
+    }
+
     // ====== preparar dataset para el selector de series ======
     $groups = $series->groupBy('producto_id');
 
@@ -107,138 +126,288 @@
   <div class="zoom-outer">
     <div class="zoom-inner">
       @can('responsivas.edit')
-        <div class="py-6">
-          <div class="wrap">
 
-            @if ($errors->any())
-              <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
-                <b>Revisa los campos:</b>
-                <ul style="margin-left:18px;list-style:disc;">
-                  @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
-                </ul>
-              </div>
-            @endif
+        {{-- ✅ SI ES CEL: el edit se comporta como el create de celulares (motivo fijo + observaciones) --}}
+        @if($isCel)
+          <div class="py-6">
+            <div class="wrap">
 
-            <form method="POST" action="{{ route('responsivas.update', $responsiva) }}">
-              @csrf @method('PUT')
-
-              {{-- ======= Datos ======= --}}
-              <div class="section-sep">
-                <div class="line"></div>
-                <div class="label">Datos</div>
-                <div class="line"></div>
-              </div>
-
-              <div class="grid2 row">
-                <div>
-                  <label>Motivo de entrega</label>
-                  <select name="motivo_entrega" required>
-                    <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
-                    <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
-                    <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
-                  </select>
-                  @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
+              @if ($errors->any())
+                <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
+                  <b>Revisa los campos:</b>
+                  <ul style="margin-left:18px;list-style:disc;">
+                    @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
+                  </ul>
                 </div>
-                <div>
-                  <label>Colaborador</label>
-                  <select name="colaborador_id" id="colaborador_id" required>
-                    <option value="" disabled>Selecciona colaborador…</option>
-                    @foreach($colaboradores as $c)
-                      <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>
-                        {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
-                      </option>
-                    @endforeach
-                  </select>
-                  @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
-                </div>
-              </div>
+              @endif
 
-              <div class="grid2 row">
-                <div>
-                  <label>Fecha de solicitud</label>
-                  <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
-                  @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div>
-                  <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-                  <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
-                  @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
-                </div>
-              </div>
+              <form method="POST" action="{{ route('responsivas.update', $responsiva) }}">
+                @csrf @method('PUT')
 
-              {{-- ======= Productos ======= --}}
-              <div class="section-sep">
-                <div class="line"></div>
-                <div class="label">Productos</div>
-                <div class="line"></div>
-              </div>
+                {{-- Mantener tipo_documento CEL en edición --}}
+                <input type="hidden" name="tipo_documento" value="CEL">
 
-              <div class="row toolrow">
-                <input id="searchBox" placeholder="Buscar por serie / producto…" />
-                <div class="toolbar-right">
-                  <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
-                  <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
+                {{-- ======= Datos ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Datos</div>
+                  <div class="line"></div>
                 </div>
-              </div>
 
-              <div class="row">
-                <label>Series (selecciona una o varias)</label>
-                <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
-                <div class="hint">Incluye las series actuales + disponibles. Quitar una serie la libera.</div>
-                @error('series_ids') <div class="err">{{ $message }}</div> @enderror
-                @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
-              </div>
+                <div class="grid2 row">
+                  <div>
+                    <label>Motivo de entrega</label>
 
-              {{-- ======= Firmas ======= --}}
-              <div class="section-sep">
-                <div class="line"></div>
-                <div class="label">Firmas</div>
-                <div class="line"></div>
-              </div>
+                    {{-- ✅ Celulares: fijo y no editable --}}
+                    <input type="hidden" name="motivo_entrega" value="prestamo_provisional">
+                    <input type="text" value="Préstamo provisional" disabled>
+                    <div class="hint">Motivo asignado automáticamente para celulares.</div>
 
-              <div class="grid3 row">
-                <div>
-                  <label>Entregó (solo admin)</label>
-                  <select name="entrego_user_id" id="entrego_user_id" required>
-                    <option value="">— Selecciona —</option>
-                    @foreach($admins as $u)
-                      <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                    @endforeach
-                  </select>
-                  @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
+                    @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Colaborador</label>
+                    <select name="colaborador_id" id="colaborador_id" required>
+                      <option value="" disabled>Selecciona colaborador…</option>
+                      @foreach($colaboradores as $c)
+                        <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>
+                          {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                        </option>
+                      @endforeach
+                    </select>
+                    @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
                 </div>
-                <div>
-                  <label>Recibí (colaborador)</label>
-                  <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
-                    <option value="">— Selecciona —</option>
-                    @foreach($colaboradores as $c)
-                      <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>
-                        {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
-                      </option>
-                    @endforeach
-                  </select>
-                  <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
-                  @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div>
-                  <label>Autorizó (solo admin)</label>
-                  <select name="autoriza_user_id" id="autoriza_user_id" required>
-                    <option value="">— Selecciona —</option>
-                    @foreach($admins as $u)
-                      <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                    @endforeach
-                  </select>
-                  @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
-                </div>
-              </div>
 
-              <div class="grid2">
-                <a href="{{ route('responsivas.index', $responsiva) }}" class="btn-cancel">Cancelar</a>
-                <button type="submit" class="btn">Actualizar responsiva</button>
-              </div>
-            </form>
+                <div class="grid2 row">
+                  <div>
+                    <label>Fecha de salida</label>
+                    <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
+                    @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Fecha de entrega <span class="hint">(requerida)</span></label>
+                    <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
+                    @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                </div>
+
+                {{-- ✅ Observaciones SOLO en CEL --}}
+                <div class="row">
+                  <label>Observaciones</label>
+                  <textarea name="observaciones" rows="4" placeholder="Escribe observaciones...">{{ old('observaciones', $responsiva->observaciones) }}</textarea>
+                  @error('observaciones') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- ======= Productos ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Productos</div>
+                  <div class="line"></div>
+                </div>
+
+                <div class="row toolrow">
+                  <input id="searchBox" placeholder="Buscar por serie / producto…" />
+                  <div class="toolbar-right">
+                    <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
+                    <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <label>Series (selecciona una o varias)</label>
+                  <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
+                  <div class="hint">Incluye las series actuales + disponibles. Quitar una serie la libera.</div>
+                  @error('series_ids') <div class="err">{{ $message }}</div> @enderror
+                  @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- ======= Firmas ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Firmas</div>
+                  <div class="line"></div>
+                </div>
+
+                <div class="grid3 row">
+                  <div>
+                    <label>Entregó (solo admin)</label>
+                    <select name="entrego_user_id" id="entrego_user_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($admins as $u)
+                        <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                      @endforeach
+                    </select>
+                    @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Recibí (colaborador)</label>
+                    <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($colaboradores as $c)
+                        <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>
+                          {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                        </option>
+                      @endforeach
+                    </select>
+                    <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
+                    @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Autorizó (solo admin)</label>
+                    <select name="autoriza_user_id" id="autoriza_user_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($admins as $u)
+                        <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                      @endforeach
+                    </select>
+                    @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                </div>
+
+                <div class="grid2">
+                  <a href="{{ route('celulares.responsivas.index') }}" class="btn-cancel">Cancelar</a>
+                  <button type="submit" class="btn">Actualizar celular</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+
+        @else
+          {{-- ✅ SI NO ES CEL: tu edit original se queda EXACTAMENTE igual --}}
+          <div class="py-6">
+            <div class="wrap">
+
+              @if ($errors->any())
+                <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px;">
+                  <b>Revisa los campos:</b>
+                  <ul style="margin-left:18px;list-style:disc;">
+                    @foreach ($errors->all() as $e) <li>{{ $e }}</li> @endforeach
+                  </ul>
+                </div>
+              @endif
+
+              <form method="POST" action="{{ route('responsivas.update', $responsiva) }}">
+                @csrf @method('PUT')
+
+                {{-- ======= Datos ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Datos</div>
+                  <div class="line"></div>
+                </div>
+
+                <div class="grid2 row">
+                  <div>
+                    <label>Motivo de entrega</label>
+                    <select name="motivo_entrega" required>
+                      <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
+                      <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
+                      <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
+                    </select>
+                    @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Colaborador</label>
+                    <select name="colaborador_id" id="colaborador_id" required>
+                      <option value="" disabled>Selecciona colaborador…</option>
+                      @foreach($colaboradores as $c)
+                        <option value="{{ $c->id }}" @selected((string)$colDefault===(string)$c->id)>
+                          {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                        </option>
+                      @endforeach
+                    </select>
+                    @error('colaborador_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                </div>
+
+                <div class="grid2 row">
+                  <div>
+                    <label>Fecha de solicitud</label>
+                    <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
+                    @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Fecha de entrega <span class="hint">(requerida)</span></label>
+                    <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
+                    @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                </div>
+
+                {{-- ======= Productos ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Productos</div>
+                  <div class="line"></div>
+                </div>
+
+                <div class="row toolrow">
+                  <input id="searchBox" placeholder="Buscar por serie / producto…" />
+                  <div class="toolbar-right">
+                    <button type="button" class="btn-gray" id="btnSelectVisible">Seleccionar visibles</button>
+                    <button type="button" class="btn-gray" id="btnClearSel">Limpiar selección</button>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <label>Series (selecciona una o varias)</label>
+                  <select id="seriesSelect" name="series_ids[]" multiple size="12" required></select>
+                  <div class="hint">Incluye las series actuales + disponibles. Quitar una serie la libera.</div>
+                  @error('series_ids') <div class="err">{{ $message }}</div> @enderror
+                  @error('series_ids.*') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- ======= Firmas ======= --}}
+                <div class="section-sep">
+                  <div class="line"></div>
+                  <div class="label">Firmas</div>
+                  <div class="line"></div>
+                </div>
+
+                <div class="grid3 row">
+                  <div>
+                    <label>Entregó (solo admin)</label>
+                    <select name="entrego_user_id" id="entrego_user_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($admins as $u)
+                        <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                      @endforeach
+                    </select>
+                    @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Recibí (colaborador)</label>
+                    <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($colaboradores as $c)
+                        <option value="{{ $c->id }}" @selected((string)$recibiDefaultId===(string)$c->id)>
+                          {{ $c->nombre_completo ?? trim(($c->nombre ?? '').' '.($c->apellidos ?? '')) }}
+                        </option>
+                      @endforeach
+                    </select>
+                    <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
+                    @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                  <div>
+                    <label>Autorizó (solo admin)</label>
+                    <select name="autoriza_user_id" id="autoriza_user_id" required>
+                      <option value="">— Selecciona —</option>
+                      @foreach($admins as $u)
+                        <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                      @endforeach
+                    </select>
+                    @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                </div>
+
+                <div class="grid2">
+                  <a href="{{ route('responsivas.index', $responsiva) }}" class="btn-cancel">Cancelar</a>
+                  <button type="submit" class="btn">Actualizar responsiva</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        @endif
 
         {{-- 🔧 Script de series (se mantiene igual) --}}
         <script>
