@@ -299,12 +299,16 @@
 
           @if (empty($responsiva->firma_colaborador_path))
             @can('responsivas.edit')
+              {{-- ✅ Firmar en sitio: SIEMPRE (incluye CEL) --}}
               <button type="button" class="btn btn-secondary" onclick="openFirma()">Firmar en sitio</button>
 
-              <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
-                @csrf
-                <button class="btn btn-secondary">Generar/renovar link de firma</button>
-              </form>
+              {{-- ❌ Generar/renovar link: SOLO si NO es CEL --}}
+              @if(!$isCel)
+                <form method="POST" action="{{ route('responsivas.emitirFirma', $responsiva) }}" style="display:inline">
+                  @csrf
+                  <button class="btn btn-secondary">Generar/renovar link de firma</button>
+                </form>
+              @endif
             @endcan
           @endif
 
@@ -336,7 +340,7 @@
               <td class="title-row title-main">Grupo Vysisa</td>
             </tr>
             <tr><td class="title-row title-sub">Departamento de Sistemas</td></tr>
-            <tr><td class="title-row title-sub">Formato de Responsiva</td></tr>
+            <tr><td class="title-row title-sub">{{ $isCel ? 'Formato de Prestamo' : 'Formato de Responsiva' }}</td></tr>
           </table>
 
           {{-- METADATOS 1 --}}
@@ -497,21 +501,23 @@
               </div>
             </div>
 
-            <div class="firma-row" style="justify-content:center; margin-top:16px;">
-              <div class="sign" style="flex:0 0 60%; max-width:60%;">
-                <div class="sign-title">AUTORIZÓ</div>
-                <div class="sign-space">
-                  @if($firmaAutoriza)
-                    <img class="firma-img" src="{{ $firmaAutoriza }}" alt="Firma autorizó">
-                  @endif
-                </div>
-                <div class="sign-inner sm">
-                  <div class="sign-name">{{ $autorizaNombre }}</div>
-                  <div class="sign-line"></div>
-                  <div class="sign-caption">Nombre y firma</div>
+            @if(!$isCel)
+              <div class="firma-row" style="justify-content:center; margin-top:16px;">
+                <div class="sign" style="flex:0 0 60%; max-width:60%;">
+                  <div class="sign-title">AUTORIZÓ</div>
+                  <div class="sign-space">
+                    @if($firmaAutoriza)
+                      <img class="firma-img" src="{{ $firmaAutoriza }}" alt="Firma autorizó">
+                    @endif
+                  </div>
+                  <div class="sign-inner sm">
+                    <div class="sign-name">{{ $autorizaNombre }}</div>
+                    <div class="sign-line"></div>
+                    <div class="sign-caption">Nombre y firma</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            @endif
           </div>
 
         </div> {{-- /#printable --}}

@@ -236,20 +236,67 @@ Route::middleware(['auth'])->group(function () {
         ->name('responsivas.firma.destroy');
     
     /*
-    |--------------------  Responsivas (Celulares)  --------------------
+    |--------------------  Celulares (módulo)  --------------------
     */
-    Route::get('/celulares/responsivas', [ResponsivaController::class, 'indexCelulares'])
-        ->name('celulares.responsivas.index');
-    Route::get('/celulares/responsivas/create', [ResponsivaController::class, 'createCelulares'])
-        ->name('celulares.responsivas.create');
-    Route::post('/celulares/responsivas', [ResponsivaController::class, 'storeCelulares'])
-        ->name('celulares.responsivas.store');
+    Route::prefix('celulares')->name('celulares.')->group(function () {
 
-    // Devoluciones Responsivas (Celulares)
-    Route::get('/celulares/devoluciones/create', [DevolucionController::class, 'create'])
-        ->name('celulares.devoluciones.create');
+        // ===== Responsivas Celulares =====
+        Route::get('/responsivas', [ResponsivaController::class, 'indexCelulares'])
+            ->middleware('permission:celulares.view')
+            ->name('responsivas.index');
 
-    
+        Route::get('/responsivas/create', [ResponsivaController::class, 'createCelulares'])
+            ->middleware('permission:celulares.create')
+            ->name('responsivas.create');
+
+        Route::post('/responsivas', [ResponsivaController::class, 'storeCelulares'])
+            ->middleware('permission:celulares.create')
+            ->name('responsivas.store');
+
+        // (Opcional pero recomendado si vas a editar/eliminar desde el index de celulares)
+        Route::get('/responsivas/{responsiva}/edit', [ResponsivaController::class, 'editCelulares'])
+            ->middleware('permission:celulares.edit')
+            ->name('responsivas.edit');
+
+        Route::put('/responsivas/{responsiva}', [ResponsivaController::class, 'updateCelulares'])
+            ->middleware('permission:celulares.edit')
+            ->name('responsivas.update');
+
+        Route::delete('/responsivas/{responsiva}', [ResponsivaController::class, 'destroyCelulares'])
+            ->middleware('permission:celulares.delete')
+            ->name('responsivas.destroy');
+
+
+        // ===== Devoluciones Celulares =====
+        Route::get('/devoluciones/create', [DevolucionController::class, 'create'])
+            ->middleware('permission:celulares.create')
+            ->name('devoluciones.create');
+
+        Route::post('/devoluciones', [DevolucionController::class, 'store'])
+            ->middleware('permission:celulares.create')
+            ->name('devoluciones.store');
+
+        Route::get('/devoluciones/{devolucion}', [DevolucionController::class, 'show'])
+            ->middleware('permission:celulares.view')
+            ->name('devoluciones.show');
+
+        Route::get('/devoluciones/{devolucion}/pdf', [DevolucionController::class, 'pdf'])
+            ->middleware('permission:celulares.view')
+            ->name('devoluciones.pdf');
+
+        Route::get('/devoluciones/{devolucion}/edit', [DevolucionController::class, 'edit'])
+            ->middleware('permission:celulares.edit')
+            ->name('devoluciones.edit');
+
+        Route::put('/devoluciones/{devolucion}', [DevolucionController::class, 'update'])
+            ->middleware('permission:celulares.edit')
+            ->name('devoluciones.update');
+
+        Route::delete('/devoluciones/{devolucion}', [DevolucionController::class, 'destroy'])
+            ->middleware('permission:celulares.delete')
+            ->name('devoluciones.destroy');
+    });
+
     /*
     |--------------------  Devoluciones  --------------------
     */

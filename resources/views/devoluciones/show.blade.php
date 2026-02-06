@@ -45,6 +45,9 @@
     // Verifica primero si hay una relación de responsiva
     $responsiva = $devolucion->responsiva ?? null;
 
+    // ✅ detectar si la responsiva es CEL-
+    $isCel = \Illuminate\Support\Str::startsWith((string)($responsiva?->folio ?? ''), 'CEL-');
+
     // Si no hay colaborador definido aún, intenta tomarlo de la responsiva
     if (!$col && $responsiva && $responsiva->colaborador) {
         $col = $responsiva->colaborador;
@@ -266,27 +269,45 @@
     <div class="zoom-inner">
       <div class="py-6 sheet">
         <div class="actions">
-          <a href="{{ route('devoluciones.index') }}" class="btn btn-secondary">← Devoluciones</a>
+
+          @php
+            // 1) Si te mandan ?from=cel o ?from=prestamos, lo respetas
+            $from = request('from');
+
+            // 2) fallback: si no viene "from", usamos $isCel
+            // AJUSTA estas rutas a las que tú tengas realmente:
+            $backHref  = ($from === 'cel' || $isCel)
+                ? route('celulares.responsivas.index')  
+                : route('devoluciones.index');            
+
+            $backLabel = ($from === 'cel' || $isCel) ? '← Devoluciones Celulares' : '← Devoluciones';
+          @endphp
+
+          <a href="{{ $backHref }}" class="btn btn-secondary">{{ $backLabel }}</a>
           <a href="{{ route('devoluciones.pdf', $devolucion) }}" class="btn btn-primary" target="_blank" rel="noopener">Descargar PDF</a>
 
           @can('devoluciones.edit')
+
+            @if(!$isCel)
               {{-- Solo mostrar link de ENTREGÓ si NO hay firma guardada --}}
               @if (empty($devolucion->firma_entrego_path))
-                  <button type="button"
-                          class="btn btn-secondary"
-                          onclick="openModalLinkFirmaDevolucion('entrego')">
-                      Link firma ENTREGÓ
-                  </button>
+                <button type="button"
+                        class="btn btn-secondary"
+                        onclick="openModalLinkFirmaDevolucion('entrego')">
+                  Link firma ENTREGÓ
+                </button>
               @endif
 
               {{-- Solo mostrar link de PSITIO si NO hay firma en sitio ni firma automática --}}
               @if (empty($devolucion->firma_psitio_path) && empty($psitioFirmaAuto))
-                  <button type="button"
-                          class="btn btn-secondary"
-                          onclick="openModalLinkFirmaDevolucion('psitio')">
-                      Link firma PSITIO
-                  </button>
+                <button type="button"
+                        class="btn btn-secondary"
+                        onclick="openModalLinkFirmaDevolucion('psitio')">
+                  Link firma PSITIO
+                </button>
               @endif
+            @endif
+
           @endcan
         </div>
 
@@ -301,7 +322,7 @@
               <td class="title-row title-main">Grupo Vysisa</td>
             </tr>
             <tr><td class="title-row title-sub">Departamento de Sistemas</td></tr>
-            <tr><td class="title-row title-sub">Formato de Devolución</td></tr>
+            <tr><td class="title-row title-sub">{{ $isCel ? 'Formato de Devolución de Préstamo' : 'Formato de Devolución' }}</td></tr>
           </table>
 
           {{-- METADATOS 1 --}}
@@ -320,7 +341,7 @@
             <tr>
               <td class="label">No. de devolución</td>
               <td class="val center">{{ $devolucion->folio }}</td>
-              <td class="label nowrap">Fecha de entrega</td>
+              <td class="label nowrap">{{ $isCel ? 'Fecha de salida' : 'Fecha de entrega' }}</td>
               <td class="val nowrap center">{{ $fechaEntregaFmt }}</td>
               <td class="label">Nombre de Usuario</td>
               <td class="val center">{{ $colNombreUsuario  }}</td>
@@ -335,9 +356,6 @@
               <col style="width:14%"><col style="width:4%">
             </colgroup>
             @php
-              // ✅ detectar si la responsiva es CEL-
-              $isCel = \Illuminate\Support\Str::startsWith((string)($responsiva?->folio ?? ''), 'CEL-');
-
               // ✅ flags normales
               $isRenovacion = strtolower((string)$devolucion->motivo) === 'renovacion';
               $isBaja       = strtolower((string)$devolucion->motivo) === 'baja_colaborador';
@@ -353,12 +371,10 @@
                 <td class="val center">{{ $unidadServicio ?? '—' }}</td>
 
                 <td class="label center">MOTIVO DE DEVOLUCIÓN</td>
-                <td class="label center">RESGUARDO</td>
-                <td class="val center mark-x">{{ $isResguardo ? 'X' : '' }}</td>
-
-                {{-- Relleno para conservar el ancho/tabla igual --}}
-                <td class="label center">&nbsp;</td>
-                <td class="val center mark-x">&nbsp;</td>
+                {{-- RESGUARDO ocupa 2 columnas --}}
+                <td class="label center" colspan="2">RESGUARDO</td>
+                {{-- X ocupa 2 columnas (las últimas dos) --}}
+                <td class="val center mark-x" colspan="2">{{ $isResguardo ? 'X' : '' }}</td>
               </tr>
             @else
               {{-- ✅ NORMAL: se queda igual --}}
@@ -392,10 +408,19 @@
 
             // Construimos la lista de productos en formato "tipo (nombre)"
             $productosTexto = $productos->map(function ($p) use ($tipos) {
-                $tipoClave = $p->tipo ?? 'otro';
+                $tipoClave    = $p->tipo ?? 'otro';
                 $tipoProducto = $tipos[$tipoClave] ?? ucfirst(str_replace('_', ' ', $tipoClave));
-                $nombreProducto = $p->nombre ?? 'producto';
-                return strtolower($tipoProducto) . ' (<b>' . e($nombreProducto) . '</b>)';
+
+                $marca  = trim((string)($p->marca ?? ''));
+                $modelo = trim((string)($p->modelo ?? ''));
+
+                // ✅ Solo Marca + Modelo (si falta algo, usa nombre como respaldo)
+                $textoProducto = trim($marca.' '.$modelo);
+                if ($textoProducto === '') {
+                    $textoProducto = trim((string)($p->nombre ?? 'producto'));
+                }
+
+                return strtolower($tipoProducto) . ' (<b>' . e($textoProducto) . '</b>)';
             })->implode(', ');
           @endphp
 

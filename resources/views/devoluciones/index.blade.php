@@ -105,16 +105,18 @@
         </form>
 
         {{-- Alerts --}}
-        @if (session('created') || session('updated') || session('deleted') || session('error'))
+        @if (session('created') || session('updated') || session('deleted') || session('success') || session('error'))
           @php
             $msg = session('created') ? 'Devolución registrada.'
                  : (session('updated') ? 'Devolución actualizada.'
                  : (session('deleted') ? 'Devolución eliminada.'
-                 : (session('error') ?: '')));
+                 : (session('success') ? session('success')
+                 : (session('error') ?: ''))));
             $cls = session('deleted') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
                  : (session('updated') ? 'background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe'
                  : (session('error') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
-                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0'));
+                 : (session('success') ? 'background:#fee2e2;color:#991b1b;border:1px solid #fecaca'
+                 : 'background:#dcfce7;color:#166534;border:1px solid #bbf7d0')));
           @endphp
           <div id="alert" style="border-radius:8px;padding:.6rem .9rem; {{ $cls }}" class="mb-4">{{ $msg }}</div>
           <script>

@@ -194,6 +194,12 @@
                   Devoluciones
                 </a>
                 @endcan
+                @can('celulares.view')
+                  <a href="{{ url('/celulares/responsivas') }}"
+                    class="menu-item {{ request()->is('celulares/responsivas*') ? 'menu-item--active' : '' }}">
+                    Bitácora de celulares
+                  </a>
+                @endcan
                 @can('cartuchos.view')
                 <a href="{{ route('cartuchos.index') }}"
                   class="menu-item {{ request()->routeIs('cartuchos.*') ? 'menu-item--active' : '' }}">
@@ -421,6 +427,12 @@
             class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
             Devoluciones
           </a>
+          @endcan
+          @can('celulares.view')
+            <a href="{{ url('/celulares/responsivas') }}"
+              class="mobile-a {{ request()->is('celulares/responsivas*') ? 'mobile-a--active' : '' }}">
+              Bitácora de celulares
+            </a>
           @endcan
           @can('cartuchos.view')
           <a href="{{ route('cartuchos.index') }}"

@@ -36,50 +36,44 @@
     @media (max-width:768px){ .grid3{grid-template-columns:1fr;} }
 
     /* 🔶 Notificación tipo advertencia */
-    .alert-warning {
-      background:#fff7ed;
-      border:1px solid #fdba74;
-      color:#92400e;
-      border-radius:8px;
-      padding:12px;
-      margin-bottom:16px;
-      font-weight:500;
-      opacity:0;
-      transition:opacity .4s ease;
-    }
+    .alert-warning { background:#fff7ed; border:1px solid #fdba74; color:#92400e; border-radius:8px;
+      padding:12px; margin-bottom:16px; font-weight:500; opacity:0; transition:opacity .4s ease; }
     .alert-warning.show { opacity:1; }
 
     /* === Tom Select: MISMO estilo que el resto de inputs === */
-    .ts-wrapper.single .ts-control {
-      border-radius:8px;
-      border:1px solid #d1d5db;
-      padding:6px 8px;
-      min-height:38px;
-      box-shadow:none;
-      background:#ffffff;
-    }
-    .ts-wrapper.single .ts-control:hover {
-      border-color:#9ca3af;
-    }
-    .ts-wrapper.single .ts-control:focus-within {
-      border-color:#2563eb;
-      box-shadow:0 0 0 3px rgba(37,99,235,.12);
-    }
+    .ts-wrapper.single .ts-control { border-radius:8px; border:1px solid #d1d5db; padding:6px 8px; min-height:38px; box-shadow:none; background:#ffffff; }
+    .ts-wrapper.single .ts-control:hover { border-color:#9ca3af; }
+    .ts-wrapper.single .ts-control:focus-within { border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
 
     /* Dropdown arriba de todo, fondo blanco y scroll interno */
-    .ts-dropdown {
-      z-index:9999 !important;
-      max-height:none;
-      overflow:visible;
-      background:#ffffff;
-      border:1px solid #d1d5db;
-      box-shadow:0 10px 15px -3px rgba(0,0,0,.1);
-    }
-    .ts-dropdown .ts-dropdown-content {
-      max-height:220px;
-      overflow-y:auto;
-      background:#ffffff;
-    }
+    .ts-dropdown { z-index:9999 !important; max-height:none; overflow:visible; background:#ffffff; 
+      border:1px solid #d1d5db; box-shadow:0 10px 15px -3px rgba(0,0,0,.1); }
+    .ts-dropdown .ts-dropdown-content { max-height:220px; overflow-y:auto; background:#ffffff; }
+
+    /* === "fake TomSelect" para inputs/readonly === */
+    .ts-like { border-radius: 8px; border: 1px solid #d1d5db; padding: 6px 8px; min-height: 38px; 
+      width: 100%; background: #ffffff; box-shadow: none; display:flex; align-items:center; }
+    .ts-like:hover { border-color:#9ca3af; }
+    .ts-like:focus,
+    .ts-like:focus-within{ border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); outline:none; }
+    
+    /* para inputs date/text que usen el look */
+    input.ts-like-input{ border:none !important; padding:0 !important; margin:0 !important; width:100%; 
+      background:transparent !important; outline:none !important; font-size:14px; }
+    
+    /* Solo “apagamos” el TEXTO, no el cuadro */
+    .ts-like.is-readonly{ background:#ffffff; border-color:#d1d5db; cursor:default; }
+    .ts-like.is-readonly span{ color:#9ca3af; font-weight:400; }
+    
+    /* sin efecto azul de focus */
+    .ts-like.is-readonly:focus,
+    .ts-like.is-readonly:focus-within{ border-color:#d1d5db; box-shadow:none; }
+
+    /* Subtítulo en labels (gris y más chico) */
+    .label-sub{ font-size:12px; color:#9ca3af; font-weight:500; }
+
+    /* ✅ Texto más chico SOLO para valores fijos (Resguardo / Isidro bloqueado) */
+    .ts-like.small-text span{ font-size: 13px; line-height: 1.2; }
   </style>
 
   <div class="zoom-outer">
@@ -101,6 +95,7 @@
 
           @php
             $isCelCreate = request()->routeIs('celulares.devoluciones.create');
+            $preselectedResponsivaId = old('responsiva_id', $responsivaId ?? request('responsiva_id'));
           @endphp
 
           <form method="POST" action="{{ route('devoluciones.store') }}">
@@ -113,19 +108,24 @@
               {{-- Columna izquierda: Responsiva + Fecha debajo --}}
               <div>
                 <label>Responsiva</label>
-                <select name="responsiva_id" id="responsivaSelect" required>
+                <select name="responsiva_id" id="responsivaSelect" required {{ ($isCelCreate && $preselectedResponsivaId) ? 'disabled' : '' }}>
                   <option value="">— Selecciona una responsiva —</option>
                   @foreach($responsivas as $r)
-                    <option value="{{ $r->id }}">
+                    <option value="{{ $r->id }}" @selected((string)$preselectedResponsivaId === (string)$r->id)>
                       {{ $r->folio }} — {{ $r->colaborador->nombre }} {{ $r->colaborador->apellidos ?? '' }}
                     </option>
                   @endforeach
                 </select>
+                @if($isCelCreate && $preselectedResponsivaId)
+                  <input type="hidden" name="responsiva_id" value="{{ $preselectedResponsivaId }}">
+                @endif
                 @error('responsiva_id') <div class="err">{{ $message }}</div> @enderror
 
                 <div style="margin-top:12px">
                   <label>Fecha de devolución</label>
-                  <input type="date" name="fecha_devolucion" required>
+                  <div class="ts-like">
+                    <input type="date" name="fecha_devolucion" required class="ts-like-input">
+                  </div>
                   @error('fecha_devolucion') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>
@@ -136,7 +136,9 @@
 
                 @if($isCelCreate)
                   {{-- ✅ Celulares: motivo fijo --}}
-                  <input type="text" value="Resguardo" disabled>
+                  <div class="ts-like is-readonly small-text">
+                    <span>Resguardo</span>
+                  </div>
                   <input type="hidden" name="motivo" value="resguardo">
                 @else
                   {{-- ✅ Normal: selector --}}
@@ -178,21 +180,31 @@
             <div class="grid3 row firmas-grid">
               {{-- Recibió (admin) --}}
               <div>
-                <label>Recibió (usuario admin)</label>
-                <select name="recibi_id" id="recibiSelect" required>
-                  <option value="">— Selecciona —</option>
-                  @foreach($admins as $a)
-                    <option value="{{ $a->id }}" {{ isset($adminDefault) && $adminDefault == $a->id ? 'selected' : '' }}>
-                      {{ $a->name }}
-                    </option>
-                  @endforeach
-                </select>
+                <label>Recibió <span class="label-sub">(usuario admin)</span></label>
+                @if($isCelCreate && !empty($lockRecibi) && $lockRecibi)
+                  {{-- ✅ SOLO CELULARES: Isidro logueado (no admin) => fijo, sin poder cambiar --}}
+                  <div class="ts-like is-readonly small-text">
+                    <span>{{ auth()->user()->name }}</span>
+                  </div>
+                  <input type="hidden" name="recibi_id" value="{{ auth()->id() }}">
+                @else
+                  {{-- ✅ Normal: seleccionable (admins) / en celular: admins + Isidro --}}
+                  <select name="recibi_id" id="recibiSelect" required>
+                    <option value="">— Selecciona —</option>
+                    @foreach($admins as $a)
+                      <option value="{{ $a->id }}"
+                        @selected((string)old('recibi_id', $adminDefault) === (string)$a->id)>
+                        {{ $a->name }}
+                      </option>
+                    @endforeach
+                  </select>
+                @endif
                 @error('recibi_id') <div class="err">{{ $message }}</div> @enderror
               </div>
 
               {{-- Entregó (colaborador) --}}
               <div>
-                <label>Entregó (colaborador)</label>
+                <label>Entregó <span class="label-sub">(colaborador)</span></label>
                 <select name="entrego_colaborador_id" id="entregoSelect" required>
                   <option value="">— Selecciona —</option>
                   @foreach($colaboradores as $c)
@@ -204,7 +216,7 @@
 
               {{-- Psitio (colaborador) --}}
               <div>
-                <label>Psitio (colaborador)</label>
+                <label>Personal en Sitio <span class="label-sub">(colaborador)</span></label>
                 <select name="psitio_colaborador_id" id="psitioSelect" required>
                   <option value="">— Selecciona —</option>
                   @foreach($colaboradores as $c)
@@ -217,7 +229,7 @@
 
             {{-- ======= Botones ======= --}}
             <div class="grid2 row">
-              <a href="{{ route('devoluciones.index') }}" class="btn-cancel">Cancelar</a>
+              <a href="{{ $isCelCreate ? route('celulares.responsivas.index') : route('devoluciones.index') }}" class="btn-cancel">Cancelar</a>
               <button type="submit" class="btn">Guardar devolución</button>
             </div>
           </form>
@@ -268,6 +280,7 @@
             const marca  = p.marca || '-';
             const modelo = p.modelo || '-';
             const serie  = d.serie?.serie || d.producto_serie_id || '-';
+            const serieId = d.producto_serie_id ?? d.serie?.id ?? '';
 
             productosTable.innerHTML += `
                 <tr>
@@ -277,7 +290,7 @@
                   <td>${modelo}</td>
                   <td>${serie}</td>
                   <td>
-                    <input type="checkbox" name="productos[${p.id}][]" value="${d.producto_serie_id}" class="h-4 w-4">
+                    <input type="checkbox" name="productos[${p.id}][]" value="${serieId}" class="h-4 w-4" checked>
                   </td>
                 </tr>`;
         });
@@ -314,6 +327,16 @@
         if (resp && seleccionado && seleccionado !== currentRespColaboradorId) {
             showWarning(resp);
         }
+    });
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const pre = @json($preselectedResponsivaId);
+      if (pre && responsivaSelect) {
+        responsivaSelect.value = String(pre);
+        responsivaSelect.dispatchEvent(new Event('change'));
+      }
     });
   </script>
 

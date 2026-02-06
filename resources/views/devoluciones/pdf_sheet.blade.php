@@ -172,86 +172,26 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Formato de Devolución</title>
+  <title>{{ $isCel ? 'Formato de Devolución de Préstamo' : 'Formato de Devolución' }}</title>
   <style>
-  @page {
-    size: letter portrait;
-    margin: 15px 18px 10px 18px;
-  }
+  @page { size: letter portrait; margin: 15px 18px 10px 18px; }
 
-  body {
-    margin: 0;
-    padding: 0;
-    font-family: DejaVu Sans, Arial, sans-serif;
-    font-size: 9.8px;
-    color: #000;
-  }
-
-  .sheet {
-    width: 100%;
-    transform-origin: top center;
-    display: flex;
-    justify-content: center;
-    position: relative;
-  }
-
-  table {
-    width: 100%;
-    margin: 0 auto;
-    border-collapse: collapse;
-    border: 1px solid #000;
-    page-break-inside: avoid !important;
-  }
-
-  td, th {
-    border: 1px solid #000;
-    padding: 3px 4px;
-    vertical-align: middle;
-    text-align: center;
-  }
-
+  body { margin: 0; padding: 0; font-family: DejaVu Sans, Arial, sans-serif; font-size: 9.8px; color: #000; }
+  .sheet { width: 100%; transform-origin: top center; display: flex; justify-content: center; position: relative; }
+  table { width: 100%; margin: 0 auto; border-collapse: collapse; border: 1px solid #000; page-break-inside: avoid !important; }
+  td, th { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; text-align: center; }
   .logo-cell { width: 28%; text-align: center; }
-
-  .logo-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 80px;
-    width: 100%;
-  }
-
-  .logo-box img {
-    max-width: 90%;
-    max-height: 75px;
-    object-fit: contain;
-  }
-
+  .logo-box { display: flex; align-items: center; justify-content: center; height: 80px; width: 100%; }
+  .logo-box img { max-width: 90%; max-height: 75px; object-fit: contain; }
   .title-main { font-weight: bold; text-transform: uppercase; font-size: 13.5px; }
   .title-sub  { font-weight: bold; text-transform: uppercase; font-size: 11.5px; }
-
   .label { font-weight: bold; text-transform: uppercase; white-space: nowrap; text-align: left; }
   .mark-cell { width: 18px; text-align: center; font-weight: bold; }
-
   .meta-1 tr:last-child td { border-bottom: 1px solid #ccc !important; }
   .meta-2 tr:first-child td { border-top: none !important; }
-
-  .section-title {
-    font-weight: bold;
-    text-transform: uppercase;
-    margin-top: 5px;
-    margin-bottom: 2px;
-  }
-
-  .paragraph {
-    text-align: justify;
-    line-height: 1.25;
-    margin-bottom: 5px;
-  }
-
-  table.productos td, table.productos th {
-    padding: 3px 3px;
-    font-size: 9.5px;
-  }
+  .section-title { font-weight: bold; text-transform: uppercase; margin-top: 5px; margin-bottom: 2px; }
+  .paragraph { text-align: justify; line-height: 1.25; margin-bottom: 5px; }
+  table.productos td, table.productos th { padding: 3px 3px; font-size: 9.5px; }
 
   @php $count = count($devolucion->productos ?? []); @endphp
   @if ($count <= 4)
@@ -270,16 +210,7 @@
   table, div, p, img { page-break-inside: avoid !important; }
 
   /* Firmas fijas al fondo */
-  .firmas-fixed {
-    position: absolute;
-    bottom: 65px;
-    left: 0;
-    right: 0;
-    width: 100%;
-    text-align: center;
-    page-break-inside: avoid !important;
-  }
-
+  .firmas-fixed { position: absolute; bottom: 65px; left: 0; right: 0; width: 100%; text-align: center; page-break-inside: avoid !important; }
   .firmas-fixed table td { border: none !important; }
   .firmas-fixed img { height: 65px; margin: 3px 0; }
   .firmas-fixed p { margin: 1px 0; font-size: 9px; }
@@ -301,7 +232,7 @@
         <td class="title-main">{{ $empresaNombre }}</td>
       </tr>
       <tr><td class="title-sub">Departamento de Sistemas</td></tr>
-      <tr><td class="title-sub">Formato de Devolución</td></tr>
+      <tr><td class="title-sub">{{ $isCel ? 'Formato de Devolución de Préstamo' : 'Formato de Devolución' }}</td></tr>
     </table>
 
     <br>
@@ -311,7 +242,7 @@
       <tr>
         <td class="label">No. de Devolución</td>
         <td>{{ $devolucion->folio ?? '' }}</td>
-        <td class="label">Fecha de Entrega</td>
+        <td class="label">{{ $isCel ? 'Fecha de Salida' : 'Fecha de Entrega' }}</td>
         <td>{{ $fechaEntregaFmt }}</td>
         <td class="label">Nombre de Usuario</td>
         <td>{{ $usuarioNombre }}</td>
@@ -326,12 +257,9 @@
           <td>{{ $unidadServicio }}</td>
 
           <td class="label">Motivo de Devolución</td>
-          <td class="label">Resguardo</td>
-          <td class="mark-cell">{!! $isResguardo ? 'X' : '&#160;' !!}</td>
 
-          {{-- relleno para mantener estructura --}}
-          <td class="label">&#160;</td>
-          <td class="mark-cell">&#160;</td>
+          <td class="label" colspan="2">Resguardo</td>
+          <td class="mark-cell" colspan="2">{!! $isResguardo ? 'X' : '&#160;' !!}</td>
         </tr>
       @else
         {{-- ✅ NORMAL: igual que antes --}}
@@ -365,10 +293,18 @@
       // Construir lista dinámica como en show.blade.php
       $productos = $devolucion->productos ?? collect();
       $productosTexto = $productos->map(function ($p) use ($tipos) {
-          $tipoClave = $p->tipo ?? 'otro';
+          $tipoClave    = $p->tipo ?? 'otro';
           $tipoProducto = $tipos[$tipoClave] ?? ucfirst(str_replace('_', ' ', $tipoClave));
-          $nombreProducto = $p->nombre ?? 'producto';
-          return strtolower($tipoProducto) . ' (<b>' . e($nombreProducto) . '</b>)';
+
+          $marca  = trim((string)($p->marca ?? ''));
+          $modelo = trim((string)($p->modelo ?? ''));
+
+          $textoProducto = trim($marca.' '.$modelo);
+          if ($textoProducto === '') {
+              $textoProducto = trim((string)($p->nombre ?? 'producto'));
+          }
+
+          return strtolower($tipoProducto) . ' (<b>' . e($textoProducto) . '</b>)';
       })->implode(', ');
     @endphp
 

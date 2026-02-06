@@ -207,40 +207,54 @@
             </div>
 
             <div class="col-grid sec-formatos">
-              {{-- Izquierda: Responsivas + Cartuchos (apilados) --}}
-              <div class="space-y-3">
-                <div class="card">
-                  <div class="card-title">Responsivas</div>
-                  <div class="perm-list">
-                    @foreach(($groups['responsivas'] ?? []) as $p)
-                      <label>
-                        <input class="perm" type="checkbox" name="permissions[]"
-                              value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
-                        <span>{{ $p['label'] }}</span>
-                      </label><br>
-                    @endforeach
-                  </div>
-                </div>
-
-                <div class="card">
-                  <div class="card-title">Cartuchos</div>
-                  <div class="perm-list">
-                    @foreach(($groups['cartuchos'] ?? []) as $p)
-                      <label>
-                        <input class="perm" type="checkbox" name="permissions[]"
-                              value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
-                        <span>{{ $p['label'] }}</span>
-                      </label><br>
-                    @endforeach
-                  </div>
+            {{-- Izquierda: Responsivas + Cartuchos (apilados) --}}
+            <div class="space-y-3">
+              <div class="card">
+                <div class="card-title">Responsivas</div>
+                <div class="perm-list">
+                  @foreach(($groups['responsivas'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                            value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
                 </div>
               </div>
 
-              {{-- Derecha: Devoluciones --}}
+              <div class="card">
+                <div class="card-title">Cartuchos</div>
+                <div class="perm-list">
+                  @foreach(($groups['cartuchos'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                            value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+            </div>
+
+            {{-- Derecha: Devoluciones + Celulares (apilados) --}}
+            <div class="space-y-3">
               <div class="card">
                 <div class="card-title">Devoluciones</div>
                 <div class="perm-list">
                   @foreach(($groups['devoluciones'] ?? []) as $p)
+                    <label>
+                      <input class="perm" type="checkbox" name="permissions[]"
+                            value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>
+                      <span>{{ $p['label'] }}</span>
+                    </label><br>
+                  @endforeach
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">Bitácora de celulares</div>
+                <div class="perm-list">
+                  @foreach(($groups['celulares'] ?? []) as $p)
                     <label>
                       <input class="perm" type="checkbox" name="permissions[]"
                             value="{{ $p['name'] }}" {{ in_array($p['name'], $sel) ? 'checked' : '' }}>

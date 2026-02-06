@@ -43,22 +43,25 @@
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
 
-     /* === Tom Select: dropdown con fondo blanco y scroll interno === */
-.ts-dropdown {
-  z-index: 9999 !important;
-  max-height: none;
-  overflow: visible;
-  background: #ffffff;               /* 👈 fondo blanco */
-  border: 1px solid #d1d5db;         /* mismo borde que inputs */
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,.1); /* sombrita ligera */
-}
+    /* === Tom Select: dropdown con fondo blanco y scroll interno === */
+    .ts-dropdown { z-index: 9999 !important; max-height: none; overflow: visible; background: #ffffff; 
+      border: 1px solid #d1d5db; box-shadow: 0 10px 15px -3px rgba(0,0,0,.1); }
+    .ts-dropdown .ts-dropdown-content { max-height: 220px; overflow-y: auto; background: #ffffff; }
+    
+    /* ✅ MISMO DISEÑO QUE "Motivo de entrega" (vista normal) */
+    .form-control { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; outline: none; }
+    .form-control:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
 
-.ts-dropdown .ts-dropdown-content {
-  max-height: 220px;
-  overflow-y: auto;                  /* scroll SOLO aquí */
-  background: #ffffff;               /* 👈 asegura fondo blanco también en el contenido */
-}
+    /* disabled (para CEL motivo fijo) */
+    .form-control[disabled],
+    .form-control:disabled { background: #f9fafb; color: #111827; cursor: not-allowed; opacity: 1; }
 
+    /* === "fake TomSelect" para readonly === */
+    .ts-like{ border-radius: 8px; border: 1px solid #d1d5db; padding: 6px 8px; min-height: 38px; width: 100%; 
+      background: #ffffff; box-shadow: none; display:flex; align-items:center; }
+    .ts-like.is-readonly{ cursor:default; }
+    .ts-like.is-readonly span{ color:#9ca3af; font-weight:400; }
+    .ts-like.small-text span{ font-size:13px; line-height:1.2; }
   </style>
 
   @php
@@ -108,11 +111,8 @@
       $data[] = $entry;
     }
 
-    $admins = isset($admins) ? $admins : (\App\Models\User::role('Administrador')->orderBy('name')->get(['id','name']));
-    $yo = auth()->user();
-    $yoEsAdmin = $yo && method_exists($yo,'hasRole') ? $yo->hasRole('Administrador') : false;
+    $entregoDefaultId = old('entrego_user_id', $entregoDefaultId ?? null);
 
-    $entregoDefaultId  = old('entrego_user_id', $yoEsAdmin ? $yo->id : '');
     $recibiDefaultId   = old('recibi_colaborador_id', old('colaborador_id'));
     // ← si el controlador envía $autorizaDefaultId (Erasto admin), úsalo; si no, queda vacío
     $autorizaDefaultId = old('autoriza_user_id', isset($autorizaDefaultId) ? $autorizaDefaultId : '');
@@ -152,13 +152,13 @@
                   <label>Motivo de entrega</label>
 
                   @if($isCel)
-                    {{-- ✅ Celulares: fijo y no editable --}}
+                    {{-- ✅ Celulares: fijo y no editable (pero con mismo diseño) --}}
                     <input type="hidden" name="motivo_entrega" value="prestamo_provisional">
-                    <input type="text" value="Préstamo provisional" disabled>
+                    <input type="text" class="form-control" value="Préstamo provisional" disabled>
                     <div class="hint">Motivo asignado automáticamente para celulares.</div>
                   @else
-                    {{-- ✅ Responsivas: se queda igual --}}
-                    <select name="motivo_entrega" required>
+                    {{-- ✅ Responsivas: mismo diseño --}}
+                    <select name="motivo_entrega" class="form-control" required>
                       <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
                       <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
                       <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
@@ -168,8 +168,10 @@
 
                   @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
+
                 <div>
                   <label>Colaborador</label>
+                  {{-- ⚠️ NO aplicar form-control aquí por TomSelect --}}
                   <select name="colaborador_id" id="colaborador_id" required>
                     <option value="" disabled {{ old('colaborador_id') ? '' : 'selected' }}>Selecciona colaborador…</option>
                     @foreach($colaboradores as $c)
@@ -183,12 +185,13 @@
               <div class="grid2 row">
                 <div>
                   <label>{{ $isCel ? 'Fecha de salida' : 'Fecha de solicitud' }}</label>
-                  <input type="date" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}" required>
+                  <input type="date" class="form-control" name="fecha_solicitud" value="{{ old('fecha_solicitud') }}" required>
                   @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                 </div>
+
                 <div>
                   <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-                  <input type="date" name="fecha_entrega" value="{{ old('fecha_entrega') }}" required>
+                  <input type="date" class="form-control" name="fecha_entrega" value="{{ old('fecha_entrega') }}" required>
                   @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
                 </div>
               </div>
@@ -196,6 +199,7 @@
               @if($isCel)
                 <div class="row">
                   <label>Observaciones</label>
+                  {{-- (No lo pediste aquí, lo dejamos como estaba para no afectar otros campos) --}}
                   <textarea name="observaciones" rows="4" placeholder="Escribe observaciones...">{{ old('observaciones') }}</textarea>
                   @error('observaciones') <div class="err">{{ $message }}</div> @enderror
                 </div>
@@ -223,18 +227,30 @@
               {{-- ======= Firmas ======= --}}
               <div class="section-sep"><div class="line"></div><div class="label">Firmas</div><div class="line"></div></div>
 
-              <div class="grid3 row">
+              <div class="{{ $isCel ? 'grid2' : 'grid3' }} row">
                 <div>
                   <label>Entregó (solo admin)</label>
-                  <select name="entrego_user_id" id="entrego_user_id" required>
-                    <option value="" disabled {{ $entregoDefaultId ? '' : 'selected' }}>— Selecciona —</option>
-                    @foreach($admins as $u)
-                      <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                    @endforeach
-                  </select>
-                  <div class="hint">Por defecto: el usuario actual si tiene rol Administrador.</div>
-                  @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
+
+                    @if(!empty($lockEntrego) && $lockEntrego)
+                      {{-- ✅ SOLO CEL: Isidro logueado (no admin) => fijo, sin poder cambiar --}}
+                      <div class="ts-like is-readonly small-text">
+                        <span>{{ auth()->user()->name }}</span>
+                      </div>
+                      <input type="hidden" name="entrego_user_id" value="{{ auth()->id() }}">
+                    @else
+                      {{-- ✅ Admin: seleccionable (admins + Isidro en CEL) --}}
+                      <select name="entrego_user_id" id="entrego_user_id" required>
+                        <option value="" disabled {{ $entregoDefaultId ? '' : 'selected' }}>— Selecciona —</option>
+                        @foreach($admins as $u)
+                          <option value="{{ $u->id }}" @selected((string)$entregoDefaultId === (string)$u->id)>{{ $u->name }}</option>
+                        @endforeach
+                      </select>
+                      <div class="hint">Por defecto: el usuario actual si tiene rol Administrador.</div>
+                    @endif
+
+                    @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
+
                 <div>
                   <label>Recibí (colaborador)</label>
                   <select name="recibi_colaborador_id" id="recibi_colaborador_id" required>
@@ -246,16 +262,19 @@
                   <div class="hint">Se sincroniza con “Colaborador”, pero puedes elegir otro.</div>
                   @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
                 </div>
-                <div>
-                  <label>Autorizó (solo admin)</label>
-                  <select name="autoriza_user_id" id="autoriza_user_id" required>
-                    <option value="" disabled {{ $autorizaDefaultId ? '' : 'selected' }}>— Selecciona —</option>
-                    @foreach($admins as $u)
-                      <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                    @endforeach
-                  </select>
-                  @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
-                </div>
+
+                @unless($isCel)
+                  <div>
+                    <label>Autorizó (solo admin)</label>
+                    <select name="autoriza_user_id" id="autoriza_user_id" required>
+                      <option value="" disabled {{ $autorizaDefaultId ? '' : 'selected' }}>— Selecciona —</option>
+                      @foreach($admins as $u)
+                        <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                      @endforeach
+                    </select>
+                    @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
+                  </div>
+                @endunless
               </div>
 
               <div class="grid2">
@@ -409,12 +428,13 @@
                 : null;
 
             // Autorizó (solo admin)
-            const tsAutoriza = document.getElementById('autoriza_user_id')
-                ? new TomSelect('#autoriza_user_id', {
-                    ...baseConfig,
-                    placeholder: 'Selecciona quién autoriza…',
+            const autorizaEl = document.getElementById('autoriza_user_id');
+            const tsAutoriza = autorizaEl
+              ? new TomSelect('#autoriza_user_id', {
+                  ...baseConfig,
+                  placeholder: 'Selecciona quién autoriza…',
                 })
-                : null;
+              : null;
 
             // 🔄 Sincronizar "Recibí" con "Colaborador"
             if (tsColaborador && tsRecibi) {

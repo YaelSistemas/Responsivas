@@ -81,6 +81,12 @@ class RoleController extends Controller
             'edit'   => 'Editar Cartuchos',
             'delete' => 'Eliminar Cartuchos',
         ],
+        'celulares' => [
+            'view'   => 'Ver Celulares',
+            'create' => 'Crear Celulares',
+            'edit'   => 'Editar Celulares',
+            'delete' => 'Eliminar Celulares',
+        ],
     ];
 
     public function index(Request $request)

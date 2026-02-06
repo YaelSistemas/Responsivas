@@ -378,7 +378,7 @@
         <td class="title-main">{{ $empresaNombre }}</td>
       </tr>
       <tr><td class="title-sub">Departamento de Sistemas</td></tr>
-      <tr><td class="title-sub">Formato de Responsiva</td></tr>
+      <tr><td class="title-sub">{{ $isCel ? 'Formato de Préstamo' : 'Formato de Responsiva' }}</td></tr>
     </table>
 
     <br>
@@ -541,26 +541,28 @@
         </tr>
       </table>
 
-      <!-- FILA INFERIOR (AUTORIZÓ) -->
-      <table>
-        <tr>
-          <td style="width:100%;">
-            <p class="sign-title">AUTORIZÓ</p>
+      @if(!$isCel)
+        <!-- FILA INFERIOR (AUTORIZÓ) -->
+        <table>
+          <tr>
+            <td style="width:100%;">
+              <p class="sign-title">AUTORIZÓ</p>
 
-            <div class="sign-space">
-              @if($firmaAutorizaB64)
-                <img class="firma-img" src="{{ $firmaAutorizaB64 }}" alt="Firma autorizó">
-              @else
-                <div style="height:65px;"></div>
-              @endif
-            </div>
+              <div class="sign-space">
+                @if($firmaAutorizaB64)
+                  <img class="firma-img" src="{{ $firmaAutorizaB64 }}" alt="Firma autorizó">
+                @else
+                  <div style="height:65px;"></div>
+                @endif
+              </div>
 
-            <p class="sign-name">{{ $autorizaNombre ?: '_________________________' }}</p>
-            <div class="sign-line" style="width:35%;"></div>
-            <p class="sign-caption">NOMBRE Y FIRMA</p>
-          </td>
-        </tr>
-      </table>
+              <p class="sign-name">{{ $autorizaNombre ?: '_________________________' }}</p>
+              <div class="sign-line" style="width:35%;"></div>
+              <p class="sign-caption">NOMBRE Y FIRMA</p>
+            </td>
+          </tr>
+        </table>
+      @endif
     </div>
 
 

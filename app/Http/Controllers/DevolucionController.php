@@ -46,6 +46,9 @@ class DevolucionController extends Controller implements HasMiddleware
                 'recibidoPor',
                 'psitioColaborador'
             ])
+            // ✅ SOLO DEV-xxxxx (normales) y excluir DEVCEL-xxxxx
+            ->where('folio', 'like', 'DEV-%')
+            ->where('folio', 'not like', 'DEVCEL-%')
             ->when($q, function ($query) use ($q) {
                 $query->where('folio', 'like', "%$q%")
                     ->orWhere('motivo', 'like', "%$q%")
@@ -72,13 +75,14 @@ class DevolucionController extends Controller implements HasMiddleware
     }
 
     /* ===================== CREAR ===================== */
-
     public function create(Request $request)
     {
         $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
 
         // ✅ Si vienes desde /celulares/devoluciones/create
         $isCel = $request->routeIs('celulares.devoluciones.create');
+
+        $responsivaId = $request->query('responsiva_id');
 
         $seriesAsignadas = ProductoSerie::where('estado', 'Asignado')
             ->whereHas('producto', fn($q) => $q->where('empresa_tenant_id', $tenant))
@@ -103,10 +107,10 @@ class DevolucionController extends Controller implements HasMiddleware
             $responsivas = Responsiva::with('colaborador')
                 ->whereIn('id', $detallesPorResponsiva->keys())
                 ->where('empresa_tenant_id', $tenant)
-                // ✅ si es modo celular, solo CEL-
                 ->when($isCel, fn($q) => $q->where('folio', 'like', 'CEL-%'))
-                // ✅ opcional: si NO es celular y quieres restringir a OES-
-                // ->when(!$isCel, fn($q) => $q->where('folio', 'like', 'OES-%'))
+                ->when(!$isCel, fn($q) => $q->where('folio', 'like', 'OES-%'))
+                // ✅ SOLO en celulares: si viene responsiva_id, filtra a esa
+                ->when($isCel && $responsivaId, fn($q) => $q->where('id', $responsivaId))
                 ->get()
                 ->map(function ($r) use ($detallesPorResponsiva) {
                     $r->setRelation('detalles', $detallesPorResponsiva->get($r->id, collect()));
@@ -115,21 +119,44 @@ class DevolucionController extends Controller implements HasMiddleware
                 ->values();
         }
 
-        // 🔹 Solo usuarios con rol Administrador
+        $user = auth()->user();
+        $authIsAdmin = ($user && $user->hasRole('Administrador'));
+
+        // 🔹 Admins
         $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
+
+        // ✅ SOLO EN DEVOLUCIONES CELULAR: agregar a Isidro aunque no sea admin
+        $isidro = null;
+        $lockRecibi = false;
+
+        if ($isCel) {
+            $isidro = User::where('name', 'Isidro Encinas Quijada')->first(['id','name']);
+
+            if ($isidro && ! $admins->contains('id', $isidro->id)) {
+                $admins->push($isidro);
+                $admins = $admins->sortBy('name')->values();
+            }
+
+            // ✅ SOLO CELULAR: si Isidro está logueado y NO es admin => bloquear Recibió a él
+            $lockRecibi = ($user && $isidro && ((int)$user->id === (int)$isidro->id) && ! $authIsAdmin);
+        }
+
+        // 🔹 Default:
+        // - si Isidro (no admin) => él mismo
+        // - si admin => él mismo
+        // - si ninguno => null
+        $adminDefault = $lockRecibi
+            ? $user->id
+            : ($authIsAdmin ? $user->id : null);
 
         // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
-            ->where('activo', 1) //
+            ->where('activo', 1)
             ->orderBy('nombre')
             ->orderBy('apellidos')
             ->get(['id', 'nombre', 'apellidos']);
 
-        // 🔹 Si el usuario autenticado es admin, lo deja como valor por defecto
-        $user = auth()->user();
-        $adminDefault = ($user && $user->hasRole('Administrador')) ? $user->id : null;
-
-        return view('devoluciones.create', compact('responsivas', 'admins', 'colaboradores', 'adminDefault', 'isCel'));
+        return view('devoluciones.create', compact('responsivas','admins','colaboradores','adminDefault','isCel','responsivaId','lockRecibi'));
     }
 
     /* ===================== GUARDAR ===================== */
@@ -282,7 +309,6 @@ class DevolucionController extends Controller implements HasMiddleware
     }
 
     /* ===================== EDITAR ===================== */
-
     public function edit($id)
     {
         $tenant = (int) session('empresa_activa', auth()->user()?->empresa_id ?? auth()->user()?->empresa_tenant_id);
@@ -290,8 +316,28 @@ class DevolucionController extends Controller implements HasMiddleware
         $devolucion = Devolucion::with(['productos', 'responsiva.colaborador', 'psitioColaborador'])
             ->findOrFail($id);
 
+        // ✅ Detectar si es devolución de CELULARES (folio CEL-)
+        $isCel = \Illuminate\Support\Str::startsWith((string)($devolucion->responsiva?->folio ?? ''), 'CEL-');
+
+        // ✅ Auth
+        $user = auth()->user();
+        $authIsAdmin = ($user && $user->hasRole('Administrador'));
+
         // 🔹 Solo usuarios con rol Administrador
         $admins = User::role('Administrador')->orderBy('name')->get(['id', 'name']);
+
+        // ✅ SOLO CELULARES: agregar a Isidro aunque no sea admin
+        $isidro = null;
+        if ($isCel) {
+            $isidro = User::where('name', 'Isidro Encinas Quijada')->first(['id','name']);
+            if ($isidro && ! $admins->contains('id', $isidro->id)) {
+                $admins->push($isidro);
+                $admins = $admins->sortBy('name')->values();
+            }
+        }
+
+        // ✅ SOLO CELULARES: si Isidro está logueado y NO es admin => NO puede editar "Recibió"
+        $lockRecibi = ($isCel && $user && $isidro && ((int)$user->id === (int)$isidro->id) && ! $authIsAdmin);
 
         // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colaboradores = Colaborador::where('empresa_tenant_id', $tenant)
@@ -319,27 +365,33 @@ class DevolucionController extends Controller implements HasMiddleware
 
         $seriesSeleccionadas = $devolucion->productos->pluck('pivot.producto_serie_id')->toArray();
 
-        return view('devoluciones.edit', compact(
-            'devolucion', 'admins', 'colaboradores', 'responsivas',
-            'detallesActuales', 'seriesSeleccionadas'
-        ));
+        return view('devoluciones.edit', compact('devolucion', 'admins', 'colaboradores', 'responsivas','detallesActuales', 'seriesSeleccionadas','lockRecibi'));
     }
 
     /* ===================== ACTUALIZAR ===================== */
 
     public function update(Request $request, $id)
     {
+        $devolucion = Devolucion::with(['responsiva', 'productos'])->findOrFail($id);
+
+        // ✅ detectar si es devolución de celular por folio CEL-
+        $folio = (string) ($devolucion->responsiva?->folio ?? '');
+        $isCel = \Illuminate\Support\Str::startsWith($folio, 'CEL-');
+
+        // ✅ si es celular, el motivo SIEMPRE debe ser resguardo
+        if ($isCel) {
+            $request->merge(['motivo' => 'resguardo']);
+        }
+
         $validated = $request->validate([
             'responsiva_id'           => 'required|exists:responsivas,id',
             'fecha_devolucion'        => 'required|date',
-            'motivo'                  => 'required|in:baja_colaborador,renovacion',
+            'motivo'                  => $isCel ? 'required|in:resguardo' : 'required|in:baja_colaborador,renovacion',
             'recibi_id'               => 'required|exists:users,id',
             'entrego_colaborador_id'  => 'required|exists:colaboradores,id',
             'psitio_colaborador_id'   => 'required|exists:colaboradores,id',
             'productos'               => 'required|array|min:1',
         ]);
-
-        $devolucion = Devolucion::with('productos')->findOrFail($id);
 
         DB::transaction(function () use ($devolucion, $validated, $request) {
 
@@ -488,7 +540,7 @@ class DevolucionController extends Controller implements HasMiddleware
     }
 
     /* ===================== ELIMINAR ===================== */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $devolucion = Devolucion::with(['productos', 'responsiva.colaborador.subsidiaria'])
             ->findOrFail($id);
@@ -638,7 +690,16 @@ class DevolucionController extends Controller implements HasMiddleware
             $devolucion->delete();
         });
 
-        return redirect()->route('devoluciones.index')
+        $from = $request->get('from');
+
+        if ($from === 'cel') {
+            return redirect()
+                ->route('celulares.responsivas.index')
+                ->with('success', 'Devolución eliminada correctamente.');
+        }
+
+        return redirect()
+            ->route('devoluciones.index')
             ->with('success', 'Devolución eliminada correctamente.');
     }
 

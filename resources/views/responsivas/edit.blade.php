@@ -43,6 +43,14 @@
     .section-sep{display:flex;align-items:center;margin:22px 0 14px}
     .section-sep .line{flex:1;height:1px;background:#e5e7eb}
     .section-sep .label{margin:0 10px;font-size:12px;color:#6b7280;letter-spacing:.06em;text-transform:uppercase;font-weight:700;white-space:nowrap}
+
+    /* ✅ MISMO DISEÑO QUE "Motivo de entrega" (create) */
+    .form-control { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; outline: none; }
+    .form-control:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+    
+    /* disabled (para CEL motivo fijo) */
+    .form-control[disabled],
+    .form-control:disabled { background: #f9fafb; color: #111827; cursor: not-allowed; opacity: 1; }
   </style>
 
   @php
@@ -119,6 +127,13 @@
     $autorizaDefaultId = old('autoriza_user_id', $responsiva->autoriza_user_id);
     $fsolDefault       = old('fecha_solicitud', $responsiva->fecha_solicitud?->toDateString());
     $fentDefault       = old('fecha_entrega',   $responsiva->fecha_entrega?->toDateString());
+
+    $authUser = auth()->user();
+    $isAdmin  = $authUser?->hasRole('Administrador') ?? false;
+
+    // 🔒 En CEL: si NO es admin, NO puede cambiar "Entregó"
+    $lockEntrego = $isCel && !$isAdmin;
+
     $selSeries         = collect(old('series_ids', $selectedSeries ?? []))->map(fn($v)=> (string)$v)->all();
   @endphp
 
@@ -160,7 +175,7 @@
 
                     {{-- ✅ Celulares: fijo y no editable --}}
                     <input type="hidden" name="motivo_entrega" value="prestamo_provisional">
-                    <input type="text" value="Préstamo provisional" disabled>
+                    <input type="text" class="form-control" value="Préstamo provisional" disabled>
                     <div class="hint">Motivo asignado automáticamente para celulares.</div>
 
                     @error('motivo_entrega') <div class="err">{{ $message }}</div> @enderror
@@ -182,12 +197,12 @@
                 <div class="grid2 row">
                   <div>
                     <label>Fecha de salida</label>
-                    <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
+                    <input type="date" class="form-control" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
                     @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                   </div>
                   <div>
                     <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-                    <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
+                    <input type="date" class="form-control" name="fecha_entrega" value="{{ $fentDefault }}" required>
                     @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
                   </div>
                 </div>
@@ -229,15 +244,29 @@
                   <div class="line"></div>
                 </div>
 
-                <div class="grid3 row">
+                <div class="grid2 row">
                   <div>
-                    <label>Entregó (solo admin)</label>
-                    <select name="entrego_user_id" id="entrego_user_id" required>
-                      <option value="">— Selecciona —</option>
-                      @foreach($admins as $u)
-                        <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                      @endforeach
-                    </select>
+                    <label>Entregó</label>
+
+                    @if(!empty($lockEntrego) && $lockEntrego)
+                      {{-- ✅ NO ADMIN (ej. Isidro): se muestra el que viene en BD y NO se puede cambiar --}}
+                      @php
+                        $entregoName = \App\Models\User::find($entregoDefaultId)?->name ?? '—';
+                      @endphp
+
+                      <input type="hidden" name="entrego_user_id" value="{{ $entregoDefaultId }}">
+                      <input type="text" class="form-control" value="{{ $entregoName }}" disabled>
+                      <div class="hint">Campo bloqueado: solo un administrador puede cambiarlo.</div>
+                    @else
+                      {{-- ✅ ADMIN: editable --}}
+                      <select name="entrego_user_id" id="entrego_user_id" required>
+                        <option value="">— Selecciona —</option>
+                        @foreach($admins as $u)
+                          <option value="{{ $u->id }}" @selected((string)$entregoDefaultId===(string)$u->id)>{{ $u->name }}</option>
+                        @endforeach
+                      </select>
+                    @endif
+
                     @error('entrego_user_id') <div class="err">{{ $message }}</div> @enderror
                   </div>
                   <div>
@@ -252,16 +281,6 @@
                     </select>
                     <div class="hint">Se sincroniza con “Colaborador”, puedes elegir otro.</div>
                     @error('recibi_colaborador_id') <div class="err">{{ $message }}</div> @enderror
-                  </div>
-                  <div>
-                    <label>Autorizó (solo admin)</label>
-                    <select name="autoriza_user_id" id="autoriza_user_id" required>
-                      <option value="">— Selecciona —</option>
-                      @foreach($admins as $u)
-                        <option value="{{ $u->id }}" @selected((string)$autorizaDefaultId===(string)$u->id)>{{ $u->name }}</option>
-                      @endforeach
-                    </select>
-                    @error('autoriza_user_id') <div class="err">{{ $message }}</div> @enderror
                   </div>
                 </div>
 
@@ -300,7 +319,7 @@
                 <div class="grid2 row">
                   <div>
                     <label>Motivo de entrega</label>
-                    <select name="motivo_entrega" required>
+                    <select name="motivo_entrega" class="form-control" required>
                       <option value="" disabled {{ $motivoDefault ? '' : 'selected' }}>— Selecciona —</option>
                       <option value="asignacion"           @selected($motivoDefault==='asignacion')>Asignación</option>
                       <option value="prestamo_provisional" @selected($motivoDefault==='prestamo_provisional')>Préstamo provisional</option>
@@ -324,12 +343,12 @@
                 <div class="grid2 row">
                   <div>
                     <label>Fecha de solicitud</label>
-                    <input type="date" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
+                    <input type="date" class="form-control" name="fecha_solicitud" value="{{ $fsolDefault }}" required>
                     @error('fecha_solicitud') <div class="err">{{ $message }}</div> @enderror
                   </div>
                   <div>
                     <label>Fecha de entrega <span class="hint">(requerida)</span></label>
-                    <input type="date" name="fecha_entrega" value="{{ $fentDefault }}" required>
+                    <input type="date" class="form-control" name="fecha_entrega" value="{{ $fentDefault }}" required>
                     @error('fecha_entrega') <div class="err">{{ $message }}</div> @enderror
                   </div>
                 </div>
@@ -401,7 +420,7 @@
                 </div>
 
                 <div class="grid2">
-                  <a href="{{ route('responsivas.index', $responsiva) }}" class="btn-cancel">Cancelar</a>
+                  <a href="{{ route('responsivas.index') }}" class="btn-cancel">Cancelar</a>
                   <button type="submit" class="btn">Actualizar responsiva</button>
                 </div>
               </form>
@@ -548,8 +567,8 @@
                 });
             }
 
-            // Entregó
-            if (document.getElementById('entrego_user_id')) {
+            // Entregó (si existe select)
+            if (document.getElementById('entrego_user_id') && document.getElementById('entrego_user_id').tagName === 'SELECT') {
                 new TomSelect('#entrego_user_id', {
                     ...baseConfig,
                     placeholder: 'Selecciona usuario que entrega…',

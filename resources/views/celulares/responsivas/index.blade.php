@@ -24,7 +24,7 @@
     }
 
     /* ====== Estilos propios (idénticos a Productos) ====== */
-    .page-wrap{max-width:1500px;margin:0 auto}
+    .page-wrap{max-width:1800px;margin:0 auto}
     .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
     .btn{display:inline-block;padding:.45rem .8rem;border-radius:.5rem;font-weight:600;text-decoration:none}
     .btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1e4ed8}
@@ -58,15 +58,12 @@
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-xl font-semibold">Bitácora de Celulares</h2>
-            <div class="text-sm text-gray-600">
-              Mostrando solo documentos tipo <span class="badge badge-blue">CEL</span>
-            </div>
           </div>
 
           {{-- Botón crear --}}
-          @can('responsivas.create')
-            <a href="{{ route('responsivas.create', ['tipo_documento'=>'CEL']) }}" class="btn btn-primary">
-              Nueva responsiva
+          @can('celulares.create')
+            <a href="{{ route('responsivas.create', ['tipo_documento' => 'CEL']) }}" class="btn btn-primary">
+              + Nueva responsiva
             </a>
           @endcan
         </div>
@@ -102,6 +99,12 @@
         @if (session('deleted'))
           <div class="cel-flash" style="margin:12px 0; padding:12px; border-radius:8px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">
             {{ session('deleted') }}
+          </div>
+        @endif
+
+        @if (session('success'))
+          <div class="cel-flash" style="margin:12px 0; padding:12px; border-radius:8px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">
+            {{ session('success') }}
           </div>
         @endif
 

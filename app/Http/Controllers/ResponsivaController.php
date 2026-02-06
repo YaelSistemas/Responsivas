@@ -82,6 +82,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             ->with($with)
             ->withCount('detalles')
             ->where('empresa_tenant_id', $tenantId)
+            ->where('folio', 'like', 'OES-%')
             ->when($q !== '', function ($query) use ($q) {
                 $query->where(function ($w) use ($q) {
                     $w->where('folio', 'like', "%{$q}%")
@@ -125,6 +126,36 @@ class ResponsivaController extends Controller implements HasMiddleware
         $tipoDoc = $request->query('tipo_documento', 'OES');
         $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
 
+                $user = auth()->user();
+                $authIsAdmin = ($user && method_exists($user, 'hasRole') && $user->hasRole('Administrador'));
+
+                // 🔹 Usuarios con rol “Administrador”
+                $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
+
+                // ✅ SOLO EN CEL: agregar a Isidro aunque no sea admin + bloquear si Isidro logueado (no admin)
+                $isidro = null;
+                $lockEntrego = false;
+
+                if ($tipoDoc === 'CEL') {
+                    $isidro = User::where('name', 'Isidro Encinas Quijada')->first(['id','name']);
+
+                    if ($isidro && ! $admins->contains('id', $isidro->id)) {
+                        $admins->push($isidro);
+                        $admins = $admins->sortBy('name')->values();
+                    }
+
+                    // ✅ SOLO CEL: si Isidro está logueado y NO es admin => bloquear "Entregó" a él
+                    $lockEntrego = ($user && $isidro && ((int)$user->id === (int)$isidro->id) && ! $authIsAdmin);
+                }
+
+                // 🔹 Default Entregó:
+                // - Isidro (no admin) => él mismo (bloqueado)
+                // - Admin => él mismo (seleccionable)
+                // - Otro => null (obligará seleccionar)
+                $entregoDefaultId = $lockEntrego
+                    ? $user->id
+                    : ($authIsAdmin ? $user->id : null);
+
         // 🔹 Solo colaboradores ACTIVOS del tenant actual
         $colabQ = Colaborador::query()
             ->where('activo', 1)
@@ -156,16 +187,13 @@ class ResponsivaController extends Controller implements HasMiddleware
             ->orderBy('producto_id')
             ->get(['id','producto_id','serie','estado','especificaciones']);
 
-        // 🔹 Usuarios con rol “Administrador”
-        $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
-
         // 🔸 Preselección condicional de “Autorizó”
         $erasto = User::where('name', 'Ing. Erasto H. Enriquez Zurita')->first();
         $autorizaDefaultId = ($erasto && method_exists($erasto, 'hasRole') && $erasto->hasRole('Administrador'))
             ? $erasto->id
             : null;
 
-        return view('responsivas.create', compact('colaboradores', 'series', 'admins', 'autorizaDefaultId', 'tipoDoc'));
+        return view('responsivas.create', compact('colaboradores','series','admins','autorizaDefaultId','tipoDoc','entregoDefaultId','lockEntrego'));
     }
 
     /* ===================== STORE ===================== */
@@ -174,16 +202,28 @@ class ResponsivaController extends Controller implements HasMiddleware
         $tenantId = $this->tenantId();
 
         $adminIds  = User::role('Administrador')->pluck('id')->all();
+
+        // ✅ Detectar tipo_doc desde el create (query) y store (hidden)
+        $tipoDoc = $req->input('tipo_documento') ?: 'OES';
+        $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
+
+        // ✅ En CEL: permitir que "Entregó" sea Admins + Isidro
+        $allowedEntregoIds = $adminIds;
+
+        if ($tipoDoc === 'CEL') {
+            $isidro = User::where('name', 'Isidro Encinas Quijada')->first(['id']);
+            if ($isidro) {
+                $allowedEntregoIds[] = (int) $isidro->id;
+                $allowedEntregoIds = array_values(array_unique($allowedEntregoIds));
+            }
+        }
+
         $colExists = Rule::exists('colaboradores','id');
         if (Schema::hasColumn('colaboradores','empresa_id')) {
             $colExists = $colExists->where('empresa_id', $tenantId);
         } elseif (Schema::hasColumn('colaboradores','empresa_tenant_id')) {
             $colExists = $colExists->where('empresa_tenant_id', $tenantId);
         }
-
-        // ✅ Detectar tipo_doc desde el create (query) y store (hidden)
-        $tipoDoc = $req->input('tipo_documento') ?: 'OES';
-        $tipoDoc = in_array($tipoDoc, ['OES','CEL'], true) ? $tipoDoc : 'OES';
 
         // ✅ Si es CEL: forzar motivo y no depender de fecha_solicitud
         if ($tipoDoc === 'CEL') {
@@ -200,8 +240,8 @@ class ResponsivaController extends Controller implements HasMiddleware
             'motivo_entrega'        => ['required', Rule::in($tipoDoc === 'CEL' ? ['prestamo_provisional'] : ['asignacion','prestamo_provisional']),],
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['required', $colExists],              // ← obligatorio
-            'entrego_user_id'       => ['required', Rule::in($adminIds)],     // ← obligatorio
-            'autoriza_user_id'      => ['required', Rule::in($adminIds)],     // ← obligatorio
+            'entrego_user_id'       => ['required', Rule::in($allowedEntregoIds)],
+            'autoriza_user_id'      => [$tipoDoc === 'CEL' ? 'nullable' : 'required', Rule::in($adminIds) ],
             'series_ids'            => ['required','array','min:1'],
             'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
             'observaciones'         => ['nullable','string','max:2000'],
@@ -254,7 +294,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                 'colaborador_id'        => $req->colaborador_id,
                 'recibi_colaborador_id' => $req->recibi_colaborador_id,  // ← ya no se “rellena”
                 'user_id'               => $req->entrego_user_id,        // ← entregó requerido
-                'autoriza_user_id'      => $req->autoriza_user_id,       // ← autorizó requerido
+                'autoriza_user_id'      => $tipoDoc === 'CEL' ? null : $req->autoriza_user_id,
                 'motivo_entrega'        => $req->motivo_entrega,
                 'fecha_solicitud'       => $req->fecha_solicitud,
                 'fecha_entrega'         => $req->fecha_entrega,
@@ -468,12 +508,40 @@ class ResponsivaController extends Controller implements HasMiddleware
 
         $series = $seriesDisponibles->concat($misSeries)->unique('id')->values();
 
+        /* ===================== ENTREGÓ (solo CEL) ===================== */
         $admins = User::role('Administrador')->orderBy('name')->get(['id','name']);
+
+        $user = auth()->user();
+        $authIsAdmin = ($user && method_exists($user, 'hasRole') && $user->hasRole('Administrador'));
+
+        $isCel = (($responsiva->tipo_documento ?? null) === 'CEL');
+
+        $isidro = null;
+        $lockEntrego = false;
+
+        if ($isCel) {
+            // ✅ buscar a Isidro
+            $isidro = User::where('name', 'Isidro Encinas Quijada')->first(['id','name']);
+
+            // ✅ meterlo en la lista (aunque no sea admin)
+            if ($isidro && ! $admins->contains('id', $isidro->id)) {
+                $admins->push($isidro);
+                $admins = $admins->sortBy('name')->values();
+            }
+
+            // ✅ si Isidro está logueado y NO es admin => bloquear Entregó a él
+            $lockEntrego = ($user && $isidro && ((int)$user->id === (int)$isidro->id) && ! $authIsAdmin);
+        }
+
+        // ✅ Default Entregó en EDIT:
+        // - si Isidro bloqueado => Isidro
+        // - si no => el que trae la responsiva
+        $entregoDefaultId = $lockEntrego ? $user->id : $responsiva->user_id;
+        /* ===================== /ENTREGÓ ===================== */
 
         $selectedSeries = $misSeries->pluck('id')->all();
 
-        return view('responsivas.edit', compact(
-            'responsiva', 'colaboradores', 'series', 'admins', 'selectedSeries'
+        return view('responsivas.edit', compact('responsiva', 'colaboradores', 'series', 'admins', 'selectedSeries','lockEntrego', 'entregoDefaultId'
         ));
     }
 
@@ -485,27 +553,81 @@ class ResponsivaController extends Controller implements HasMiddleware
         $tenantId = $this->tenantId();
 
         $adminIds  = User::role('Administrador')->pluck('id')->all();
-        $colExists = Rule::exists('colaboradores','id');
-        if (Schema::hasColumn('colaboradores','empresa_id')) {
+
+        // ✅ Reglas "Entregó" para CEL: Admins + Isidro (pero Isidro NO puede cambiarlo)
+        $isidroId = User::where('name', 'Isidro Encinas Quijada')->value('id');
+
+        $authUser = $req->user();
+        $isAdmin  = $authUser?->hasRole('Administrador') ?? false;
+
+        $allowedEntregoIds = $adminIds;
+
+        // En CEL permitimos que Isidro sea un valor válido (aunque no sea admin)
+        if ($isidroId) {
+            $allowedEntregoIds[] = (int) $isidroId;
+            $allowedEntregoIds = array_values(array_unique($allowedEntregoIds));
+        }
+
+        $colExists = Rule::exists('colaboradores', 'id');
+
+        if (Schema::hasColumn('colaboradores', 'empresa_id')) {
             $colExists = $colExists->where('empresa_id', $tenantId);
-        } elseif (Schema::hasColumn('colaboradores','empresa_tenant_id')) {
+        } elseif (Schema::hasColumn('colaboradores', 'empresa_tenant_id')) {
             $colExists = $colExists->where('empresa_tenant_id', $tenantId);
         }
 
+        // ✅ Detectar tipo_doc de la responsiva (en edit puede NO venir en request)
+        $tipoDoc = $responsiva->tipo_documento ?: ($req->input('tipo_documento') ?: 'OES');
+        $tipoDoc = in_array($tipoDoc, ['OES', 'CEL'], true) ? $tipoDoc : 'OES';
+
+        // ✅ Si es CEL: forzar motivo y no depender de fecha_solicitud si faltara
+        if ($tipoDoc === 'CEL') {
+            $req->merge(['motivo_entrega' => 'prestamo_provisional']);
+
+            if (!$req->filled('fecha_solicitud')) {
+                $req->merge(['fecha_solicitud' => now()->toDateString()]);
+            }
+        }
+
+        // ✅ Si es CEL y NO es admin: forzar "Entregó" al valor de BD ANTES de validar
+        if ($tipoDoc === 'CEL' && !$isAdmin) {
+            $req->merge(['entrego_user_id' => (int) $responsiva->user_id]);
+        }
+
         $req->validate([
-            'motivo_entrega'        => ['required', Rule::in(['asignacion','prestamo_provisional'])],
+            'motivo_entrega'        => ['required', Rule::in($tipoDoc === 'CEL' ? ['prestamo_provisional'] : ['asignacion', 'prestamo_provisional'])],
             'colaborador_id'        => ['required', $colExists],
             'recibi_colaborador_id' => ['required', $colExists],
-            'entrego_user_id'       => ['required', Rule::in($adminIds)],
-            'autoriza_user_id'      => ['required', Rule::in($adminIds)],
-            'series_ids'            => ['required','array','min:1'],
-            'series_ids.*'          => ['integer', Rule::exists('producto_series','id')->where('empresa_tenant_id', $tenantId)],
-            'fecha_solicitud'       => ['required','date'],
-            'fecha_entrega'         => ['required','date'],
-            'observaciones'         => ['nullable','string','max:2000'],
+            'entrego_user_id'       => ['required', Rule::in($tipoDoc === 'CEL' ? $allowedEntregoIds : $adminIds)],
+
+            // ✅ Autorizó: SOLO obligatorio si NO es CEL
+            'autoriza_user_id'      => [$tipoDoc === 'CEL' ? 'nullable' : 'required', Rule::in($adminIds)],
+
+            'series_ids'            => ['required', 'array', 'min:1'],
+            'series_ids.*'          => ['integer', Rule::exists('producto_series', 'id')->where('empresa_tenant_id', $tenantId)],
+
+            // ✅ Fecha solicitud: CEL nullable, OES required
+            'fecha_solicitud'       => [$tipoDoc === 'CEL' ? 'nullable' : 'required', 'date'],
+
+            'fecha_entrega'         => ['required', 'date'],
+            'observaciones'         => ['nullable', 'string', 'max:2000'],
         ]);
 
-        DB::transaction(function() use ($req, $responsiva, $tenantId) {
+        // ✅ Si es CEL: validar que TODAS las series seleccionadas sean tipo celular (seguridad)
+        if ($tipoDoc === 'CEL') {
+            $countCel = ProductoSerie::deEmpresa($tenantId)
+                ->whereIn('id', $req->input('series_ids', []))
+                ->whereHas('producto', fn($q) => $q->where('tipo', 'celular'))
+                ->count();
+
+            if ($countCel !== count($req->input('series_ids', []))) {
+                throw ValidationException::withMessages([
+                    'series_ids' => 'Solo puedes seleccionar equipos tipo Celular para una responsiva CEL.',
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($req, $responsiva, $tenantId, $tipoDoc) {
 
             /* ===================================
             🔹 PRIMERO OBTENEMOS LOS VALORES ORIGINALES
@@ -515,7 +637,7 @@ class ResponsivaController extends Controller implements HasMiddleware
             $actuales = $responsiva->detalles()->pluck('producto_serie_id')->all();
             $nuevas   = $req->input('series_ids', []);
 
-            $toAdd    = array_values(array_diff($nuevas,   $actuales));
+            $toAdd    = array_values(array_diff($nuevas, $actuales));
             $toRemove = array_values(array_diff($actuales, $nuevas));
 
             $disponible = ProductoSerie::ESTADO_DISPONIBLE ?? 'disponible';
@@ -527,14 +649,14 @@ class ResponsivaController extends Controller implements HasMiddleware
             if ($toAdd) {
 
                 $seriesAdd = ProductoSerie::deEmpresa($tenantId)
-                    ->whereIn('id',$toAdd)
+                    ->whereIn('id', $toAdd)
                     ->lockForUpdate()
                     ->with('producto:id,activo')
-                    ->get(['id','producto_id','serie','estado']);
+                    ->get(['id', 'producto_id', 'serie', 'estado']);
 
                 // ✅ Unidad del colaborador NUEVO (del request)
-                $colabNuevo = Colaborador::find($req->colaborador_id);
-                $unidadNuevaId = $colabNuevo?->unidad_servicio_id;
+                $colabNuevo     = Colaborador::find($req->colaborador_id);
+                $unidadNuevaId  = $colabNuevo?->unidad_servicio_id;
 
                 foreach ($seriesAdd as $s) {
 
@@ -556,7 +678,7 @@ class ResponsivaController extends Controller implements HasMiddleware
                     ]);
 
                     $s->update([
-                        'estado' => $asignado,
+                        'estado'                    => $asignado,
                         'asignado_en_responsiva_id' => $responsiva->id,
                         'unidad_servicio_id'        => $unidadNuevaId,
                     ]);
@@ -574,8 +696,7 @@ class ResponsivaController extends Controller implements HasMiddleware
 
                             'asignado_a' => [
                                 'antes'   => null,
-                                'despues' => $responsiva->colaborador->nombre
-                                            . ' ' . $responsiva->colaborador->apellidos,
+                                'despues' => $responsiva->colaborador->nombre . ' ' . $responsiva->colaborador->apellidos,
                             ],
 
                             'entregado_por' => [
@@ -585,11 +706,11 @@ class ResponsivaController extends Controller implements HasMiddleware
 
                             'fecha_entrega' => [
                                 'antes'   => $responsiva->fecha_entrega
-                                                ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
-                                                : 'SIN FECHA',
+                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                    : 'SIN FECHA',
                                 'despues' => $responsiva->fecha_entrega
-                                                ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
-                                                : 'SIN FECHA',
+                                    ? \Carbon\Carbon::parse($responsiva->fecha_entrega)->format('d-m-Y')
+                                    : 'SIN FECHA',
                             ],
 
                             'subsidiaria' => [
@@ -612,27 +733,26 @@ class ResponsivaController extends Controller implements HasMiddleware
             if ($toRemove) {
 
                 $seriesRem = ProductoSerie::deEmpresa($tenantId)
-                    ->whereIn('id',$toRemove)
+                    ->whereIn('id', $toRemove)
                     ->lockForUpdate()
-                    ->get(['id','serie','estado','asignado_en_responsiva_id']);
+                    ->get(['id', 'serie', 'estado', 'asignado_en_responsiva_id']);
 
                 foreach ($seriesRem as $s) {
 
                     $s->update([
-                        'estado' => $disponible,
+                        'estado'                    => $disponible,
                         'asignado_en_responsiva_id' => null,
                     ]);
 
                     $s->registrarHistorial([
-                        'accion' => 'removido_edicion',
+                        'accion'          => 'removido_edicion',
                         'responsiva_id'   => $responsiva->id,
                         'estado_anterior' => $original['motivo_entrega'],
                         'estado_nuevo'    => $disponible,
-                        'cambios' => [
+                        'cambios'         => [
 
                             'removido_de' => [
-                                'antes'   => $responsiva->colaborador->nombre
-                                            . ' ' . $responsiva->colaborador->apellidos,
+                                'antes'   => $responsiva->colaborador->nombre . ' ' . $responsiva->colaborador->apellidos,
                                 'despues' => null,
                             ],
 
@@ -647,14 +767,14 @@ class ResponsivaController extends Controller implements HasMiddleware
                             ],
 
                             'fecha_entrega' => [
-                                'antes' => $original['fecha_entrega']
-                                            ? \Carbon\Carbon::parse($original['fecha_entrega'])->format('d-m-Y')
-                                            : 'SIN FECHA',
+                                'antes'   => $original['fecha_entrega']
+                                    ? \Carbon\Carbon::parse($original['fecha_entrega'])->format('d-m-Y')
+                                    : 'SIN FECHA',
                                 'despues' => null,
                             ],
 
                             'subsidiaria' => [
-                                'antes' => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
+                                'antes'   => $responsiva->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA',
                                 'despues' => null,
                             ],
                         ]
@@ -669,16 +789,25 @@ class ResponsivaController extends Controller implements HasMiddleware
             /* ===================================
             🔹 ACTUALIZAR RESPONSIVA
             =================================== */
-            $responsiva->update([
+            $payload = [
                 'motivo_entrega'        => $req->motivo_entrega,
                 'colaborador_id'        => $req->colaborador_id,
                 'recibi_colaborador_id' => $req->recibi_colaborador_id ?: $req->colaborador_id,
                 'user_id'               => $req->entrego_user_id,
-                'autoriza_user_id'      => $req->autoriza_user_id,
+
+                // ✅ fecha_solicitud puede ser null en CEL (aunque arriba la forzamos si falta)
                 'fecha_solicitud'       => $req->fecha_solicitud,
+
                 'fecha_entrega'         => $req->fecha_entrega,
                 'observaciones'         => $req->observaciones,
-            ]);
+            ];
+
+            // ✅ Solo OES/normal guarda "autoriza"
+            if ($tipoDoc !== 'CEL') {
+                $payload['autoriza_user_id'] = $req->autoriza_user_id;
+            }
+
+            $responsiva->update($payload);
 
             /* ===================================
             🔹 CAMBIOS DE PRODUCTOS (SERIES)
@@ -730,12 +859,14 @@ class ResponsivaController extends Controller implements HasMiddleware
             // 📘 Historial de la RESPONSIVA (sin tocar series)
             // ==========================================================
             $cambiosResp = [];
+
+            // ✅ En CEL, NO registramos autoriza_user_id porque ya no se captura
             $camposResp = [
                 'motivo_entrega',
                 'colaborador_id',
                 'recibi_colaborador_id',
                 'user_id',
-                'autoriza_user_id',
+                ...($tipoDoc === 'CEL' ? [] : ['autoriza_user_id']),
                 'fecha_solicitud',
                 'fecha_entrega',
                 'observaciones',
@@ -785,10 +916,9 @@ class ResponsivaController extends Controller implements HasMiddleware
                 /* ==========================================================
                 SNAPSHOT REAL DE LOS PRODUCTOS AL MOMENTO DE ESTA EDICIÓN
                 ========================================================== */
-
                 $productosSnapshot = [];
 
-                $responsiva->load('detalles.producto','detalles.serie');
+                $responsiva->load('detalles.producto', 'detalles.serie');
 
                 foreach ($responsiva->detalles as $d) {
                     $productosSnapshot[] = [
@@ -815,18 +945,18 @@ class ResponsivaController extends Controller implements HasMiddleware
             // ===================================
             if (($original['colaborador_id'] ?? null) != $responsiva->colaborador_id) {
 
-                $colabNuevo     = Colaborador::find($responsiva->colaborador_id);
-                $unidadNuevaId  = $colabNuevo?->unidad_servicio_id;
+                $colabNuevo    = Colaborador::find($responsiva->colaborador_id);
+                $unidadNuevaId = $colabNuevo?->unidad_servicio_id;
 
                 $serieIdsActuales = $responsiva->detalles()->pluck('producto_serie_id')->all();
 
                 $seriesActuales = ProductoSerie::deEmpresa($tenantId)
                     ->whereIn('id', $serieIdsActuales)
                     ->lockForUpdate()
-                    ->get(['id','unidad_servicio_id']);
+                    ->get(['id', 'unidad_servicio_id']);
 
                 foreach ($seriesActuales as $serie) {
-                    if ((int)$serie->unidad_servicio_id !== (int)$unidadNuevaId) {
+                    if ((int) $serie->unidad_servicio_id !== (int) $unidadNuevaId) {
                         $serie->update([
                             'unidad_servicio_id' => $unidadNuevaId,
                         ]);
@@ -834,11 +964,9 @@ class ResponsivaController extends Controller implements HasMiddleware
                 }
             }
 
-
             /* ===================================
             🔹 DETECTAR CAMBIOS DE EDICIÓN
             =================================== */
-
             $camposAsignacion = [
                 'colaborador_id',
                 'user_id',
@@ -853,14 +981,14 @@ class ResponsivaController extends Controller implements HasMiddleware
                 $cambiosAsignacion['productos'] = $cambiosProductos;
             }
 
-            $antesC = optional(\App\Models\Colaborador::find($original['colaborador_id']));
+            $antesC   = optional(\App\Models\Colaborador::find($original['colaborador_id']));
             $despuesC = optional(\App\Models\Colaborador::find($responsiva->colaborador_id));
 
             foreach ($camposAsignacion as $campo) {
 
                 if ($responsiva->$campo != $original[$campo]) {
 
-                    $antes = $original[$campo];
+                    $antes   = $original[$campo];
                     $despues = $responsiva->$campo;
 
                     /* ===== CAMBIO DE COLABORADOR ===== */
@@ -920,10 +1048,10 @@ class ResponsivaController extends Controller implements HasMiddleware
             /* ===================================
             🔹 SI CAMBIÓ EL COLABORADOR → SIEMPRE mostrar Subsidiaria y Unidad
             =================================== */
-            $antesSub = $antesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
+            $antesSub   = $antesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
             $despuesSub = $despuesC->subsidiaria->descripcion ?? 'SIN SUBSIDIARIA';
 
-            $antesUnidad = $antesC->unidadServicio->nombre ?? 'SIN UNIDAD';
+            $antesUnidad   = $antesC->unidadServicio->nombre ?? 'SIN UNIDAD';
             $despuesUnidad = $despuesC->unidadServicio->nombre ?? 'SIN UNIDAD';
 
             if ($original['colaborador_id'] != $responsiva->colaborador_id) {
@@ -967,6 +1095,9 @@ class ResponsivaController extends Controller implements HasMiddleware
             🔹 SI HAY CAMBIOS, REGISTRAR HISTORIAL POR CADA SERIE
             =================================== */
             if (!empty($cambiosAsignacion)) {
+
+                // ✅ Asegurar detalles cargados (por si no venían ya)
+                $responsiva->loadMissing('detalles.serie');
 
                 foreach ($responsiva->detalles as $det) {
 
@@ -1015,7 +1146,9 @@ class ResponsivaController extends Controller implements HasMiddleware
             }
         });
 
-        return redirect()->route('responsivas.show', $responsiva)->with('updated', 'Responsiva actualizada.');
+        return redirect()
+            ->route('responsivas.show', $responsiva)
+            ->with('updated', 'Responsiva actualizada.');
     }
 
     /* ===================== SHOW ===================== */
