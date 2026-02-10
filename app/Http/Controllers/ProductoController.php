@@ -154,101 +154,102 @@ class ProductoController extends Controller implements HasMiddleware
             'tipo'           => ['required', Rule::in(['equipo_pc','impresora','celular','monitor','pantalla','periferico','consumible','otro'])],
             'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
             'unidad_medida'  => 'nullable|string|max:30',
-            'descripcion'    => 'nullable|string|max:2000',
+
+            // ✅ SOLO consumible usa descripción global en el create nuevo
+            'descripcion'      => 'nullable|string|max:2000',
             'color_consumible' => ['nullable', Rule::requiredIf(fn() => $request->input('tipo') === 'consumible'),'string','max:50'],
-            // Carga inicial
-            'series'                 => ['nullable','array'],
-            'series.*.serie'         => ['required_with:series','string','max:255'],
-            'series.*.subsidiaria_id'=> [
+
+            // ✅ Carga inicial
+            'series'                   => ['required_if:tracking,serial','array','min:1'],
+            'series.*.serie'           => ['required_with:series','string','max:255'],
+            'series.*.subsidiaria_id'  => [
                 'nullable',
                 Rule::exists('subsidiarias', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
             'series.*.unidad_servicio_id' => [
                 'nullable',
-                Rule::exists('unidades_servicio', 'id')
-                    ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
+                Rule::exists('unidades_servicio', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
-            'stock_inicial'          => 'nullable|integer|min:0',
-            // Especificaciones
-            'spec.color'                               => ['nullable','string','max:50'],
-            'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
-            'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
-            'spec.almacenamiento.capacidad_gb'         => [
-                'nullable','integer','min:1','max:50000',
-                function($attr,$value,$fail) use ($request) {
-                    $tipo = $request->input('tipo');
-                    $tipoAlm = $request->input('spec.almacenamiento.tipo');
-                    if (in_array($tipo, ['equipo_pc','otro']) && $value && !$tipoAlm) {
-                        $fail('Debes seleccionar el tipo de almacenamiento si indicas capacidad en GB.');
+
+            // ✅ NUEVO: SPECS POR SERIE (PC)
+            'series.*.spec_pc.color'      => ['nullable','string','max:50'],
+            'series.*.spec_pc.ram_gb'     => ['nullable','integer','min:1','max:32767'],
+            'series.*.spec_pc.procesador' => ['nullable','string','max:120'],
+
+            // ✅ NUEVO (A): múltiples almacenamientos por serie
+            'series.*.spec_pc.almacenamientos'                       => ['nullable','array'],
+            'series.*.spec_pc.almacenamientos.*.tipo'                => ['nullable', Rule::in(['ssd','hdd','m2'])],
+            'series.*.spec_pc.almacenamientos.*.capacidad_gb'        => ['nullable','integer','min:1','max:50000'],
+            // Validación cruzada: si hay capacidad -> tipo requerido (por cada almacenamiento)
+            'series.*.spec_pc.almacenamientos.*' => [
+                'nullable',
+                function ($attr, $value, $fail) {
+                    if (!is_array($value)) return;
+
+                    $cap  = $value['capacidad_gb'] ?? null;
+                    $tipo = $value['tipo'] ?? null;
+
+                    if ($cap !== null && $cap !== '' && ($tipo === null || $tipo === '')) {
+                        $fail('Debes seleccionar el tipo de almacenamiento (SSD, HDD o M.2) si indicas capacidad.');
                     }
                 }
             ],
-            'spec.procesador'                          => ['nullable','string','max:120'],
 
-            // Especificaciones celular
+            // ✅ NUEVO: SPECS POR SERIE (CELULAR)
+            'series.*.spec_cel.color'             => ['nullable','string','max:255'],
+            'series.*.spec_cel.almacenamiento_gb' => ['nullable','integer','min:1','max:50000'],
+            'series.*.spec_cel.ram_gb'            => ['nullable','integer','min:1','max:32767'],
+            'series.*.spec_cel.imei'              => ['nullable','string','max:30'],
+
+            // ✅ NUEVO: DESCRIPCIÓN POR SERIE (impresora/monitor/pantalla/periferico/otro)
+            'series.*.descripcion' => ['nullable','string','max:2000'],
+
+            'stock_inicial_attach' => ['nullable'], // (si algún form viejo lo manda; no afecta)
+            'stock_inicial'        => 'nullable|integer|min:0',
+
+            // ✅ (LEGACY) por compatibilidad con formularios viejos
+            'spec.color'                               => ['nullable','string','max:50'],
+            'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
+            'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
+            'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
+            'spec.procesador'                          => ['nullable','string','max:120'],
             'spec_cel.color'             => ['nullable','string','max:255'],
             'spec_cel.almacenamiento_gb' => ['nullable','integer','min:1','max:50000'],
             'spec_cel.ram_gb'            => ['nullable','integer','min:1','max:32767'],
             'spec_cel.imei'              => ['nullable','string','max:30'],
         ]);
 
+        // ✅ tracking real según tipo (seguridad backend)
         $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
+
+        // ✅ si no es "otro", tracking viene forzado por tipo; por eso validamos series aquí también
+        if ($tracking === 'serial') {
+            if (empty($data['series']) || !is_array($data['series']) || count($data['series']) < 1) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'series' => 'Debes agregar al menos una serie.',
+                ]);
+            }
+        }
 
         $unidad = $tracking === 'cantidad'
             ? ($data['unidad_medida'] ?: 'pieza')
             : 'pieza';
 
+        // ✅ En el create nuevo:
+        // - Producto base solo guarda descripción/specs cuando es consumible.
         $specs = null;
+        $descripcionFinal = null;
 
-        // ✅ PC / Consumible (lo que ya tenías)
-        if (in_array($data['tipo'], ['equipo_pc', 'consumible'])) {
+        if ($data['tipo'] === 'consumible') {
             $specs = array_filter([
-                'color' => $request->input('spec.color') ?? $request->input('color_consumible'),
-                'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
-                'almacenamiento' => array_filter([
-                    'tipo' => $request->input('spec.almacenamiento.tipo'),
-                    'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
-                        ? (int)$request->input('spec.almacenamiento.capacidad_gb') : null,
-                ], fn($v)=>$v!==null && $v!==''),
-                'procesador' => $request->input('spec.procesador'),
-            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
-        }
+                'color' => $request->input('color_consumible'),
+            ], fn($v)=>$v!==null && $v!=='');
 
-        // ✅ Celular (nuevo)
-        if ($data['tipo'] === 'celular') {
-            $specs = array_filter([
-                'color'             => $request->input('spec_cel.color'),
-                'almacenamiento_gb' => $request->filled('spec_cel.almacenamiento_gb')
-                    ? (int) $request->input('spec_cel.almacenamiento_gb') : null,
-                'ram_gb'            => $request->filled('spec_cel.ram_gb')
-                    ? (int) $request->input('spec_cel.ram_gb') : null,
-                'imei'              => $request->input('spec_cel.imei'),
-            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
-        }
-
-        // ✅ Descripción FINAL (independiente del JS/textarea)
-        $descripcionFinal = $data['descripcion'] ?? null;
-
-        // si viene vacía, la tomamos del campo correcto según tipo
-        if ($descripcionFinal === null || trim((string)$descripcionFinal) === '') {
-
-            // Equipo PC: tomar el input name="spec[color]"
-            if ($data['tipo'] === 'equipo_pc') {
-                $descripcionFinal = $request->input('spec.color');
-            }
-
-            // Consumible: usar color_consumible
-            if ($data['tipo'] === 'consumible') {
-                $descripcionFinal = $request->input('color_consumible');
-            }
-
-            // Celular (opcional): si quieres que también llene descripcion
-            if ($data['tipo'] === 'celular') {
-                $descripcionFinal = $request->input('spec_cel.color');
-            }
+            $descripcionFinal = $data['descripcion'] ?? null;
         }
 
         DB::transaction(function () use ($tenant, $data, $unidad, $specs, $tracking, $descripcionFinal) {
+
             $maxFolio = Producto::where('empresa_tenant_id', $tenant)->lockForUpdate()->max('folio');
 
             $producto = Producto::create([
@@ -263,7 +264,7 @@ class ProductoController extends Controller implements HasMiddleware
                 'unidad'            => $unidad,
                 'activo'            => true,
                 'descripcion'       => $descripcionFinal,
-                'especificaciones'  => $specs,
+                'especificaciones'  => $specs, // solo consumible en el create nuevo
             ]);
 
             // tracking virtual
@@ -272,9 +273,12 @@ class ProductoController extends Controller implements HasMiddleware
 
             if ($tracking === 'serial') {
 
-                // ✅ Ahora viene como array: series[n][serie] + series[n][subsidiaria_id]
+                $tipoProducto = $data['tipo'];
+
+                // ✅ items ahora incluyen specs/observaciones por serie
                 $items = collect($data['series'] ?? [])
-                    ->map(function ($row) {
+                    ->map(function ($row) use ($tipoProducto) {
+
                         $serie = trim((string)($row['serie'] ?? ''));
                         if ($serie === '') return null;
 
@@ -284,73 +288,147 @@ class ProductoController extends Controller implements HasMiddleware
                         $unidadId = $row['unidad_servicio_id'] ?? null;
                         $unidadId = ($unidadId === '' || $unidadId === null) ? null : (int) $unidadId;
 
+                        // ✅ specs JSON por serie
+                        $serieSpecs = null;
+
+                        if ($tipoProducto === 'equipo_pc') {
+                            $pc = is_array($row['spec_pc'] ?? null) ? ($row['spec_pc'] ?? []) : [];
+
+                            // ✅ NUEVO (A): almacenamientos[]
+                            $almacenamientos = [];
+                            $almRows = $pc['almacenamientos'] ?? [];
+                            if (is_array($almRows)) {
+                                foreach ($almRows as $a) {
+                                    if (!is_array($a)) continue;
+
+                                    $t = isset($a['tipo']) ? trim((string)$a['tipo']) : '';
+                                    $c = $a['capacidad_gb'] ?? null;
+                                    $c = ($c === '' || $c === null) ? null : (int) $c;
+
+                                    // ignorar filas vacías
+                                    if ($t === '' && ($c === null || $c <= 0)) continue;
+
+                                    // si tiene capacidad, forzar que tenga tipo (ya lo valida validate, pero mantenemos defensa)
+                                    if ($c !== null && $c > 0 && $t === '') continue;
+
+                                    $almacenamientos[] = array_filter([
+                                        'tipo'         => $t ?: null,
+                                        'capacidad_gb' => $c,
+                                    ], fn($v)=>$v!==null && $v!=='');
+                                }
+                            }
+
+                            $serieSpecs = array_filter([
+                                'color' => isset($pc['color']) ? trim((string)$pc['color']) : null,
+                                'ram_gb' => isset($pc['ram_gb']) && $pc['ram_gb'] !== '' ? (int) $pc['ram_gb'] : null,
+
+                                // ✅ guardamos como array de discos
+                                'almacenamientos' => $almacenamientos ?: null,
+
+                                'procesador' => isset($pc['procesador']) ? trim((string)$pc['procesador']) : null,
+                            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+                        }
+
+                        if ($tipoProducto === 'celular') {
+                            $cel = is_array($row['spec_cel'] ?? null) ? ($row['spec_cel'] ?? []) : [];
+                            $serieSpecs = array_filter([
+                                'color' => isset($cel['color']) ? trim((string)$cel['color']) : null,
+                                'almacenamiento_gb' => isset($cel['almacenamiento_gb']) && $cel['almacenamiento_gb'] !== '' ? (int) $cel['almacenamiento_gb'] : null,
+                                'ram_gb' => isset($cel['ram_gb']) && $cel['ram_gb'] !== '' ? (int) $cel['ram_gb'] : null,
+                                'imei' => isset($cel['imei']) ? trim((string)$cel['imei']) : null,
+                            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+                        }
+
+                        // ✅ descripción por serie (otros tipos)
+                        $serieDesc = null;
+                        if (in_array($tipoProducto, ['impresora','monitor','pantalla','periferico','otro'], true)) {
+                            $serieDesc = trim((string)($row['descripcion'] ?? '')) ?: null;
+                        }
+
                         return [
                             'serie'              => $serie,
                             'subsidiaria_id'     => $subs,
                             'unidad_servicio_id' => $unidadId,
+                            'especificaciones'   => $serieSpecs,
+                            'observaciones'      => $serieDesc,
                         ];
                     })
                     ->filter()
                     ->unique(fn($x) => $x['serie'])
                     ->values();
 
-                // (opcional) si no mandaron series, no hace nada y sigue
+                // ✅ si por alguna razón quedó vacío, abortamos
+                if ($items->isEmpty()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'series' => 'Debes agregar al menos una serie válida.',
+                    ]);
+                }
+
                 foreach ($items as $row) {
-                    try {
-                        // ✅ seguridad extra: aunque ya validaste exists+tenant, lo dejamos
-                        if (!empty($row['subsidiaria_id'])) {
-                            $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
-                                ->where('id', $row['subsidiaria_id'])
-                                ->exists();
 
-                            if (!$ok) {
-                                throw \Illuminate\Validation\ValidationException::withMessages([
-                                    'series' => "La serie {$row['serie']} tiene una subsidiaria inválida o de otra empresa.",
-                                ]);
-                            }
-                        }
+                    // ✅ evita duplicados por tenant+producto+serie
+                    $exists = ProductoSerie::where('empresa_tenant_id', $tenant)
+                        ->where('producto_id', $producto->id)
+                        ->where('serie', $row['serie'])
+                        ->exists();
 
-                        if (!empty($row['unidad_servicio_id'])) {
-                            $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
-                                ->where('id', $row['unidad_servicio_id'])
-                                ->exists();
+                    if ($exists) continue;
 
-                            if (!$ok) {
-                                throw \Illuminate\Validation\ValidationException::withMessages([
-                                    'series' => "La serie {$row['serie']} tiene una unidad de servicio inválida o de otra empresa.",
-                                ]);
-                            }
-                        }                   
+                    // ✅ seguridad extra: aunque ya validaste exists+tenant
+                    if (!empty($row['subsidiaria_id'])) {
+                        $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
+                            ->where('id', $row['subsidiaria_id'])
+                            ->exists();
 
-                        $serieModel = ProductoSerie::create([
-                            'empresa_tenant_id' => $tenant,
-                            'producto_id'       => $producto->id,
-                            'serie'             => $row['serie'],
-                            'estado'            => 'disponible',
-                            'subsidiaria_id'    => $row['subsidiaria_id'], 
-                            'unidad_servicio_id' => $row['unidad_servicio_id'],
-                        ]);
-
-                        if (method_exists($serieModel, 'registrarHistorial')) {
-                            $serieModel->registrarHistorial([
-                                'accion'          => 'creacion',
-                                'estado_anterior' => null,
-                                'estado_nuevo'    => 'disponible',
-                                'cambios'         => [
-                                    'especificaciones_base' => $producto->especificaciones ?? [],
-                                    'serie'                 => $serieModel->serie,
-                                    'subsidiaria_id'        => $serieModel->subsidiaria_id,
-                                    'unidad_servicio_id' => $serieModel->unidad_servicio_id,
-                                ],
+                        if (!$ok) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'series' => "La serie {$row['serie']} tiene una subsidiaria inválida o de otra empresa.",
                             ]);
                         }
+                    }
 
-                    } catch (\Illuminate\Validation\ValidationException $e) {
-                        throw $e; // ✅ que cancele la transacción y muestre error
-                    } catch (\Throwable $e) {
-                        // duplicadas u otros errores: ignorar (como ya lo tenías)
+                    if (!empty($row['unidad_servicio_id'])) {
+                        $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
+                            ->where('id', $row['unidad_servicio_id'])
+                            ->exists();
+
+                        if (!$ok) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'series' => "La serie {$row['serie']} tiene una unidad de servicio inválida o de otra empresa.",
+                            ]);
+                        }
+                    }
+
+                    $serieModel = ProductoSerie::create([
+                        'empresa_tenant_id'   => $tenant,
+                        'producto_id'         => $producto->id,
+                        'serie'               => $row['serie'],
+                        'estado'              => 'disponible',
+                        'subsidiaria_id'      => $row['subsidiaria_id'],
+                        'unidad_servicio_id'  => $row['unidad_servicio_id'],
+
+                        // ✅ NUEVO: guardar lo capturado en el create
+                        'especificaciones'    => $row['especificaciones'], // PC/CEL
+                        'observaciones'       => $row['observaciones'],    // impresora/monitor/...
+                    ]);
+
+                    if (method_exists($serieModel, 'registrarHistorial')) {
+                        $serieModel->registrarHistorial([
+                            'accion'          => 'creacion',
+                            'estado_anterior' => null,
+                            'estado_nuevo'    => 'disponible',
+                            'cambios'         => [
+                                'especificaciones_base' => $producto->especificaciones ?? [],
+                                'serie'                 => $serieModel->serie,
+                                'subsidiaria_id'        => $serieModel->subsidiaria_id,
+                                'unidad_servicio_id'    => $serieModel->unidad_servicio_id,
+                                'especificaciones'      => $serieModel->especificaciones,
+                                'observaciones'         => $serieModel->observaciones,
+                            ],
+                        ]);
                     }
                 }
+
             } else {
                 $stockInicial = (int) ($data['stock_inicial'] ?? 0);
 
@@ -373,6 +451,7 @@ class ProductoController extends Controller implements HasMiddleware
                     ]);
                 }
             }
+
             // ✅ Registrar en historial
             ProductoHistorial::create([
                 'producto_id'    => $producto->id,
@@ -412,95 +491,31 @@ class ProductoController extends Controller implements HasMiddleware
     public function update(Request $request, Producto $producto)
     {
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
-        $tenant = $this->tenantId();
 
+        // ✅ Solo permitimos editar estos campos desde el edit.blade.php
         $data = $request->validate([
-            'nombre'         => 'required|string|max:255',
-            'sku'            => ['nullable','string','max:100', Rule::unique('productos','sku')->where('empresa_tenant_id',$tenant)->ignore($producto->id)],
-            'marca'          => 'nullable|string|max:100',
-            'modelo'         => 'nullable|string|max:100',
-            'tipo'           => ['required', Rule::in(['equipo_pc','impresora','celular','monitor','pantalla','periferico','consumible','otro'])],
-            'tracking'       => ['required_if:tipo,otro', Rule::in(['serial','cantidad'])],
-            'unidad_medida'  => 'nullable|string|max:30',
-            'descripcion'    => 'nullable|string|max:2000',
-            'activo'         => 'sometimes|boolean',
-
-            // Especificaciones
-            'spec.color'                               => ['nullable','string','max:50'],
-            'spec.ram_gb'                              => ['nullable','integer','min:1','max:32767'],
-            'spec.almacenamiento.tipo'                 => ['nullable','in:ssd,hdd,m2'],
-            'spec.almacenamiento.capacidad_gb'         => ['nullable','integer','min:1','max:50000'],
-            'spec.procesador'                          => ['nullable','string','max:120'],
+            'nombre' => ['required', 'string', 'max:255'],
+            'marca'  => ['nullable', 'string', 'max:100'],
+            'modelo' => ['nullable', 'string', 'max:100'],
+            // viene como "0" o "1" por el hidden + checkbox
+            'activo' => ['nullable'],
         ]);
 
-        // ✅ Normalizar valor de 'activo' (checkbox)
-        $data['activo'] = $request->has('activo') ? 1 : 0;
+        // ✅ Normalizar activo (con hidden=0 + checkbox=1)
+        $activo = $request->boolean('activo');
 
-        // ✅ Guardar snapshot antes de actualizar
+        // ✅ Snapshot antes
         $antes = $producto->toArray();
 
-        $tracking = $this->trackingByTipo($data['tipo'], $data['tracking'] ?? null);
-
-        $unidad = $tracking === 'cantidad'
-            ? (($data['unidad_medida'] ?? null) ?: 'pieza')
-            : ($producto->unidad ?: 'pieza');
-
-        /**
-         * ✅ FIX: NO borrar especificaciones si no se editaron
-         * - Si tipo != equipo_pc => conservar lo que ya tiene
-         * - Si tipo == equipo_pc:
-         *      - si viene algún campo spec.* => recalcular y guardar
-         *      - si NO viene nada => conservar
-         */
-        $specs = $producto->especificaciones; // por defecto conservar
-
-        $tipo = $data['tipo'];
-
-        $tieneAlgunaSpec = $request->hasAny([
-            'spec.color',
-            'spec.ram_gb',
-            'spec.almacenamiento.tipo',
-            'spec.almacenamiento.capacidad_gb',
-            'spec.procesador',
-        ]);
-
-        if ($tipo === 'equipo_pc') {
-            if ($tieneAlgunaSpec) {
-                $specs = array_filter([
-                    'color' => $request->input('spec.color'),
-                    'ram_gb' => $request->filled('spec.ram_gb') ? (int) $request->input('spec.ram_gb') : null,
-                    'almacenamiento' => array_filter([
-                        'tipo' => $request->input('spec.almacenamiento.tipo'),
-                        'capacidad_gb' => $request->filled('spec.almacenamiento.capacidad_gb')
-                            ? (int) $request->input('spec.almacenamiento.capacidad_gb')
-                            : null,
-                    ], fn($v) => $v !== null && $v !== ''),
-                    'procesador' => $request->input('spec.procesador'),
-                ], fn($v) => $v !== null && $v !== '' && $v !== []);
-            }
-            // si no trae nada spec.*, se conserva $producto->especificaciones
-        } else {
-            // tipo != equipo_pc => conservar siempre (no tocar)
-            $specs = $producto->especificaciones;
-        }
-
+        // ✅ Update sin tocar tipo/tracking/unidad/sku/descripcion/especificaciones
         $producto->update([
-            'nombre'           => $data['nombre'],
-            'sku'              => $data['sku'] ?? null,
-            'marca'            => $data['marca'] ?? null,
-            'modelo'           => $data['modelo'] ?? null,
-            'tipo'             => $data['tipo'],
-            'unidad'           => $unidad,
-            'descripcion'      => $data['descripcion'] ?? null,
-            'activo'           => $data['activo'],
-            'especificaciones' => $specs,
+            'nombre' => $data['nombre'],
+            'marca'  => $data['marca'] ?? null,
+            'modelo' => $data['modelo'] ?? null,
+            'activo' => $activo ? 1 : 0,
         ]);
 
-        // tracking virtual
-        $producto->tracking = $tracking;
-        $producto->save();
-
-        // ✅ Registrar historial solo después de guardar correctamente
+        // ✅ Registrar historial
         try {
             \App\Models\ProductoHistorial::create([
                 'producto_id'      => $producto->id,
@@ -511,14 +526,6 @@ class ProductoController extends Controller implements HasMiddleware
             ]);
         } catch (\Throwable $e) {
             \Log::error("Error registrando historial de producto: " . $e->getMessage());
-        }
-
-        // si quedó como cantidad, aseguramos registro de existencias
-        if ($producto->tracking === 'cantidad') {
-            ProductoExistencia::firstOrCreate(
-                ['empresa_tenant_id' => $tenant, 'producto_id' => $producto->id],
-                ['cantidad' => 0]
-            );
         }
 
         return redirect()->route('productos.index')->with('updated', true);
@@ -581,12 +588,14 @@ class ProductoController extends Controller implements HasMiddleware
         if ($producto->tracking !== 'serial') abort(403);
 
         $tenant = $this->tenantId();
+        $tipoProducto = (string) ($producto->tipo ?? '');
 
         // Acepta: series[] (nuevo) o lotes (legacy)
         $data = $request->validate([
-            // ✅ NUEVO: filas tipo create
+            // ✅ NUEVO: filas tipo create (BLADE NUEVO)
             'series' => ['nullable', 'array'],
             'series.*.serie' => ['required_with:series', 'string', 'max:255'],
+
             'series.*.subsidiaria_id' => [
                 'nullable',
                 Rule::exists('subsidiarias', 'id')
@@ -598,15 +607,45 @@ class ProductoController extends Controller implements HasMiddleware
                     ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
 
+            // ✅ NUEVO: el Blade manda specs unificados: series[i][specs][...]
+            'series.*.specs.color' => ['nullable', 'string', 'max:255'],
+            'series.*.specs.ram_gb' => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'series.*.specs.procesador' => ['nullable', 'string', 'max:120'],
+
+            'series.*.specs.almacenamiento_gb' => ['nullable', 'integer', 'min:1', 'max:50000'],
+            'series.*.specs.imei' => ['nullable', 'string', 'max:30'],
+
+            // ✅ NUEVO (PC): múltiples almacenamientos
+            'series.*.specs.almacenamientos' => ['nullable', 'array'],
+            'series.*.specs.almacenamientos.*.tipo' => ['nullable', Rule::in(['SSD','HDD','M.2','ssd','hdd','m2'])],
+            'series.*.specs.almacenamientos.*.capacidad_gb' => ['nullable', 'integer', 'min:1', 'max:50000'],
+            'series.*.specs.almacenamientos.*' => [
+                'nullable',
+                function ($attr, $value, $fail) {
+                    if (!is_array($value)) return;
+
+                    $cap  = $value['capacidad_gb'] ?? null;
+                    $tipo = $value['tipo'] ?? null;
+
+                    if ($cap !== null && $cap !== '' && ($tipo === null || $tipo === '')) {
+                        $fail('Debes seleccionar el tipo de almacenamiento si indicas capacidad.');
+                    }
+                }
+            ],
+
+            // ✅ NUEVO: el Blade manda observaciones por serie (tipos simples)
+            'series.*.observaciones' => ['nullable', 'string', 'max:2000'],
+
             // ✅ LEGACY: textarea
             'lotes' => ['nullable', 'string'],
         ]);
 
         // ===============================
         // 1) Construir items desde series[]
+        // (ahora incluye especificaciones/observaciones)
         // ===============================
         $itemsFromArray = collect($data['series'] ?? [])
-            ->map(function ($row) {
+            ->map(function ($row) use ($tipoProducto) {
                 $serie = trim((string)($row['serie'] ?? ''));
                 if ($serie === '') return null;
 
@@ -616,20 +655,73 @@ class ProductoController extends Controller implements HasMiddleware
                 $unidadId = $row['unidad_servicio_id'] ?? null;
                 $unidadId = ($unidadId === '' || $unidadId === null) ? null : (int)$unidadId;
 
+                $specsIn = is_array($row['specs'] ?? null) ? $row['specs'] : [];
+
+                $serieSpecs = null;
+                $serieObs   = null;
+
+                if ($tipoProducto === 'equipo_pc') {
+
+                    // normalizar almacenamientos (ignora filas vacías)
+                    $almacenamientos = [];
+                    $almRows = $specsIn['almacenamientos'] ?? [];
+                    if (is_array($almRows)) {
+                        foreach ($almRows as $a) {
+                            if (!is_array($a)) continue;
+
+                            $t = trim((string)($a['tipo'] ?? ''));
+                            $c = $a['capacidad_gb'] ?? null;
+                            $c = ($c === '' || $c === null) ? null : (int)$c;
+
+                            if ($t === '' && ($c === null || $c <= 0)) continue;
+                            if ($c !== null && $c > 0 && $t === '') continue;
+
+                            // normaliza valores tipo a un set estable si quieres (opcional)
+                            // aquí lo dejamos como venga (SSD/HDD/M.2 o ssd/hdd/m2)
+                            $almacenamientos[] = array_filter([
+                                'tipo'         => $t ?: null,
+                                'capacidad_gb' => $c,
+                            ], fn($v) => $v !== null && $v !== '');
+                        }
+                    }
+
+                    $serieSpecs = array_filter([
+                        'color'          => isset($specsIn['color']) ? trim((string)$specsIn['color']) : null,
+                        'ram_gb'         => isset($specsIn['ram_gb']) && $specsIn['ram_gb'] !== '' ? (int)$specsIn['ram_gb'] : null,
+                        'almacenamientos'=> $almacenamientos ?: null,
+                        'procesador'     => isset($specsIn['procesador']) ? trim((string)$specsIn['procesador']) : null,
+                    ], fn($v) => $v !== null && $v !== '' && $v !== []);
+
+                } elseif ($tipoProducto === 'celular') {
+
+                    $serieSpecs = array_filter([
+                        'color'             => isset($specsIn['color']) ? trim((string)$specsIn['color']) : null,
+                        'almacenamiento_gb' => isset($specsIn['almacenamiento_gb']) && $specsIn['almacenamiento_gb'] !== '' ? (int)$specsIn['almacenamiento_gb'] : null,
+                        'ram_gb'            => isset($specsIn['ram_gb']) && $specsIn['ram_gb'] !== '' ? (int)$specsIn['ram_gb'] : null,
+                        'imei'              => isset($specsIn['imei']) ? trim((string)$specsIn['imei']) : null,
+                    ], fn($v) => $v !== null && $v !== '' && $v !== []);
+
+                } else {
+                    // impresora/monitor/pantalla/periferico/otro
+                    $serieObs = trim((string)($row['observaciones'] ?? '')) ?: null;
+                    $serieSpecs = null;
+                }
+
                 return [
                     'serie'              => $serie,
                     'subsidiaria_id'     => $subs,
                     'unidad_servicio_id' => $unidadId,
+                    'especificaciones'   => $serieSpecs,
+                    'observaciones'      => $serieObs,
                 ];
-
             })
             ->filter()
-            // unique por serie
             ->unique(fn($x) => $x['serie'])
             ->values();
 
         // ===============================
         // 2) Construir items desde lotes (si viene)
+        // (lotes NO trae specs/obs)
         // ===============================
         $itemsFromText = collect();
 
@@ -644,20 +736,35 @@ class ProductoController extends Controller implements HasMiddleware
                     'serie'              => $serie,
                     'subsidiaria_id'     => null,
                     'unidad_servicio_id' => null,
+                    'especificaciones'   => null,
+                    'observaciones'      => null,
                 ]);
         }
 
         // ===============================
-        // 3) Unir (prioridad: series[] manda subsidiaria; lotes solo serie)
-        // Si misma serie aparece en ambos, se queda la que tenga subsidiaria (series[])
+        // 3) Unir:
+        // - si la misma serie aparece en ambos:
+        //   preferimos la que tenga subsidiaria_id (como antes)
+        //   y además, si alguna trae especificaciones/observaciones, también se conservan.
         // ===============================
         $items = $itemsFromText
             ->concat($itemsFromArray)
             ->groupBy('serie')
             ->map(function ($group) {
-                // si alguna fila trae subsidiaria_id, la preferimos
-                $withSubs = $group->first(fn($x) => !empty($x['subsidiaria_id']));
-                return $withSubs ?: $group->first();
+                // preferimos con subsidiaria; si no, cualquiera.
+                $preferred = $group->first(fn($x) => !empty($x['subsidiaria_id'])) ?: $group->first();
+
+                // si el preferred no trae specs/obs, intenta tomarlos de otro del grupo
+                if (empty($preferred['especificaciones'])) {
+                    $withSpecs = $group->first(fn($x) => !empty($x['especificaciones']));
+                    if ($withSpecs) $preferred['especificaciones'] = $withSpecs['especificaciones'];
+                }
+                if (empty($preferred['observaciones'])) {
+                    $withObs = $group->first(fn($x) => !empty($x['observaciones']));
+                    if ($withObs) $preferred['observaciones'] = $withObs['observaciones'];
+                }
+
+                return $preferred;
             })
             ->values();
 
@@ -672,6 +779,9 @@ class ProductoController extends Controller implements HasMiddleware
             $serieTxt = $row['serie'];
             $subsId   = $row['subsidiaria_id'] ?? null;
             $unidadId = $row['unidad_servicio_id'] ?? null;
+
+            $especificaciones = $row['especificaciones'] ?? null;
+            $observaciones    = $row['observaciones'] ?? null;
 
             try {
                 // ✅ evita duplicados por producto + serie + tenant
@@ -698,13 +808,30 @@ class ProductoController extends Controller implements HasMiddleware
                     }
                 }
 
+                // ✅ seguridad extra: unidad pertenece al tenant (aunque ya valida)
+                if (!empty($unidadId)) {
+                    $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
+                        ->where('id', $unidadId)
+                        ->exists();
+
+                    if (!$ok) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'series' => "La serie {$serieTxt} tiene una unidad de servicio inválida o de otra empresa.",
+                        ]);
+                    }
+                }
+
                 $serieModel = ProductoSerie::create([
-                    'empresa_tenant_id' => $tenant,
-                    'producto_id'       => $producto->id,
-                    'serie'             => $serieTxt,
-                    'estado'            => 'disponible',
-                    'subsidiaria_id'    => $subsId, 
-                    'unidad_servicio_id' => $unidadId,
+                    'empresa_tenant_id'   => $tenant,
+                    'producto_id'         => $producto->id,
+                    'serie'               => $serieTxt,
+                    'estado'              => 'disponible',
+                    'subsidiaria_id'      => $subsId,
+                    'unidad_servicio_id'  => $unidadId,
+
+                    // ✅ NUEVO: guardar lo capturado en alta masiva
+                    'especificaciones'    => $especificaciones,
+                    'observaciones'       => $observaciones,
                 ]);
 
                 $creadas++;
@@ -718,6 +845,9 @@ class ProductoController extends Controller implements HasMiddleware
                         'cambios'         => [
                             'serie'                 => $serieModel->serie,
                             'subsidiaria_id'        => $serieModel->subsidiaria_id,
+                            'unidad_servicio_id'    => $serieModel->unidad_servicio_id,
+                            'especificaciones'      => $serieModel->especificaciones,
+                            'observaciones'         => $serieModel->observaciones,
                             'especificaciones_base' => $producto->especificaciones ?? [],
                         ],
                     ]);
@@ -779,33 +909,21 @@ class ProductoController extends Controller implements HasMiddleware
 
         $tenant = $this->tenantId();
 
-        $subsidiarias = \App\Models\Subsidiaria::query()
+        $subsidiarias = Subsidiaria::query()
             ->where('empresa_tenant_id', $tenant)
             ->orderBy('nombre')
             ->get(['id','nombre']);
 
-        $unidadesServicio = \App\Models\UnidadServicio::query()
+        $unidadesServicio = UnidadServicio::query()
             ->where('empresa_tenant_id', $tenant)
             ->orderBy('nombre')
             ->get(['id','nombre']);
 
-        // Si es equipo de cómputo => vista completa
-        if ($producto->tipo === 'equipo_pc') {
-            return view('series.edit_specs', [
-                'producto'     => $producto,
-                'serie'        => $serie,
-                'over'         => (array) ($serie->especificaciones ?? []),
-                'subsidiarias' => $subsidiarias, 
-                'unidadesServicio' => $unidadesServicio,
-            ]);
-        }
-
-        // Otros tipos => solo descripción
-        return view('series.edit_desc', [
-            'producto'     => $producto,
-            'serie'        => $serie,
-            'descripcion'  => data_get($serie->especificaciones, 'descripcion'),
-            'subsidiarias' => $subsidiarias, 
+        // ✅ UNA SOLA VISTA (la unificada)
+        return view('series.edit', [
+            'producto'         => $producto,
+            'serie'            => $serie,
+            'subsidiarias'     => $subsidiarias,
             'unidadesServicio' => $unidadesServicio,
         ]);
     }
@@ -816,188 +934,145 @@ class ProductoController extends Controller implements HasMiddleware
         abort_if($producto->empresa_tenant_id !== $this->tenantId(), 404);
         abort_if($serie->empresa_tenant_id !== $this->tenantId() || $serie->producto_id !== $producto->id, 404);
 
-        // === GUARDAR SNAPSHOT ANTES DEL CAMBIO ===
-        $antes = $serie->especificaciones ? $serie->especificaciones : [];
+        $tenant = $this->tenantId();
 
-        // Equipo de cómputo: specs completas
-        if ($producto->tipo === 'equipo_pc') {
-            $data = $request->validate([
-                'spec.color'                       => ['nullable','string','max:50'],
-                'spec.ram_gb'                      => ['nullable','integer','min:1','max:32767'],
-                'spec.almacenamiento.tipo'         => ['nullable','in:ssd,hdd,m2'],
-                'spec.almacenamiento.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
-                'spec.procesador'                  => ['nullable','string','max:120'],
-                'subsidiaria_id' => ['nullable', Rule::exists('subsidiarias', 'id') ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),],
-                'unidad_servicio_id' => ['nullable', Rule::exists('unidades_servicio', 'id') ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),],
-            ]);
+        // snapshot (para historial)
+        $antesSpecs = $serie->especificaciones ?: [];
+        $antesObs   = $serie->observaciones;
 
-            // overrides nuevos
-            $over = array_filter([
-                'color' => $request->input('spec.color'),
-                'ram_gb' => $request->filled('spec.ram_gb') ? (int)$request->input('spec.ram_gb') : null,
-                'almacenamiento' => array_filter([
-                    'tipo'          => $request->input('spec.almacenamiento.tipo'),
-                    'capacidad_gb'  => $request->filled('spec.almacenamiento.capacidad_gb')
-                                            ? (int)$request->input('spec.almacenamiento.capacidad_gb')
-                                            : null,
-                ], fn($v)=>$v!==null),
-                'procesador' => $request->input('spec.procesador'),
-            ], fn($v)=>$v!==null);
-
-            $tenant = $this->tenantId();
-            $subsidiariaId = $request->filled('subsidiaria_id')
-                ? (int) $request->input('subsidiaria_id')
-                : null;
-
-            if ($subsidiariaId) {
-                $ok = Subsidiaria::where('empresa_tenant_id', $tenant)
-                    ->where('id', $subsidiariaId)
-                    ->exists();
-
-                if (!$ok) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'subsidiaria_id' => 'Subsidiaria inválida o no pertenece a la empresa activa.',
-                    ]);
-                }
-            }
-
-            $oldSubs = $serie->subsidiaria_id;
-            $serie->subsidiaria_id = $subsidiariaId;
-
-            $unidadId = $request->filled('unidad_servicio_id')
-                ? (int) $request->input('unidad_servicio_id')
-                : null;
-
-            if ($unidadId) {
-                $ok = UnidadServicio::where('empresa_tenant_id', $tenant)
-                    ->where('id', $unidadId)
-                    ->exists();
-
-                if (!$ok) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'unidad_servicio_id' => 'Unidad de servicio inválida o no pertenece a la empresa activa.',
-                    ]);
-                }
-            }
-
-            $oldUnidad = $serie->unidad_servicio_id;
-            $serie->unidad_servicio_id = $unidadId;
-
-            // GUARDAR NUEVAS OVERRIDES
-            $serie->especificaciones = $over ?: null;
-            $serie->save();
-
-            // === GUARDAR HISTORIAL ===
-            $cambios = [];
-
-            // ✅ subsidiaria también en historial
-            if ($oldSubs != $subsidiariaId) {
-                $cambios['subsidiaria_id'] = [
-                    'antes'   => $oldSubs,
-                    'despues' => $subsidiariaId,
-                ];
-            }
-
-            if ($oldUnidad != $unidadId) {
-                $cambios['unidad_servicio_id'] = [
-                    'antes'   => $oldUnidad,
-                    'despues' => $unidadId,
-                ];
-            }
-
-            foreach(['color','ram_gb','procesador'] as $campo){
-                $old = data_get($antes, $campo);
-                $new = data_get($over, $campo);
-
-                if($old != $new){
-                    $cambios[$campo] = [
-                        'antes'   => $old,
-                        'despues' => $new,
-                    ];
-                }
-            }
-
-            // almacenamiento (tipo y capacidad)
-            $oldAlm = data_get($antes,'almacenamiento',[]);
-            $newAlm = data_get($over,'almacenamiento',[]);
-            if($oldAlm != $newAlm){
-                $cambios['almacenamiento'] = [
-                    'antes'   => $oldAlm,
-                    'despues' => $newAlm,
-                ];
-            }
-
-            if(!empty($cambios)){
-                $serie->registrarHistorial([
-                    'accion' => 'edicion',
-                    'cambios' => $cambios,
-                ]);
-            }
-
-            return redirect()
-                ->route('productos.series', $producto)
-                ->with('updated', 'Serie actualizada.');
-        }
-
-        // === OTROS TIPOS (SOLO DESCRIPCIÓN) ===
+        // ✅ Validación común (siempre)
         $data = $request->validate([
-            'descripcion'    => ['nullable','string','max:2000'],
             'subsidiaria_id' => [
                 'nullable',
-                Rule::exists('subsidiarias', 'id')
-                    ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),
+                Rule::exists('subsidiarias', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
             'unidad_servicio_id' => [
                 'nullable',
-                Rule::exists('unidades_servicio', 'id')
-                    ->where(fn($q) => $q->where('empresa_tenant_id', $this->tenantId())),
+                Rule::exists('unidades_servicio', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
+
+            // ✅ PC (como create: spec_pc + almacenamientos[])
+            'spec_pc.color' => ['nullable','string','max:50'],
+            'spec_pc.ram_gb' => ['nullable','integer','min:1','max:32767'],
+            'spec_pc.procesador' => ['nullable','string','max:120'],
+
+            'spec_pc.almacenamientos' => ['nullable','array'],
+            'spec_pc.almacenamientos.*.tipo' => ['nullable', Rule::in(['ssd','hdd','m2'])],
+            'spec_pc.almacenamientos.*.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
+            'spec_pc.almacenamientos.*' => [
+                'nullable',
+                function ($attr, $value, $fail) {
+                    if (!is_array($value)) return;
+                    $cap  = $value['capacidad_gb'] ?? null;
+                    $tipo = $value['tipo'] ?? null;
+                    if ($cap !== null && $cap !== '' && ($tipo === null || $tipo === '')) {
+                        $fail('Debes seleccionar el tipo de almacenamiento (SSD, HDD o M.2) si indicas capacidad.');
+                    }
+                }
+            ],
+
+            // ✅ CEL (como create: spec_cel)
+            'spec_cel.color' => ['nullable','string','max:255'],
+            'spec_cel.almacenamiento_gb' => ['nullable','integer','min:1','max:50000'],
+            'spec_cel.ram_gb' => ['nullable','integer','min:1','max:32767'],
+            'spec_cel.imei' => ['nullable','string','max:30'],
+
+            // ✅ DESC (otros tipos) -> se guardará en observaciones
+            'descripcion' => ['nullable','string','max:2000'],
         ]);
 
-        $oldDesc = data_get($serie->especificaciones, 'descripcion');
-        $newDesc = $data['descripcion'] ?? null;
-
+        // ✅ Set subsidiaria / unidad (directo)
         $oldSubs = $serie->subsidiaria_id;
-        $newSubs = $data['subsidiaria_id'] ?? null;
+        $oldUni  = $serie->unidad_servicio_id;
 
-        // ✅ guardar subsidiaria
-        $serie->subsidiaria_id = $newSubs;
+        $serie->subsidiaria_id     = $request->filled('subsidiaria_id') ? (int)$request->input('subsidiaria_id') : null;
+        $serie->unidad_servicio_id = $request->filled('unidad_servicio_id') ? (int)$request->input('unidad_servicio_id') : null;
 
-        $oldUnidad = $serie->unidad_servicio_id;
-        $newUnidad = $data['unidad_servicio_id'] ?? null;
+        // ✅ Construir overrides según tipo de producto
+        $tipo = $producto->tipo;
 
-        $serie->unidad_servicio_id = $newUnidad;
+        $nuevoSpecs = null;
+        $nuevaObs   = $serie->observaciones; // default: conservar
 
-        // ✅ guardar descripción
-        $serie->especificaciones = $newDesc ? ['descripcion' => $newDesc] : null;
+        if ($tipo === 'equipo_pc') {
+
+            // limpiar/normalizar almacenamientos (ignora filas vacías)
+            $almacenamientos = [];
+            $almRows = $request->input('spec_pc.almacenamientos', []);
+            if (is_array($almRows)) {
+                foreach ($almRows as $a) {
+                    if (!is_array($a)) continue;
+
+                    $t = isset($a['tipo']) ? trim((string)$a['tipo']) : '';
+                    $c = $a['capacidad_gb'] ?? null;
+                    $c = ($c === '' || $c === null) ? null : (int)$c;
+
+                    if ($t === '' && ($c === null || $c <= 0)) continue;
+                    if ($c !== null && $c > 0 && $t === '') continue;
+
+                    $almacenamientos[] = array_filter([
+                        'tipo'         => $t ?: null,
+                        'capacidad_gb' => $c,
+                    ], fn($v)=>$v!==null && $v!=='');
+                }
+            }
+
+            $nuevoSpecs = array_filter([
+                'color' => $request->input('spec_pc.color'),
+                'ram_gb' => $request->filled('spec_pc.ram_gb') ? (int)$request->input('spec_pc.ram_gb') : null,
+                'almacenamientos' => $almacenamientos ?: null,
+                'procesador' => $request->input('spec_pc.procesador'),
+            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+
+            // PC: observaciones por serie no aplica (puedes conservar o limpiar; yo conservo)
+            // $nuevaObs = $serie->observaciones;
+
+        } elseif ($tipo === 'celular') {
+
+            $nuevoSpecs = array_filter([
+                'color' => $request->input('spec_cel.color'),
+                'almacenamiento_gb' => $request->filled('spec_cel.almacenamiento_gb') ? (int)$request->input('spec_cel.almacenamiento_gb') : null,
+                'ram_gb' => $request->filled('spec_cel.ram_gb') ? (int)$request->input('spec_cel.ram_gb') : null,
+                'imei' => $request->input('spec_cel.imei'),
+            ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
+
+            // celular: observaciones no aplica (conservar o limpiar; yo conservo)
+            // $nuevaObs = $serie->observaciones;
+
+        } else {
+            // impresora/monitor/pantalla/periferico/otro
+            // ✅ descripción por serie VA EN observaciones (como en tu store)
+            $desc = trim((string)($data['descripcion'] ?? ''));
+            $nuevaObs = $desc !== '' ? $desc : null;
+
+            // y ya no guardamos descripcion en JSON
+            $nuevoSpecs = null;
+        }
+
+        $serie->especificaciones = $nuevoSpecs ?: null;
+        $serie->observaciones    = $nuevaObs;
 
         $serie->save();
 
-        // ✅ historial (una sola vez)
+        // ✅ Historial (si tu modelo lo tiene)
         $cambios = [];
 
-        if ($oldDesc != $newDesc) {
-            $cambios['descripcion'] = [
-                'antes'   => $oldDesc,
-                'despues' => $newDesc,
-            ];
+        if ($oldSubs != $serie->subsidiaria_id) {
+            $cambios['subsidiaria_id'] = ['antes'=>$oldSubs, 'despues'=>$serie->subsidiaria_id];
+        }
+        if ($oldUni != $serie->unidad_servicio_id) {
+            $cambios['unidad_servicio_id'] = ['antes'=>$oldUni, 'despues'=>$serie->unidad_servicio_id];
         }
 
-        if ($oldSubs != $newSubs) {
-            $cambios['subsidiaria_id'] = [
-                'antes'   => $oldSubs,
-                'despues' => $newSubs,
-            ];
+        if (($antesSpecs ?: []) != ($serie->especificaciones ?: [])) {
+            $cambios['especificaciones'] = ['antes'=>$antesSpecs ?: [], 'despues'=>$serie->especificaciones ?: []];
         }
 
-        if ($oldUnidad != $newUnidad) {
-            $cambios['unidad_servicio_id'] = [
-                'antes'   => $oldUnidad,
-                'despues' => $newUnidad,
-            ];
+        if ($antesObs != $serie->observaciones) {
+            $cambios['observaciones'] = ['antes'=>$antesObs, 'despues'=>$serie->observaciones];
         }
 
-        if (!empty($cambios)) {
+        if (!empty($cambios) && method_exists($serie, 'registrarHistorial')) {
             $serie->registrarHistorial([
                 'accion'  => 'edicion',
                 'cambios' => $cambios,
@@ -1007,7 +1082,6 @@ class ProductoController extends Controller implements HasMiddleware
         return redirect()
             ->route('productos.series', $producto)
             ->with('updated', 'Serie actualizada.');
-
     }
 
     // ===================== EXISTENCIA (NO SERIAL) =====================

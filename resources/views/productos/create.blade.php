@@ -34,9 +34,61 @@
 
     .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
     @media (max-width: 720px){ .grid-3{ grid-template-columns:1fr; } }
+
+    /* ===== Almacenamientos repeater ===== */
+    .storage-box{ border:1px solid #e5e7eb; border-radius:10px; padding:10px; margin-top:10px; background:#fafafa; }
+    .storage-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .storage-title{ font-weight:700; color:#111827; font-size:13px; }
+    .btn-mini{ padding:6px 10px; font-size:12px; border-radius:8px; border:0; cursor:pointer; font-weight:700; }
+    .btn-mini-add{ background:#e5f9ef; color:#166534; }
+    .btn-mini-add:hover{ background:#d1fae5; }
+    .btn-mini-del{ background:#fee2e2; color:#991b1b; }
+    .btn-mini-del:hover{ background:#fecaca; }
+    .storage-row{ border:1px dashed #e5e7eb; border-radius:10px; padding:10px; margin-bottom:10px; background:#fff; }
+    .storage-row:last-child{ margin-bottom:0; }
+
+    /* ===== Serie Cards (borde más negro + acordeón libre) ===== */
+    .serie-row{
+      border:1px solid #9ca3af;
+      border-radius:12px;
+      padding:12px;
+      margin-bottom:12px;
+      background:#fff;
+    }
+    .serie-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      cursor:pointer;
+      user-select:none;
+      padding:10px 10px;
+      border-radius:10px;
+      background:#f9fafb;
+      border:1px solid #e5e7eb;
+    }
+    .serie-title{ font-weight:800; color:#111827; }
+    .serie-subtitle{ font-size:12px; color:#6b7280; margin-top:2px; }
+    .serie-left{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .serie-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .serie-toggle{
+      font-weight:900;
+      color:#111827;
+      font-size:16px;
+      line-height:1;
+      padding:4px 10px;
+      border-radius:8px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+    }
+    .serie-body{ margin-top:12px; }
+    .serie-row.is-collapsed .serie-body{ display:none; }
+    .serie-row.has-error .serie-header{
+    border-color:#ef4444 !important;
+    box-shadow:0 0 0 2px rgba(239,68,68,.15);
+  }
   </style>
 
-  <!-- Envoltura de zoom -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="py-6">
@@ -71,7 +123,6 @@
               @error('modelo') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Tipo (sin valor por defecto) --}}
             <div class="form-group">
               <label>Tipo</label>
               <select id="tipo" name="tipo" required>
@@ -95,7 +146,6 @@
               @error('tipo') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Tracking (solo visible si tipo = "otro") --}}
             <div class="form-group" id="tracking-wrap" style="{{ old('tipo')==='otro' ? '' : 'display:none' }}">
               <label>Tracking</label>
               <select name="tracking" id="tracking" {{ old('tipo')==='otro' ? 'required' : '' }}>
@@ -106,7 +156,6 @@
               @error('tracking') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Color (solo visible si tipo = consumible) --}}
             <div class="form-group" id="color-consumible-wrap" style="{{ old('tipo')==='consumible' ? '' : 'display:none' }}">
               <label>Color</label>
               <select name="color_consumible" id="color-consumible">
@@ -119,99 +168,27 @@
               @error('color_consumible') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- SKU (visible si: tipo = consumible  o (tipo=otro y tracking=cantidad) ) --}}
             <div class="form-group" id="sku-wrap" style="{{ (old('tipo')==='consumible' || (old('tipo')==='otro' && old('tracking')==='cantidad')) ? '' : 'display:none' }}">
               <label>SKU (p.ej. consumibles/variantes)</label>
               <input name="sku" value="{{ old('sku') }}">
               @error('sku') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- ====== Especificaciones (solo si tipo = equipo_pc) ====== --}}
-            <div id="equipo-specs" style="{{ old('tipo')==='equipo_pc' ? '' : 'display:none' }}">
-              <div style="font-weight:700;margin:10px 0 6px;">Especificaciones del equipo de cómputo</div>
-              <div class="grid-2">
-                <div>
-                  <label>Descripción o Color</label>
-                  <input id="colorInput" name="spec[color]" value="{{ old('spec.color') }}">
-                  @error('spec.color') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div>
-                  <label>RAM (GB)</label>
-                  <input type="number" min="1" name="spec[ram_gb]" value="{{ old('spec.ram_gb') }}">
-                  @error('spec.ram_gb') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div>
-                  <label>Almacenamiento (tipo)</label>
-                  <select name="spec[almacenamiento][tipo]">
-                    <option value="">Selecciona…</option>
-                    @foreach(['ssd'=>'SSD','hdd'=>'HDD','m2'=>'M.2'] as $k=>$v)
-                      <option value="{{ $k }}" @selected(old('spec.almacenamiento.tipo')===$k)>{{ $v }}</option>
-                    @endforeach
-                  </select>
-                  @error('spec.almacenamiento.tipo') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div>
-                  <label>Almacenamiento (capacidad GB)</label>
-                  <input type="number" min="1" name="spec[almacenamiento][capacidad_gb]" value="{{ old('spec.almacenamiento.capacidad_gb') }}">
-                  @error('spec.almacenamiento.capacidad_gb') <div class="err">{{ $message }}</div> @enderror
-                </div>
-                <div style="grid-column:1/-1">
-                  <label>Procesador</label>
-                  <input name="spec[procesador]" placeholder="Ej. Intel Core i5-1135G7" value="{{ old('spec.procesador') }}">
-                  @error('spec.procesador') <div class="err">{{ $message }}</div> @enderror
-                </div>
-              </div>
-            </div>
-
-            {{-- ====== Especificaciones (solo si tipo = celular) ====== --}}
-            <div id="celular-specs" style="{{ old('tipo')==='celular' ? '' : 'display:none' }}">
-              <div style="font-weight:700;margin:10px 0 6px;">Especificaciones de Celular / Teléfono</div>
-
-              <div class="grid-2">
-                <div>
-                  <label>Descripción o Color</label>
-                  <input name="spec_cel[color]" value="{{ old('spec_cel.color') }}">
-                  @error('spec_cel.color') <div class="err">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                  <label>Almacenamiento (GB)</label>
-                  <input type="number" min="1" name="spec_cel[almacenamiento_gb]" value="{{ old('spec_cel.almacenamiento_gb') }}">
-                  @error('spec_cel.almacenamiento_gb') <div class="err">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                  <label>RAM (GB) <span class="hint">(opcional)</span></label>
-                  <input type="number" min="1" name="spec_cel[ram_gb]" value="{{ old('spec_cel.ram_gb') }}">
-                  @error('spec_cel.ram_gb') <div class="err">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                  <label>IMEI</label>
-                  <input name="spec_cel[imei]" value="{{ old('spec_cel.imei') }}" placeholder="Ej. 356xxxxxxxxxxxxx">
-                  @error('spec_cel.imei') <div class="err">{{ $message }}</div> @enderror
-                </div>
-              </div>
-            </div>
-
-            {{-- Descripción (visible impresora | monitor | pantalla | periférico | otro) --}}
-            <div class="form-group" id="descripcion-wrap" style="{{ in_array(old('tipo'), ['impresora','monitor','pantalla','periferico','otro']) ? '' : 'display:none' }}">
+            <div class="form-group" id="descripcion-wrap" style="{{ (old('tipo')==='consumible') ? '' : 'display:none' }}">
               <label>Descripción</label>
               <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles relevantes…">{{ old('descripcion') }}</textarea>
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Solo para cantidad --}}
             <div class="form-group" id="um-wrap" style="{{ old('tracking')==='cantidad' ? '' : 'display:none' }}">
               <label>Unidad de medida</label>
               <input name="unidad_medida" value="{{ old('unidad_medida','pieza') }}">
               @error('unidad_medida') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Carga inicial SEGÚN tracking --}}
             <div id="serial-wrap" style="{{ old('tracking')==='serial' ? '' : 'display:none' }}">
               <div class="form-group">
-                <label>Series + Subsidiaria + Unidad de servicio</label>
+                <label>Series</label>
 
                 <div id="seriesRows"></div>
 
@@ -230,41 +207,153 @@
               </div>
 
               <template id="serieRowTpl">
-                <div class="grid-3" style="align-items:end;margin-bottom:10px;">
-                  <div>
-                    <label style="font-size:12px;color:#374151;">Serie</label>
-                    <input type="text" name="series[__i__][serie]" placeholder="Ej. ABC123" required>
+                <div class="serie-row" data-serie-row data-serie-index="__i__">
+                  <div class="serie-header" data-serie-toggle>
+                    <div class="serie-left">
+                      <div class="serie-title" data-serie-title>Serie __n__</div>
+                      <div class="serie-subtitle" data-serie-preview>Captura la información de esta serie</div>
+                    </div>
+                    <div class="serie-actions">
+                      <span class="serie-toggle" data-serie-chevron>▾</span>
+                    </div>
                   </div>
 
-                  <div>
-                    <label style="font-size:12px;color:#374151;">Subsidiaria</label>
-                    <select name="series[__i__][subsidiaria_id]">
-                      <option value="">— Sin subsidiaria —</option>
-                      @foreach($subsidiarias as $s)
-                        <option value="{{ $s->id }}">{{ $s->nombre }}</option>
-                      @endforeach
-                    </select>
-                  </div>
+                  <div class="serie-body" data-serie-body>
+                    <div style="font-weight:700; margin:12px 0 10px; color:#111827;">Series + Subsidiaria + Unidad de servicio</div>
 
-                  <div>
-                    <label style="font-size:12px;color:#374151;">Unidad de servicio</label>
-                    <select name="series[__i__][unidad_servicio_id]">
-                      <option value="">— Sin unidad —</option>
-                      @foreach($unidadesServicio as $u)
-                        <option value="{{ $u->id }}">{{ $u->nombre }}</option>
-                      @endforeach
-                    </select>
-                  </div>
+                    <div class="grid-3" style="align-items:end;">
+                      <div>
+                        <label style="font-size:12px;color:#374151;">Serie</label>
+                        <input type="text" name="series[__i__][serie]" placeholder="Ej. ABC123" required data-serie-input>
+                      </div>
 
-                  <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
-                    <button type="button" class="btn-cancel btnRemoveRow" style="padding:6px 12px;">
-                      Quitar
-                    </button>
+                      <div>
+                        <label style="font-size:12px;color:#374151;">Subsidiaria</label>
+                        <select name="series[__i__][subsidiaria_id]">
+                          <option value="">— Sin subsidiaria —</option>
+                          @foreach($subsidiarias as $s)
+                            <option value="{{ $s->id }}">{{ $s->nombre }}</option>
+                          @endforeach
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style="font-size:12px;color:#374151;">Unidad de servicio</label>
+                        <select name="series[__i__][unidad_servicio_id]">
+                          <option value="">— Sin unidad —</option>
+                          @foreach($unidadesServicio as $u)
+                            <option value="{{ $u->id }}">{{ $u->nombre }}</option>
+                          @endforeach
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="spec-pc" style="display:none; margin-top:12px;">
+                      <div style="font-weight:700;margin:6px 0 8px;">Especificaciones (por serie) - Equipo de cómputo</div>
+
+                      <div class="grid-2">
+                        <div>
+                          <label>Descripción o Color</label>
+                          <input name="series[__i__][spec_pc][color]" placeholder="Ej. Negro / Gris">
+                        </div>
+
+                        <div>
+                          <label>RAM (GB)</label>
+                          <input type="number" min="1" name="series[__i__][spec_pc][ram_gb]">
+                        </div>
+
+                        <div style="grid-column:1/-1">
+                          <div class="storage-box" data-storage-box>
+                            <div class="storage-head">
+                              <div class="storage-title">Almacenamientos (puedes agregar más de uno)</div>
+                              <button type="button" class="btn-mini btn-mini-add" data-add-storage>+ Agregar almacenamiento</button>
+                            </div>
+
+                            <div data-storage-rows></div>
+
+                            <template data-storage-tpl>
+                              <div class="storage-row">
+                                <div class="grid-2" style="align-items:end;">
+                                  <div>
+                                    <label>Tipo</label>
+                                    <select name="series[__i__][spec_pc][almacenamientos][__j__][tipo]">
+                                      <option value="">Selecciona…</option>
+                                      <option value="ssd">SSD</option>
+                                      <option value="hdd">HDD</option>
+                                      <option value="m2">M.2</option>
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label>Capacidad (GB)</label>
+                                    <input type="number" min="1" name="series[__i__][spec_pc][almacenamientos][__j__][capacidad_gb]" placeholder="Ej. 512">
+                                  </div>
+                                </div>
+
+                                <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                                  <button type="button" class="btn-mini btn-mini-del" data-del-storage>Quitar</button>
+                                </div>
+                              </div>
+                            </template>
+
+                            <div class="hint" style="margin-top:8px;">
+                              Si capturas capacidad, selecciona el tipo (SSD/HDD/M.2).
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style="grid-column:1/-1">
+                          <label>Procesador</label>
+                          <input name="series[__i__][spec_pc][procesador]" placeholder="Ej. Intel Core i5-1135G7">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="spec-cel" style="display:none; margin-top:12px;">
+                      <div style="font-weight:700;margin:6px 0 8px;">Especificaciones (por serie) - Celular / Teléfono</div>
+                      <div class="grid-2">
+                        <div>
+                          <label>Descripción o Color</label>
+                          <input name="series[__i__][spec_cel][color]" placeholder="Ej. Azul / Negro">
+                        </div>
+
+                        <div>
+                          <label>Almacenamiento (GB)</label>
+                          <input type="number" min="1" name="series[__i__][spec_cel][almacenamiento_gb]">
+                        </div>
+
+                        <div>
+                          <label>RAM (GB) <span class="hint">(opcional)</span></label>
+                          <input type="number" min="1" name="series[__i__][spec_cel][ram_gb]">
+                        </div>
+
+                        <div>
+                          <label>IMEI</label>
+                          <input name="series[__i__][spec_cel][imei]" placeholder="Ej. 356xxxxxxxxxxxxx">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="spec-desc" style="display:none; margin-top:12px;">
+                      <div style="font-weight:700;margin:6px 0 8px;">Descripción (por serie)</div>
+                      <textarea
+                        name="series[__i__][descripcion]"
+                        rows="3"
+                        placeholder="Detalles relevantes de esta pieza/serie…"
+                        style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px"
+                      ></textarea>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                      <button type="button" class="btn-cancel btnRemoveRow" style="padding:6px 12px;">
+                        Quitar
+                      </button>
+                    </div>
                   </div>
                 </div>
               </template>
             </div>
-            
+
             <div id="cantidad-wrap" style="{{ old('tracking')==='cantidad' ? '' : 'display:none' }}">
               <div class="form-group">
                 <label>Stock inicial</label>
@@ -273,20 +362,19 @@
                 @error('stock_inicial') <div class="err">{{ $message }}</div> @enderror
               </div>
             </div>
-            
+
             <div class="form-buttons">
               <a href="{{ route('productos.index') }}" class="btn-cancel">Cancelar</a>
               <button class="btn-save" type="submit">Crear</button>
             </div>
-            </form>
-          </div>
+          </form>
         </div>
       </div>
     </div>
+  </div>
 
   <script>
   (function(){
-    const form         = document.getElementById('productoForm');
     const tipo         = document.getElementById('tipo');
     const tracking     = document.getElementById('tracking');
     const trackingWrap = document.getElementById('tracking-wrap');
@@ -294,30 +382,171 @@
     const umWrap       = document.getElementById('um-wrap');
     const serialWrap   = document.getElementById('serial-wrap');
     const cantWrap     = document.getElementById('cantidad-wrap');
-    const equipoSpecs  = document.getElementById('equipo-specs');
     const descWrap     = document.getElementById('descripcion-wrap');
-    const celularSpecs = document.getElementById('celular-specs');
-
-    const colorInput   = document.getElementById('colorInput');
-    const descripcion  = document.getElementById('descripcion');
     const colorConsumibleWrap = document.getElementById('color-consumible-wrap');
 
-    // ===== Repeater de series + subsidiaria =====
     const rowsWrap = document.getElementById('seriesRows');
     const addBtn   = document.getElementById('addSerieBtn');
     const tpl      = document.getElementById('serieRowTpl');
     let rowIndex   = 0;
 
+    // ---- Accordion libre ----
+    function collapseRow(row){
+      row.classList.add('is-collapsed');
+      const che = row.querySelector('[data-serie-chevron]');
+      if (che) che.textContent = '▸';
+    }
+    function expandRow(row){
+      row.classList.remove('is-collapsed');
+      const che = row.querySelector('[data-serie-chevron]');
+      if (che) che.textContent = '▾';
+    }
+    function toggleRow(row){
+      if (row.classList.contains('is-collapsed')) expandRow(row);
+      else collapseRow(row);
+    }
+
+    // ✅ Auto-expande tarjetas con errores al intentar enviar
+    function clearSerieErrors() {
+      document.querySelectorAll('#seriesRows .serie-row.has-error').forEach(r => r.classList.remove('has-error'));
+    }
+
+    function expandSerieContaining(el) {
+      const row = el?.closest?.('.serie-row');
+      if (!row) return;
+      row.classList.add('has-error');
+      // expandir solo esa tarjeta (modo libre)
+      expandRow(row);
+    }
+
+    function setupAutoExpandOnInvalid(formEl) {
+      if (!formEl) return;
+
+      // Captura TODOS los invalid (aunque el navegador solo muestre el primero)
+      formEl.addEventListener('invalid', (e) => {
+        const el = e.target;
+        // si el inválido está dentro de una serie, la expandimos
+        expandSerieContaining(el);
+      }, true); // 👈 capture
+
+      formEl.addEventListener('submit', (e) => {
+        clearSerieErrors();
+
+        // si hay inválidos, evitamos submit, expandimos tarjetas y enfocamos el primero
+        if (!formEl.checkValidity()) {
+          e.preventDefault();
+
+          // fuerza a que el navegador dispare invalid por cada campo
+          formEl.reportValidity();
+
+          // focus al primer inválido visible
+          const firstInvalid = formEl.querySelector(':invalid');
+          if (firstInvalid) {
+            expandSerieContaining(firstInvalid);
+            setTimeout(() => firstInvalid.focus({ preventScroll: false }), 50);
+          }
+          return false;
+        }
+      });
+    }
+
+    // ✅ inicializa
+    setupAutoExpandOnInvalid(document.getElementById('productoForm'));
+
+    function renumberTitles(){
+      const all = Array.from(document.querySelectorAll('#seriesRows [data-serie-row]'));
+      all.forEach((row, idx) => {
+        const n = idx + 1;
+        const title = row.querySelector('[data-serie-title]');
+        if (title) title.textContent = `Serie ${n}`;
+        row.setAttribute('data-serie-number', String(n));
+        updateSeriePreview(row);
+      });
+    }
+
+    function updateSeriePreview(row){
+      const input = row.querySelector('[data-serie-input]');
+      const val = (input?.value || '').trim();
+      const preview = row.querySelector('[data-serie-preview]');
+      if (!preview) return;
+      preview.textContent = val ? `Serie capturada: ${val}` : 'Captura la información de esta serie';
+    }
+
+    function wireAccordion(row){
+      row.querySelector('[data-serie-toggle]')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleRow(row); // ✅ libre: no afecta a las otras
+      });
+
+      row.querySelector('[data-serie-input]')?.addEventListener('input', () => updateSeriePreview(row));
+    }
+
+    function applySpecsVisibilityToRow(row) {
+      const t = (tipo.value || '').toLowerCase();
+
+      const pc = row.querySelector('.spec-pc');
+      const cel = row.querySelector('.spec-cel');
+      const desc = row.querySelector('.spec-desc');
+
+      if (pc) pc.style.display = (t === 'equipo_pc') ? '' : 'none';
+      if (cel) cel.style.display = (t === 'celular') ? '' : 'none';
+
+      const showDescBySerie = (t === 'impresora' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
+      if (desc) desc.style.display = showDescBySerie ? '' : 'none';
+    }
+
+    // ===== Almacenamientos repeater por fila =====
+    function initStorageRepeater(row, iIndex) {
+      const box = row.querySelector('[data-storage-box]');
+      if (!box) return;
+
+      const rows = box.querySelector('[data-storage-rows]');
+      const tpl = box.querySelector('template[data-storage-tpl]');
+      const btnAdd = box.querySelector('[data-add-storage]');
+      if (!rows || !tpl || !btnAdd) return;
+
+      let j = 0;
+
+      function addStorage(values = {}) {
+        const html = tpl.innerHTML
+          .replaceAll('__i__', String(iIndex))
+          .replaceAll('__j__', String(j));
+
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const node = temp.firstElementChild;
+
+        const selTipo = node.querySelector(`select[name="series[${iIndex}][spec_pc][almacenamientos][${j}][tipo]"]`);
+        const inCap   = node.querySelector(`input[name="series[${iIndex}][spec_pc][almacenamientos][${j}][capacidad_gb]"]`);
+
+        if (selTipo && values.tipo) selTipo.value = String(values.tipo);
+        if (inCap && values.capacidad_gb) inCap.value = String(values.capacidad_gb);
+
+        node.querySelector('[data-del-storage]')?.addEventListener('click', () => node.remove());
+
+        rows.appendChild(node);
+        j++;
+      }
+
+      btnAdd.addEventListener('click', () => addStorage());
+
+      if (rows.children.length === 0) addStorage();
+    }
+
     function addSerieRow(values = {}) {
       if (!rowsWrap || !tpl) return;
 
-      const html = tpl.innerHTML.replaceAll('__i__', String(rowIndex));
+      const visibleNumber = rowsWrap.querySelectorAll('[data-serie-row]').length + 1;
+
+      const html = tpl.innerHTML
+        .replaceAll('__i__', String(rowIndex))
+        .replaceAll('__n__', String(visibleNumber));
+
       const temp = document.createElement('div');
       temp.innerHTML = html;
 
       const row = temp.firstElementChild;
 
-      // set values si vienen
       const inputSerie = row.querySelector(`input[name="series[${rowIndex}][serie]"]`);
       const selSubs    = row.querySelector(`select[name="series[${rowIndex}][subsidiaria_id]"]`);
       const selUnidad  = row.querySelector(`select[name="series[${rowIndex}][unidad_servicio_id]"]`);
@@ -326,26 +555,37 @@
       if (selSubs && values.subsidiaria_id) selSubs.value = String(values.subsidiaria_id);
       if (selUnidad && values.unidad_servicio_id) selUnidad.value = String(values.unidad_servicio_id);
 
-      row.querySelector('.btnRemoveRow')?.addEventListener('click', () => row.remove());
+      row.querySelector('.btnRemoveRow')?.addEventListener('click', () => {
+        row.remove();
+        renumberTitles();
+      });
 
       rowsWrap.appendChild(row);
+
+      applySpecsVisibilityToRow(row);
+      initStorageRepeater(row, rowIndex);
+
+      wireAccordion(row);
+      updateSeriePreview(row);
+      renumberTitles();
+
+      // ✅ al agregar: la nueva queda abierta (sin colapsar las demás)
+      expandRow(row);
+
       rowIndex++;
     }
 
     addBtn?.addEventListener('click', () => addSerieRow());
 
-    // Al cargar: si tracking=serial, crea una fila por defecto
     function ensureOneRowIfSerial() {
-      // si está visible serial-wrap y no hay filas, agrega una
       if (serialWrap.style.display !== 'none' && rowsWrap && rowsWrap.children.length === 0) {
         addSerieRow();
       }
     }
 
-    // defaults por tipo (monitor y pantalla como impresora; periférico ahora serial)
     const defaultTracking = {
       consumible: 'cantidad',
-      periferico: 'serial',   
+      periferico: 'serial',
       equipo_pc:  'serial',
       impresora:  'serial',
       monitor:    'serial',
@@ -361,9 +601,7 @@
       umWrap.style.display    = 'none';
       serialWrap.style.display= 'none';
       cantWrap.style.display  = 'none';
-      equipoSpecs.style.display = 'none';
       descWrap.style.display  = 'none';
-      celularSpecs.style.display = 'none';
       colorConsumibleWrap.style.display = 'none';
     }
 
@@ -387,32 +625,16 @@
       cantWrap.style.display   = isCantidad ? '' : 'none';
       serialWrap.style.display = isCantidad ? 'none' : '';
       updateSKUVisibility();
-    }
-
-    function syncColorToDescripcion() {
-      const t = (tipo.value || '').toLowerCase();
-      if (!descripcion) return;
-      if (t === 'equipo_pc') {
-        const color = (colorInput?.value || '').trim();
-        descripcion.value = color;
-      }
+      ensureOneRowIfSerial();
     }
 
     function applyByTipo() {
       const t = (tipo.value || '').toLowerCase();
       if (!t) { resetAll(); return; }
 
-      // Especificaciones solo para Equipo de Cómputo
-      equipoSpecs.style.display = (t === 'equipo_pc') ? '' : 'none';
+      const showDescGlobal = (t === 'consumible');
+      descWrap.style.display = showDescGlobal ? '' : 'none';
 
-      // Especificaciones solo para Celulares
-      celularSpecs.style.display = (t === 'celular') ? '' : 'none';
-
-      // Descripción visible para impresora, monitor, pantalla, periférico u "otro"
-      const showDesc = (t === 'impresora' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
-      descWrap.style.display = showDesc ? '' : 'none';
-
-      // Tracking solo visible si tipo = "otro"
       if (t === 'otro') {
         trackingWrap.style.display = '';
         tracking?.setAttribute('required','required');
@@ -422,49 +644,47 @@
         if (tracking) tracking.value = defaultTracking[t] || '';
       }
 
-      // Campo color solo visible si tipo = "consumible"
-      if (t === 'consumible') {
-        colorConsumibleWrap.style.display = '';
-      } else {
-        colorConsumibleWrap.style.display = 'none';
-      }
+      if (t === 'consumible') colorConsumibleWrap.style.display = '';
+      else colorConsumibleWrap.style.display = 'none';
 
       toggleByTracking();
-      syncColorToDescripcion();
+
+      document.querySelectorAll('#seriesRows .serie-row').forEach(applySpecsVisibilityToRow);
     }
 
     tipo.addEventListener('change', applyByTipo);
     tracking?.addEventListener('change', toggleByTracking);
-    colorInput?.addEventListener('input', syncColorToDescripcion);
-    form?.addEventListener('submit', syncColorToDescripcion);
 
-    if ('{{ old('tipo') }}') {
-      applyByTipo();
-    } else {
-      resetAll();
-      syncColorToDescripcion();
-    }
+    if ('{{ old('tipo') }}') applyByTipo();
+    else resetAll();
   })();
 
+  // === Validar almacenamientos[]: si hay capacidad, tipo requerido (POR SERIE PC) ===
   const form = document.getElementById('productoForm');
   const tipo = document.getElementById('tipo');
 
-  // === Validar almacenamiento (tipo requerido si hay capacidad) ===
   form?.addEventListener('submit', (e) => {
     const tipoProd = (tipo.value || '').toLowerCase();
-    if (tipoProd === 'equipo_pc' || tipoProd === 'otro') {
-      const tipoAlmacen = form.querySelector('[name="spec[almacenamiento][tipo]"]');
-      const capAlmacen = form.querySelector('[name="spec[almacenamiento][capacidad_gb]"]');
+    if (tipoProd !== 'equipo_pc') return;
 
-      const capacidad = parseInt(capAlmacen?.value || 0);
-      const tipoSel   = (tipoAlmacen?.value || '').trim();
+    const rows = form.querySelectorAll('#seriesRows .serie-row');
+    for (const row of rows) {
+      const caps = row.querySelectorAll('[name*="[spec_pc][almacenamientos]"][name$="[capacidad_gb]"]');
 
-      // Si hay capacidad pero no se eligió tipo → error
-      if (capacidad > 0 && !tipoSel) {
-        e.preventDefault();
-        alert('Debes seleccionar el tipo de almacenamiento (SSD, HDD o M.2) si colocas una capacidad.');
-        tipoAlmacen.focus();
-        return false;
+      for (const capInput of caps) {
+        const cap = parseInt(capInput?.value || 0);
+        if (!cap || cap <= 0) continue;
+
+        const tipoName = capInput.name.replace('[capacidad_gb]', '[tipo]');
+        const tipoSelect = row.querySelector(`[name="${tipoName}"]`);
+        const tipoVal = (tipoSelect?.value || '').trim();
+
+        if (!tipoVal) {
+          e.preventDefault();
+          alert('En una de las series: debes seleccionar el tipo de almacenamiento (SSD, HDD o M.2) si colocas una capacidad.');
+          tipoSelect?.focus();
+          return false;
+        }
       }
     }
   });

@@ -290,28 +290,62 @@
         <script>
           (function(){
             const DATA   = @json($data);
+            const IS_CEL = @json(request('tipo_documento') === 'CEL');
+
             const select = document.getElementById('seriesSelect');
             const search = document.getElementById('searchBox');
             const btnAll = document.getElementById('btnSelectVisible');
             const btnClr = document.getElementById('btnClearSel');
 
+            // ✅ normaliza (minúsculas + sin acentos)
+            function normalizeText(str='') {
+              return String(str)
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+            }
+
+            // ✅ true si contiene "celular" y "resguardo" (en cualquier orden y con palabras entre medio)
+            function isCelularResguardo(text='') {
+              const t = normalizeText(text);
+              return t.includes('celular') && t.includes('resguardo');
+            }
+
             function render(filterText='') {
-              const q = (filterText || '').toLowerCase().trim();
+              const q = normalizeText(filterText || '').trim();
               const selected = new Set(Array.from(select.selectedOptions).map(o => o.value));
+
               select.innerHTML = '';
               let groupsRendered = 0;
 
               DATA.forEach(g => {
-                const groupMatches = g.label.toLowerCase().includes(q) || g.producto.toLowerCase().includes(q);
+                // 👇 aquí detectamos el "nombre" base del producto (label y/o producto)
+                const baseName = `${g.label || ''} ${g.producto || ''}`;
+                const isCR = isCelularResguardo(baseName);
+
+                // ✅ filtro por tipo de documento
+                if (IS_CEL) {
+                  if (!isCR) return;        // CEL: solo celular+resguardo
+                } else {
+                  if (isCR) return;         // OES: excluir celular+resguardo
+                }
+
+                // --- tu lógica actual de búsqueda ---
+                const labelN   = normalizeText(g.label || '');
+                const productoN= normalizeText(g.producto || '');
+                const groupMatches = labelN.includes(q) || productoN.includes(q);
+
                 const opts = [];
                 g.options.forEach(o => {
-                  const text = (o.text || '').toLowerCase();
-                  const match = groupMatches || text.includes(q) || (o.serie || '').toLowerCase().includes(q);
+                  const text = normalizeText(o.text || '');
+                  const serie = normalizeText(o.serie || '');
+                  const match = groupMatches || text.includes(q) || serie.includes(q);
                   if (q === '' || match) opts.push(o);
                 });
 
                 if (opts.length) {
                   groupsRendered++;
+
                   const og = document.createElement('optgroup');
                   og.label = g.label;
 

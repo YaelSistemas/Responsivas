@@ -5,25 +5,22 @@
 
   <style>
     /* ====== Zoom responsivo: misma UI, solo se “reduce” en pantallas chicas ====== */
-    .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
+    .zoom-outer{ overflow-x:hidden; }
     .zoom-inner{
-      --zoom: 1;                       /* desktop */
+      --zoom: 1;
       transform: scale(var(--zoom));
       transform-origin: top left;
-      width: calc(100% / var(--zoom)); /* compensa el ancho visual */
+      width: calc(100% / var(--zoom));
     }
-    /* Breakpoints (ajústalos si gustas) */
-    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets landscape */
-    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* tablets/phones grandes */
-    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} } /* phones comunes */
-    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }  /* phones muy chicos */
+    @media (max-width: 1024px){ .zoom-inner{ --zoom:.95; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 768px){  .zoom-inner{ --zoom:.90; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 640px){  .zoom-inner{ --zoom:.70; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
+    @media (max-width: 400px){  .zoom-inner{ --zoom:.55; } .page-wrap{max-width:94vw;padding-left:4vw;padding-right:4vw;} }
 
-    /* iOS: evita auto-zoom al enfocar inputs en móvil */
     @media (max-width: 768px){
       input, select, textarea{ font-size:16px; }
     }
 
-    /* ====== Estilos propios ====== */
     .form-container{max-width:700px;margin:0 auto;background:#fff;padding:24px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
     .form-group{margin-bottom:16px}
     .form-container input,.form-container select,.form-container textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
@@ -37,13 +34,13 @@
 
     /* ===== Toggle Switch ===== */
     .switch {position: relative;display: inline-block;width: 50px;height: 26px;}
-    .switch input {opacity: 0;width: 0;height: 0;}.slider {position: absolute;cursor: pointer;top: 0; left: 0; right: 0; bottom: 0;background-color: #d1d5db; /* gris apagado */transition: .3s;border-radius: 26px;}
+    .switch input {opacity: 0;width: 0;height: 0;}
+    .slider {position: absolute;cursor: pointer;top: 0; left: 0; right: 0; bottom: 0;background-color: #d1d5db;transition: .3s;border-radius: 26px;}
     .slider:before {position: absolute;content: "";height: 20px; width: 20px;left: 3px; bottom: 3px;background-color: white;transition: .3s;border-radius: 50%;}
-    input:checked + .slider {background-color: #16a34a; /* verde activo */}
+    input:checked + .slider {background-color: #16a34a;}
     input:checked + .slider:before {transform: translateX(24px);}
   </style>
 
-  <!-- Envoltura de zoom -->
   <div class="zoom-outer">
     <div class="zoom-inner">
       <div class="py-6">
@@ -82,74 +79,13 @@
               @error('modelo') <div class="err">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Tipo / Categoría --}}
-            <div class="form-group">
-              <label>Tipo</label>
-              <select id="tipo" name="tipo" required>
-                @php
-                  $tipos = [
-                    'equipo_pc'  => 'Equipo de Cómputo',
-                    'impresora'  => 'Impresora/Multifuncional',
-                    'celular'    => 'Celular/Teléfono',
-                    'monitor'    => 'Monitor',
-                    'pantalla'   => 'Pantalla/TV',
-                    'periferico' => 'Periférico',
-                    'consumible' => 'Consumible',
-                    'otro'       => 'Otro',
-                  ];
-                @endphp
-                @foreach($tipos as $val=>$text)
-                  <option value="{{ $val }}" @selected(old('tipo', $producto->tipo)===$val)>{{ $text }}</option>
-                @endforeach
-              </select>
-              @error('tipo') <div class="err">{{ $message }}</div> @enderror
-            </div>
-
-            {{-- Tracking (solo visible si tipo = "otro") --}}
-            @php $oldTipo = old('tipo', $producto->tipo); @endphp
-            <div class="form-group" id="tracking-wrap" style="{{ $oldTipo==='otro' ? '' : 'display:none' }}">
-              <label>Tracking</label>
-              <select name="tracking" id="tracking" {{ $oldTipo==='otro' ? 'required' : '' }}>
-                <option value="serial"   @selected(old('tracking', $producto->tracking)==='serial')>Por número de serie</option>
-                <option value="cantidad" @selected(old('tracking', $producto->tracking)==='cantidad')>Por cantidad (stock)</option>
-              </select>
-              @error('tracking') <div class="err">{{ $message }}</div> @enderror
-            </div>
-
-            {{-- SKU (visible si: tipo = consumible  o (tipo=otro y tracking=cantidad) ) --}}
-            @php
-              $showSku = (old('tipo', $producto->tipo)==='consumible')
-                        || (old('tipo', $producto->tipo)==='otro' && old('tracking', $producto->tracking)==='cantidad');
-            @endphp
-            <div class="form-group" id="sku-wrap" style="{{ $showSku ? '' : 'display:none' }}">
-              <label>SKU <span class="hint">(para consumibles/variantes)</span></label>
-              <input name="sku" value="{{ old('sku', $producto->sku) }}" maxlength="100">
-              @error('sku') <div class="err">{{ $message }}</div> @enderror
-            </div>
-
-            {{-- Descripción (solo impresora / periférico / otro) --}}
-            @php
-              $showDesc = in_array(old('tipo', $producto->tipo), ['impresora', 'celular','monitor','pantalla','periferico','otro'], true);
-            @endphp
-            <div class="form-group" id="descripcion-wrap" style="{{ $showDesc ? '' : 'display:none' }}">
-              <label>Descripción</label>
-              <textarea name="descripcion" rows="3" placeholder="Detalles relevantes...">{{ old('descripcion', $producto->descripcion) }}</textarea>
-              @error('descripcion') <div class="err">{{ $message }}</div> @enderror
-            </div>
-
-            {{-- Unidad de medida (solo si tracking = cantidad) --}}
-            @php $isCantidad = old('tracking', $producto->tracking)==='cantidad'; @endphp
-            <div class="form-group" id="um-wrap" style="{{ $isCantidad ? '' : 'display:none' }}">
-              <label>Unidad de medida <span class="hint">(solo para stock por cantidad)</span></label>
-              <input name="unidad_medida" id="unidad_medida"
-                     value="{{ old('unidad_medida', $producto->unidad ?? 'pieza') }}"
-                     maxlength="30">
-              @error('unidad_medida') <div class="err">{{ $message }}</div> @enderror
-            </div>
-
             {{-- Activo (toggle switch) --}}
             <div class="form-group">
               <label for="activo" style="display:block;margin-bottom:6px;">Activo</label>
+
+              {{-- ✅ Para que al desmarcar sí se mande 0 --}}
+              <input type="hidden" name="activo" value="0">
+
               <label class="switch">
                 <input type="checkbox" name="activo" id="activo" value="1" {{ old('activo', $producto->activo) ? 'checked' : '' }}>
                 <span class="slider"></span>
@@ -161,77 +97,9 @@
               <button class="btn-save" type="submit">Actualizar</button>
             </div>
           </form>
+
         </div>
       </div>
     </div>
   </div>
-
-  <script>
-  (function(){
-    const tipo         = document.getElementById('tipo');
-    const tracking     = document.getElementById('tracking');
-    const trackingWrap = document.getElementById('tracking-wrap');
-    const skuWrap      = document.getElementById('sku-wrap');
-    const umWrap       = document.getElementById('um-wrap');
-    const descWrap     = document.getElementById('descripcion-wrap');
-
-    // Defaults por tipo (cuando NO es "otro")
-    const defaultTracking = {
-      consumible: 'cantidad',
-      periferico: 'serial',   
-      equipo_pc:  'serial',
-      impresora:  'serial',
-      monitor:    'serial',
-      pantalla:   'serial',
-      celular:    'serial'
-    };
-
-    function updateSKUVisibility() {
-      const t = (tipo.value || '').toLowerCase();
-      const showSKU = (t === 'consumible') || (t === 'otro' && tracking?.value === 'cantidad');
-      skuWrap.style.display = showSKU ? '' : 'none';
-    }
-
-    function updateDescripcionVisibility() {
-      const t = (tipo.value || '').toLowerCase();
-      const show = (t === 'impresora' || t === 'celular' || t === 'monitor' || t === 'pantalla' || t === 'periferico' || t === 'otro');
-      descWrap.style.display = show ? '' : 'none';
-    }
-
-    function toggleByTracking() {
-      if (!tracking || !tracking.value) {
-        umWrap.style.display = 'none';
-        updateSKUVisibility();
-        return;
-      }
-      const isCantidad = tracking.value === 'cantidad';
-      umWrap.style.display = isCantidad ? '' : 'none';
-      updateSKUVisibility();
-    }
-
-    function applyByTipo() {
-      const t = (tipo.value || '').toLowerCase();
-      updateDescripcionVisibility();
-
-      // Tracking solo visible cuando tipo = "otro"
-      if (t === 'otro') {
-        trackingWrap.style.display = '';
-        tracking?.setAttribute('required','required');
-      } else {
-        trackingWrap.style.display = 'none';
-        tracking?.removeAttribute('required');
-        if (tracking) tracking.value = defaultTracking[t] || tracking.value || 'serial';
-      }
-
-      toggleByTracking(); // Esto también actualiza SKU
-    }
-
-    // Listeners
-    tipo.addEventListener('change', applyByTipo);
-    tracking?.addEventListener('change', toggleByTracking);
-
-    // Estado inicial coherente:
-    applyByTipo();
-  })();
-  </script>
 </x-app-layout>

@@ -9,7 +9,6 @@
     </h2>
   </x-slot>
 
-
   <style>
     /* ====== Zoom responsivo: MISMA VISTA, solo “más pequeña” en pantallas chicas ====== */
     .zoom-outer{ overflow-x:hidden; } /* evita scroll horizontal por el ancho compensado */
@@ -93,53 +92,53 @@
     /* antes era nth-child(3) porque Fotos estaba en 3; ahora Fotos es 4 */
     .tbl td:nth-child(4) form{display:inline-block;}
 
-      .badge-estado{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    padding:.25rem .75rem;
-    border-radius:9999px;
-    font-size:.75rem;
-    font-weight:600;
-    border-width:1px;
-    border-style:solid;
-  }
+    .badge-estado{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:.25rem .75rem;
+      border-radius:9999px;
+      font-size:.75rem;
+      font-weight:600;
+      border-width:1px;
+      border-style:solid;
+    }
 
-  .badge-disponible{
-    background:#f3f4f6;   /* gris claro */
-    color:#374151;
-    border-color:#d1d5db;
-  }
+    .badge-disponible{
+      background:#f3f4f6;
+      color:#374151;
+      border-color:#d1d5db;
+    }
 
-  .badge-asignado{
-    background:#dcfce7;   /* verde */
-    color:#166534;
-    border-color:#4ade80;
-  }
+    .badge-asignado{
+      background:#dcfce7;
+      color:#166534;
+      border-color:#4ade80;
+    }
 
-  .badge-prestamo{
-    background:#fef9c3;   /* amarillo pastel */
-    color:#92400e;
-    border-color:#eab308;
-  }
+    .badge-prestamo{
+      background:#fef9c3;
+      color:#92400e;
+      border-color:#eab308;
+    }
 
-  .badge-devuelto{
-    background:#dbeafe;   /* azul claro */
-    color:#1d4ed8;
-    border-color:#93c5fd;
-  }
+    .badge-devuelto{
+      background:#dbeafe;
+      color:#1d4ed8;
+      border-color:#93c5fd;
+    }
 
-  .badge-baja{
-    background:#fee2e2;   /* rojo claro */
-    color:#b91c1c;
-    border-color:#fecaca;
-  }
+    .badge-baja{
+      background:#fee2e2;
+      color:#b91c1c;
+      border-color:#fecaca;
+    }
 
-  .badge-reparacion{
-    background:#ffedd5;   /* naranja */
-    color:#c2410c;
-    border-color:#fed7aa;
-  }
+    .badge-reparacion{
+      background:#ffedd5;
+      color:#c2410c;
+      border-color:#fed7aa;
+    }
 
     .loading::after{
       content: '';
@@ -158,16 +157,15 @@
       font-size:.75rem;
       font-weight:700;
       line-height:1;
-      border:1px solid #93c5fd;   /* azul borde */
-      background:#dbeafe;         /* azul claro */
-      color:#1d4ed8;              /* azul texto */
+      border:1px solid #93c5fd;
+      background:#dbeafe;
+      color:#1d4ed8;
       max-width: 180px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    /* cuando no hay subsidiaria (si quieres igual azul, deja esto igual que arriba) */
     .sub-pill--none{
       border-color:#93c5fd;
       background:#dbeafe;
@@ -184,9 +182,9 @@
       font-size:.75rem;
       font-weight:700;
       line-height:1;
-      border:1px solid #c4b5fd;   /* morado borde */
-      background:#ede9fe;         /* morado claro */
-      color:#5b21b6;              /* morado texto */
+      border:1px solid #c4b5fd;
+      background:#ede9fe;
+      color:#5b21b6;
       max-width: 180px;
       white-space: nowrap;
       overflow: hidden;
@@ -197,6 +195,141 @@
       background:#ede9fe;
       color:#5b21b6;
     }
+
+    /* ==========================================================
+       ✅ CAMBIO: Bulk modal tipo CREATE (tarjetas/accordion)
+       ========================================================== */
+    #bulk-modal .panel{ width:min(1100px,96vw); }
+
+    .bulk-scroll{
+      overflow:auto;
+      padding-right:6px;
+      margin-top:10px;
+      max-height: calc(90vh - 160px);
+    }
+
+    .serie-card{
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:12px;
+      background:#fff;
+    }
+    .serie-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:6px 6px 10px;
+    }
+    .serie-title{
+      font-weight:800;
+      font-size:14px;
+      line-height:1.2;
+    }
+    .serie-sub{
+      font-size:12px;
+      color:#6b7280;
+      margin-top:2px;
+    }
+    .serie-toggle{
+      border:1px solid #e5e7eb;
+      background:#fff;
+      border-radius:10px;
+      padding:6px 10px;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1;
+    }
+
+    .serie-body{ display:none; padding:10px 6px 6px; }
+    .serie-card.open .serie-body{ display:block; }
+
+    .grid-3{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(220px,1fr));
+      gap:12px;
+      align-items:end;
+    }
+    .grid-2{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(240px,1fr));
+      gap:12px;
+      align-items:end;
+    }
+    .grid-1{ display:grid; grid-template-columns:1fr; gap:12px; }
+
+    @media (max-width: 900px){
+      .grid-3{ grid-template-columns:1fr; }
+      .grid-2{ grid-template-columns:1fr; }
+    }
+
+    .field label{ display:block; font-size:12px; color:#374151; font-weight:700; margin-bottom:6px; }
+    .inp{
+      width:100%;
+      border:1px solid #d1d5db;
+      border-radius:10px;
+      padding:10px 12px;
+      outline:none;
+    }
+    .inp:focus{ border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+
+    .section-title{
+      font-weight:800;
+      font-size:13px;
+      margin:14px 0 10px;
+      color:#111827;
+    }
+    .muted{ color:#6b7280; font-size:12px; }
+
+    .alm-wrap{
+      border:1px dashed #d1d5db;
+      border-radius:12px;
+      padding:10px;
+      background:#f9fafb;
+    }
+    .alm-row{
+      display:grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap:10px;
+      align-items:end;
+      margin-top:10px;
+    }
+    @media (max-width: 900px){
+      .alm-row{ grid-template-columns:1fr; }
+    }
+
+    .btn-green{
+      background:#16a34a;
+      color:#fff;
+      border:none;
+      padding:.45rem .9rem;
+      border-radius:.6rem;
+      font-weight:800;
+      cursor:pointer;
+    }
+    .btn-green:hover{ background:#15803d; }
+
+    .btn-red{
+      background:#ef4444;
+      color:#fff;
+      border:none;
+      padding:.45rem .9rem;
+      border-radius:.6rem;
+      font-weight:800;
+      cursor:pointer;
+    }
+    .btn-red:hover{ background:#dc2626; }
+
+    .btn-gray{
+      background:#f3f4f6;
+      border:1px solid #e5e7eb;
+      color:#374151;
+      padding:.45rem .9rem;
+      border-radius:.6rem;
+      font-weight:800;
+      cursor:pointer;
+    }
+    /* ========================================================== */
   </style>
 
   <!-- Escalamos SOLO el contenido principal.
@@ -252,42 +385,137 @@
               </thead>
               <tbody id="series-tbody">
                 @forelse($series as $s)
-                  @php $sp = $s->specs; @endphp
+                  @php
+                    // sp = valores efectivos por serie (producto + overrides) si existe accessor specs
+                    $sp = (array) ($s->specs ?? $s->especificaciones ?? []);
+                    $tipoProd = (string) ($producto->tipo ?? '');
+
+                    // Descripción por serie (nuevo: observaciones) + fallbacks legacy/producto
+                    $descSerieObs = $s->observaciones ?? null;
+                    $descSerieJson = data_get($s->especificaciones, 'descripcion');
+                    $descProd  = $producto->descripcion ?? null;
+                    $descRaw   = $descSerieObs ?? $descSerieJson ?? $descProd;
+
+                    $desc = $descRaw
+                      ? preg_replace('/\s+/u', ' ', str_replace(["\r\n","\n","\r"], ' ', $descRaw))
+                      : null;
+                  @endphp
+
                   <tr>
                     {{-- Serie + chips --}}
                     <td>
+                      @php
+                        // ✅ Mostrar "Mod." SOLO si:
+                        // 1) ya fue editada (updated_at > created_at)
+                        // 2) y hay overrides reales
+                        $overRaw = (array) ($s->especificaciones ?? []);
+
+                        $clean = function ($v) use (&$clean) {
+                          if (is_array($v)) {
+                            $tmp = [];
+                            foreach ($v as $k => $vv) {
+                              $cv = $clean($vv);
+                              if ($cv !== null) $tmp[$k] = $cv;
+                            }
+                            return count($tmp) ? $tmp : null;
+                          }
+
+                          if ($v === null) return null;
+                          if (is_string($v) && trim($v) === '') return null;
+
+                          if (is_numeric($v) && (float)$v <= 0) return null;
+
+                          return $v;
+                        };
+
+                        $overClean = $clean($overRaw);
+                        $hasOverrides = !empty($overClean);
+
+                        $wasEdited = $s->updated_at && $s->created_at
+                          ? $s->updated_at->gt($s->created_at)
+                          : false;
+
+                        $showMod = $wasEdited && $hasOverrides;
+                      @endphp
+
                       <div class="flex items-center gap-2">
                         <span class="font-mono">{{ $s->serie }}</span>
-                        @if(!empty($s->especificaciones))
+                        @if($showMod)
                           <span class="badge-mod">Mod.</span>
                         @endif
                       </div>
 
-                      @if($producto->tipo === 'equipo_pc' && !empty($sp))
+                      {{-- ===================== CHIPS POR TIPO ===================== --}}
+                      @if($tipoProd === 'equipo_pc')
                         <div class="chips">
-                          @if(!empty($sp['procesador'])) <span class="chip">{{ $sp['procesador'] }}</span>@endif
-                          @if(!empty($sp['ram_gb']))     <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>@endif
-                          @php
-                            $alm = $sp['almacenamiento'] ?? [];
-                            $t = $alm['tipo'] ?? null; $cap = $alm['capacidad_gb'] ?? null;
-                          @endphp
-                          @if($t || $cap)
-                            <span class="chip">{{ strtoupper($t ?? '') }} @if($cap) {{ (int)$cap }} GB @endif</span>
+                          {{-- Color/Descripción --}}
+                          @if(!empty($sp['color']))
+                            <span class="chip">Color: {{ $sp['color'] }}</span>
                           @endif
-                          @if(!empty($sp['color'])) <span class="chip">Color: {{ $sp['color'] }}</span>@endif
-                        </div>
-                      @else
-                        @php
-                          // 1) override de la serie si existe, 2) cae a la descripción del producto
-                          $descSerie = data_get($s->especificaciones, 'descripcion');
-                          $descProd  = $producto->descripcion;
-                          $descRaw   = $descSerie ?? $descProd;
 
-                          // NORMALIZA: quita saltos de línea y espacios dobles
-                          $desc = $descRaw
-                            ? preg_replace('/\s+/u', ' ', str_replace(["\r\n", "\n", "\r"], ' ', $descRaw))
-                            : null;
-                        @endphp
+                          {{-- RAM --}}
+                          @if(!empty($sp['ram_gb']))
+                            <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>
+                          @endif
+
+                          {{-- Almacenamientos (plural nuevo) --}}
+                          @php
+                            $alms = data_get($sp, 'almacenamientos');
+                            if (!is_array($alms)) $alms = [];
+
+                            // fallback por si existe data vieja en singular 'almacenamiento'
+                            if (empty($alms)) {
+                              $old = data_get($sp, 'almacenamiento');
+                              if (is_array($old) && (!empty($old['tipo']) || !empty($old['capacidad_gb']))) {
+                                $alms = [$old];
+                              }
+                            }
+                          @endphp
+
+                          @foreach($alms as $a)
+                            @php
+                              $t = strtoupper((string) data_get($a,'tipo',''));
+                              $c = data_get($a,'capacidad_gb');
+                            @endphp
+                            @if($t || $c)
+                              <span class="chip">
+                                {{ $t ?: 'ALM' }}@if($c) {{ (int)$c }} GB @endif
+                              </span>
+                            @endif
+                          @endforeach
+
+                          {{-- CPU --}}
+                          @if(!empty($sp['procesador']))
+                            <span class="chip">{{ $sp['procesador'] }}</span>
+                          @endif
+                        </div>
+
+                      @elseif($tipoProd === 'celular')
+                        <div class="chips">
+                          {{-- Color/Descripción --}}
+                          @if(!empty($sp['color']))
+                            <span class="chip">Color: {{ $sp['color'] }}</span>
+                          @elseif($desc)
+                            <span class="chip" title="{{ $desc }}">{{ \Illuminate\Support\Str::limit($desc, 70) }}</span>
+                          @endif
+
+                          {{-- Almacenamiento --}}
+                          @if(!empty($sp['almacenamiento_gb']))
+                            <span class="chip">{{ (int)$sp['almacenamiento_gb'] }} GB</span>
+                          @endif
+
+                          {{-- RAM --}}
+                          @if(!empty($sp['ram_gb']))
+                            <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>
+                          @endif
+
+                          {{-- IMEI --}}
+                          @if(!empty($sp['imei']))
+                            <span class="chip">IMEI: {{ $sp['imei'] }}</span>
+                          @endif
+                        </div>
+
+                      @elseif(in_array($tipoProd, ['impresora','monitor','pantalla','periferico','otro'], true))
                         @if($desc)
                           <div class="chips">
                             <span class="chip" title="{{ $desc }}">
@@ -330,25 +558,21 @@
                     {{-- Estado (solo lectura, calculado) --}}
                     <td class="text-center">
                         @php
-                            // Estado técnico que guarda producto_series
-                            $estadoRaw = $s->estado; // disponible / asignado / devuelto / baja / reparacion
+                            $estadoRaw = $s->estado;
                             $estado    = $estadoRaw;
 
-                            // Si está asignado, revisamos el historial para ver el estado lógico actual
                             if ($estadoRaw === 'asignado') {
-
-                                // Tomamos el ÚLTIMO registro relevante de estado
                                 $ultimoEstado = $s->historial()
                                     ->whereIn('accion', ['asignacion', 'edicion_asignacion'])
                                     ->orderByDesc('id')
                                     ->first();
 
-                                $estadoLogico = $ultimoEstado->estado_nuevo ?? null; // asignado / prestamo_provisional
+                                $estadoLogico = $ultimoEstado->estado_nuevo ?? null;
 
                                 if ($estadoLogico === 'prestamo_provisional') {
-                                    $estado = 'prestamo';      // se muestra como “Préstamo”
+                                    $estado = 'prestamo';
                                 } elseif ($estadoLogico === 'asignado') {
-                                    $estado = 'asignado';      // se asegura que vuelva a “Asignado”
+                                    $estado = 'asignado';
                                 }
                             }
 
@@ -390,7 +614,7 @@
                     <td>
                       <div class="flex items-center justify-center gap-3">
                         @can('productos.edit')
-                          <a href="{{ route('productos.series.edit', [$producto, $s]) }}" 
+                          <a href="{{ route('productos.series.edit', [$producto, $s]) }}"
                           class="text-gray-800 hover:text-gray-900" title="Editar">
                             <i class="fa-solid fa-pen"></i>
                           </a>
@@ -425,128 +649,45 @@
     </div>
   </div>
 
-  {{-- MODAL: Alta masiva (solo crear) --}}
+  {{-- ==========================================================
+       ✅ CAMBIO: MODAL Alta masiva estilo CREATE (accordion)
+       Mantiene el POST a la MISMA ruta: productos.series.store
+     ========================================================== --}}
   @can('productos.create')
-  <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="backdrop" data-close="1"></div>
+    @php
+      $tipoProd = (string) ($producto->tipo ?? '');
+    @endphp
 
-    <div class="panel">
-      <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
-      <h3>Alta masiva de series</h3>
+    <div id="bulk-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="backdrop" data-close="1"></div>
 
-      <form id="bulkForm" method="POST" action="{{ route('productos.series.store', $producto) }}">
-        @csrf
-
+      <div class="panel">
+        <button class="close" type="button" aria-label="Cerrar" data-close="1">&times;</button>
+        <h3>Alta masiva de series</h3>
         <div class="hint" style="margin-bottom:10px">
-          Agrega varias series y asigna su subsidiaria. Se crearán como <b>Disponible</b>.
+          Agrega varias series y asigna su subsidiaria/unidad. Se crearán como <b>Disponible</b>.
         </div>
 
-        <div id="rowsWrap" style="display:flex;flex-direction:column;gap:14px;">
-          @php
-            $oldRows = old('series', []);
-            if (!is_array($oldRows)) $oldRows = [];
-          @endphp
+        <form id="bulkForm" method="POST" action="{{ route('productos.series.store', $producto) }}">
+          @csrf
 
-          @if(count($oldRows))
-            @foreach($oldRows as $i => $r)
-              <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
-                <div>
-                  <label>Serie</label>
-                  <input class="inp"
-                        name="series[{{ $i }}][serie]"
-                        value="{{ $r['serie'] ?? '' }}"
-                        placeholder="Ej. ABC123"
-                        autocomplete="off"
-                        required>
-                  @error("series.$i.serie") <div class="err">{{ $message }}</div> @enderror
-                </div>
+          <div class="bulk-scroll">
+            <div id="rowsWrap" style="display:flex;flex-direction:column;gap:14px;"></div>
 
-                <div>
-                  <label>Subsidiaria</label>
-                  <select class="inp" name="series[{{ $i }}][subsidiaria_id]">
-                    <option value="">— Sin subsidiaria —</option>
-                    @foreach(($subsidiarias ?? []) as $sub)
-                      <option value="{{ $sub->id }}"
-                        @selected((string)($r['subsidiaria_id'] ?? '') === (string)$sub->id)>
-                        {{ $sub->nombre }}
-                      </option>
-                    @endforeach
-                  </select>
-                  @error("series.$i.subsidiaria_id") <div class="err">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                  <label>Unidad de servicio</label>
-                  <select class="inp" name="series[{{ $i }}][unidad_servicio_id]">
-                    <option value="">— Sin unidad de servicio —</option>
-                    @foreach(($unidadesServicio ?? []) as $u)
-                      <option value="{{ $u->id }}"
-                        @selected((string)($r['unidad_servicio_id'] ?? '') === (string)$u->id)>
-                        {{ $u->nombre }}
-                      </option>
-                    @endforeach
-                  </select>
-                  @error("series.$i.unidad_servicio_id") <div class="err">{{ $message }}</div> @enderror
-                </div>
-
-                <div style="display:flex;justify-content:flex-end;">
-                  <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">
-                    Quitar
-                  </button>
-                </div>
-              </div>
-            @endforeach
-          @else
-            <div class="bulk-row" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;">
-              <div>
-                <label>Serie</label>
-                <input class="inp" name="series[0][serie]" placeholder="Ej. ABC123" autocomplete="off" required>
-              </div>
-
-              <div>
-                <label>Subsidiaria</label>
-                <select class="inp" name="series[0][subsidiaria_id]">
-                  <option value="">— Sin subsidiaria —</option>
-                  @foreach(($subsidiarias ?? []) as $sub)
-                    <option value="{{ $sub->id }}">{{ $sub->nombre }}</option>
-                  @endforeach
-                </select>
-              </div>
-
-              <div>
-                <label>Unidad de servicio</label>
-                <select class="inp" name="series[0][unidad_servicio_id]">
-                  <option value="">— Sin unidad de servicio —</option>
-                  @foreach(($unidadesServicio ?? []) as $u)
-                    <option value="{{ $u->id }}">{{ $u->nombre }}</option>
-                  @endforeach
-                </select>
-              </div>
-
-              <div style="display:flex;justify-content:flex-end;">
-                <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">
-                  Quitar
-                </button>
-              </div>
+            <div style="margin-top:14px;">
+              <button type="button" id="btnAddRow" class="btn-green">+ Agregar serie</button>
             </div>
-          @endif
-        </div>
+          </div>
 
-        <div style="margin-top:14px;">
-          <button type="button" id="btnAddRow" class="btn btn-primary" style="background:#16a34a;border:none">
-            + Agregar serie
-          </button>
-        </div>
-
-        <div class="actions" style="margin-top:16px;">
-          <button type="button" class="btn btn-light" data-close="1">Cancelar</button>
-          <button type="submit" class="btn btn-primary" id="btnBulkSave">Guardar</button>
-        </div>
-      </form>
+          <div class="actions" style="margin-top:16px;">
+            <button type="button" class="btn-gray" data-close="1">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btnBulkSave">Guardar</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
-@endcan
-
+  @endcan
+  {{-- ========================================================== --}}
 
   {{-- MODALES DE FOTOS (uno por serie) --}}
   @foreach($series as $s)
@@ -597,7 +738,7 @@
 
   {{-- CONTENEDOR GLOBAL PARA MODAL AJAX DE HISTORIAL --}}
   <div id="ajax-modal-container"></div>
-  
+
   <script>
     (function(){
       document.querySelectorAll('[data-open-fotos]').forEach(a=>{
@@ -762,144 +903,346 @@
   });
   </script>
 
-<script>
-(function(){
-  const modal   = document.getElementById('bulk-modal');
-  const openBtn = document.getElementById('open-bulk');
-  const form    = document.getElementById('bulkForm');
-  const wrap    = document.getElementById('rowsWrap');
-  const addBtn  = document.getElementById('btnAddRow');
-  const btnSave = document.getElementById('btnBulkSave');
+  {{-- ==========================================================
+       ✅ CAMBIO: JS Alta masiva estilo CREATE (accordion)
+       - Respeta payload existente: series[i][serie], [subsidiaria_id], [unidad_servicio_id]
+       - En specs usa: series[i][specs][...]
+       - Para tipos simples: series[i][observaciones] (sin romper store si lo ignora)
+     ========================================================== --}}
+  @can('productos.create')
+  <script>
+  (function(){
+    const modal   = document.getElementById('bulk-modal');
+    const openBtn = document.getElementById('open-bulk');
+    const form    = document.getElementById('bulkForm');
+    const wrap    = document.getElementById('rowsWrap');
+    const addBtn  = document.getElementById('btnAddRow');
+    const btnSave = document.getElementById('btnBulkSave');
 
-  function openModal(){
-    modal.classList.add('open');
-    setTimeout(()=> {
-      const first = wrap?.querySelector('input[name*="[serie]"]');
-      first?.focus();
-    }, 30);
-  }
-  function closeModal(){
-    modal.classList.remove('open');
-  }
+    const tipoProd = @json((string)($producto->tipo ?? ''));
 
-  openBtn?.addEventListener('click', openModal);
-  modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal?.classList.contains('open')) closeModal(); });
+    // opciones para selects (seguro, sin clonar del DOM)
+    const SUBS_OPTS = @json(collect($subsidiarias ?? [])->map(fn($s)=>['id'=>$s->id,'nombre'=>$s->nombre])->values());
+    const UNI_OPTS  = @json(collect($unidadesServicio ?? [])->map(fn($u)=>['id'=>$u->id,'nombre'=>$u->nombre])->values());
 
-  // Crea una fila nueva
-  function makeRow(index){
-    const row = document.createElement('div');
-    row.className = 'bulk-row';
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;';
+    const OLD_ROWS = @json(old('series', []));
 
-    row.innerHTML = `
-      <div>
-        <label>Serie</label>
-        <input class="inp" name="series[${index}][serie]" value="" placeholder="Ej. ABC123" autocomplete="off" required>
-      </div>
+    function esc(v){
+      return String(v ?? '')
+        .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+        .replaceAll('"','&quot;').replaceAll("'","&#039;");
+    }
 
-      <div>
-        <label>Subsidiaria</label>
-        <select class="inp" name="series[${index}][subsidiaria_id]">
-          <option value="">— Sin subsidiaria —</option>
-          ${getSubsidiariasOptionsHTML()}
-        </select>
-      </div>
+    function optHTML(list, selected){
+      return (list || []).map(x =>
+        `<option value="${x.id}" ${String(selected)===String(x.id) ? 'selected':''}>${esc(x.nombre)}</option>`
+      ).join('');
+    }
 
-      <div>
-        <label>Unidad de servicio</label>
-        <select class="inp" name="series[${index}][unidad_servicio_id]">
-          <option value="">— Sin unidad de servicio —</option>
-          ${getUnidadesOptionsHTML()}
-        </select>
-      </div>
+    function openModal(){
+      modal.classList.add('open');
+      setTimeout(()=> wrap?.querySelector('input[name*="[serie]"]')?.focus(), 30);
+    }
+    function closeModal(){ modal.classList.remove('open'); }
 
-      <div style="display:flex;justify-content:flex-end;">
-        <button type="button" class="btn btn-light btn-remove-row" style="background:#ef4444;color:#fff;border:none">Quitar</button>
-      </div>
-    `;
-    return row;
-  }
+    openBtn?.addEventListener('click', openModal);
+    modal?.addEventListener('click', (e)=>{ if(e.target.dataset.close) closeModal(); });
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && modal?.classList.contains('open')) closeModal(); });
 
-  // Toma las options existentes del primer select (para no duplicar PHP)
-  function getSubsidiariasOptionsHTML(){
-    const anySelect = wrap?.querySelector('select[name*="[subsidiaria_id]"]');
-    if(!anySelect) return '';
-    const opts = [...anySelect.querySelectorAll('option')]
-      .filter(o => o.value !== '') // quitamos "Sin subsidiaria" porque ya lo pusimos arriba
-      .map(o => `<option value="${o.value}">${o.textContent}</option>`)
-      .join('');
-    return opts;
-  }
+    function almRowHTML(i, j, tipoVal='', capVal=''){
+      return `
+        <div class="alm-row" data-alm-row="${i}">
+          <div class="field">
+            <label>Tipo</label>
+            <select class="inp" name="series[${i}][specs][almacenamientos][${j}][tipo]">
+              <option value="">Selecciona...</option>
+              <option value="SSD" ${String(tipoVal).toUpperCase()==='SSD'?'selected':''}>SSD</option>
+              <option value="HDD" ${String(tipoVal).toUpperCase()==='HDD'?'selected':''}>HDD</option>
+              <option value="M.2" ${String(tipoVal).toUpperCase()==='M.2'?'selected':''}>M.2</option>
+            </select>
+          </div>
 
-  function getUnidadesOptionsHTML(){
-    const anySelect = wrap?.querySelector('select[name*="[unidad_servicio_id]"]');
-    if(!anySelect) return '';
-    return [...anySelect.querySelectorAll('option')]
-      .filter(o => o.value !== '') // quitamos "Sin unidad..." porque ya lo pusimos arriba
-      .map(o => `<option value="${o.value}">${o.textContent}</option>`)
-      .join('');
-  }
+          <div class="field">
+            <label>Capacidad (GB)</label>
+            <input class="inp" type="number" name="series[${i}][specs][almacenamientos][${j}][capacidad_gb]" value="${esc(capVal)}" placeholder="Ej. 512">
+          </div>
 
-  // Renumera names: series[0]...[n]
-  function renumber(){
-    const rows = [...wrap.querySelectorAll('.bulk-row')];
-    rows.forEach((row, i) => {
-      const input  = row.querySelector('input[name*="[serie]"]');
-      const subSel = row.querySelector('select[name*="[subsidiaria_id]"]');
-      const uniSel = row.querySelector('select[name*="[unidad_servicio_id]"]');
+          <div style="display:flex;justify-content:flex-end;">
+            <button type="button" class="btn-red" data-del-alm="1" style="padding:.45rem .85rem;">Quitar</button>
+          </div>
+        </div>
+      `;
+    }
 
-      if(input)  input.name  = `series[${i}][serie]`;
-      if(subSel) subSel.name = `series[${i}][subsidiaria_id]`;
-      if(uniSel) uniSel.name = `series[${i}][unidad_servicio_id]`;
+    function buildSpecsHTML(i, data){
+      const specs = (data && typeof data === 'object') ? (data.specs || {}) : {};
+      const get = (k, fallback='') => (specs?.[k] ?? data?.[k] ?? fallback);
+
+      if(tipoProd === 'celular'){
+        return `
+          <div class="section-title">Especificaciones (por serie) - Celular / Teléfono</div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Descripción o Color</label>
+              <input class="inp" name="series[${i}][specs][color]" value="${esc(get('color'))}" placeholder="Ej. Azul / Negro">
+            </div>
+            <div class="field">
+              <label>Almacenamiento (GB)</label>
+              <input class="inp" type="number" name="series[${i}][specs][almacenamiento_gb]" value="${esc(get('almacenamiento_gb'))}" placeholder="Ej. 128">
+            </div>
+            <div class="field">
+              <label>RAM (GB) (opcional)</label>
+              <input class="inp" type="number" name="series[${i}][specs][ram_gb]" value="${esc(get('ram_gb'))}" placeholder="Ej. 6">
+            </div>
+            <div class="field">
+              <label>IMEI</label>
+              <input class="inp" name="series[${i}][specs][imei]" value="${esc(get('imei'))}" placeholder="Ej. 356xxxxxxxxxxxxx">
+            </div>
+          </div>
+        `;
+      }
+
+      if(tipoProd === 'equipo_pc'){
+        const alms = Array.isArray(specs?.almacenamientos) ? specs.almacenamientos : [];
+        const rows = (alms.length ? alms : [{}]).map((a, j) => {
+          const t = a?.tipo ?? '';
+          const c = a?.capacidad_gb ?? '';
+          return almRowHTML(i, j, t, c);
+        }).join('');
+
+        return `
+          <div class="section-title">Especificaciones (por serie) - Equipo de cómputo</div>
+          <div class="grid-2">
+            <div class="field">
+              <label>Descripción o Color</label>
+              <input class="inp" name="series[${i}][specs][color]" value="${esc(get('color'))}" placeholder="Ej. Negro / Gris">
+            </div>
+            <div class="field">
+              <label>RAM (GB)</label>
+              <input class="inp" type="number" name="series[${i}][specs][ram_gb]" value="${esc(get('ram_gb'))}" placeholder="Ej. 16">
+            </div>
+          </div>
+
+          <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span>Almacenamientos (puedes agregar más de uno)</span>
+            <button type="button" class="btn-green" data-add-alm="1" data-serie-index="${i}" style="padding:.35rem .7rem;border-radius:.55rem;">
+              + Agregar almacenamiento
+            </button>
+          </div>
+
+          <div class="alm-wrap" data-alm-wrap="${i}">
+            ${rows}
+            <div class="muted" style="margin-top:8px;">Si capturas capacidad, selecciona el tipo (SSD/HDD/M.2).</div>
+          </div>
+
+          <div class="section-title">Procesador</div>
+          <div class="grid-1">
+            <div class="field">
+              <label>Procesador</label>
+              <input class="inp" name="series[${i}][specs][procesador]" value="${esc(get('procesador'))}" placeholder="Ej. Intel Core i5-1135G7">
+            </div>
+          </div>
+        `;
+      }
+
+      // tipos simples (impresora/monitor/pantalla/periferico/otro)
+      return `
+        <div class="section-title">Descripción (por serie)</div>
+        <div class="grid-1">
+          <div class="field">
+            <label>Detalles relevantes de esta pieza/serie</label>
+            <textarea class="inp" name="series[${i}][observaciones]" rows="4" placeholder="Detalles relevantes de esta pieza/serie...">${esc(data?.observaciones ?? '')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    function serieCardHTML(i, data){
+      const serie = data?.serie ?? '';
+      const subId = data?.subsidiaria_id ?? '';
+      const uniId = data?.unidad_servicio_id ?? '';
+
+      return `
+        <div class="serie-card open" data-serie-card="1">
+          <div class="serie-head">
+            <div>
+              <div class="serie-title">Serie ${i+1}</div>
+              <div class="serie-sub">Captura la información de esta serie</div>
+            </div>
+
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button type="button" class="serie-toggle" data-toggle="1" title="Contraer/expandir">▾</button>
+            </div>
+          </div>
+
+          <div class="serie-body">
+            <div class="section-title">Series + Subsidiaria + Unidad de servicio</div>
+
+            <div class="grid-3">
+              <div class="field">
+                <label>Serie</label>
+                <input class="inp" name="series[${i}][serie]" value="${esc(serie)}" placeholder="Ej. ABC123" autocomplete="off" required>
+              </div>
+
+              <div class="field">
+                <label>Subsidiaria</label>
+                <select class="inp" name="series[${i}][subsidiaria_id]">
+                  <option value="">— Sin subsidiaria —</option>
+                  ${optHTML(SUBS_OPTS, subId)}
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Unidad de servicio</label>
+                <select class="inp" name="series[${i}][unidad_servicio_id]">
+                  <option value="">— Sin unidad —</option>
+                  ${optHTML(UNI_OPTS, uniId)}
+                </select>
+              </div>
+            </div>
+
+            ${buildSpecsHTML(i, data)}
+
+            <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+              <button type="button" class="btn-red" data-remove-serie="1">Quitar</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAllFromOld(){
+      wrap.innerHTML = '';
+      const rows = Array.isArray(OLD_ROWS) ? OLD_ROWS : [];
+      if(rows.length){
+        rows.forEach((r, i)=> wrap.insertAdjacentHTML('beforeend', serieCardHTML(i, r)));
+      } else {
+        wrap.insertAdjacentHTML('beforeend', serieCardHTML(0, {}));
+      }
+    }
+
+    function renumberAll(){
+      const cards = [...wrap.querySelectorAll('[data-serie-card]')];
+
+      cards.forEach((card, i)=>{
+        const title = card.querySelector('.serie-title');
+        if(title) title.textContent = `Serie ${i+1}`;
+
+        // renumera series[old] -> series[i]
+        card.querySelectorAll('[name^="series["]').forEach(el=>{
+          el.name = el.name.replace(/^series\[\d+\]/, `series[${i}]`);
+        });
+
+        if(tipoProd === 'equipo_pc'){
+          const almRows = [...card.querySelectorAll('[data-alm-row]')];
+          almRows.forEach((r, j)=>{
+            r.querySelectorAll('[name*="[almacenamientos]"]').forEach(el=>{
+              el.name = el.name.replace(/\[almacenamientos\]\[\d+\]/, `[almacenamientos][${j}]`);
+            });
+          });
+        }
+
+        const addAlm = card.querySelector('[data-add-alm]');
+        if(addAlm) addAlm.setAttribute('data-serie-index', String(i));
+
+        const almWrap = card.querySelector('[data-alm-wrap]');
+        if(almWrap) almWrap.setAttribute('data-alm-wrap', String(i));
+
+        card.querySelectorAll('[data-alm-row]').forEach(row=>{
+          row.setAttribute('data-alm-row', String(i));
+        });
+      });
+    }
+
+    // render inicial
+    renderAllFromOld();
+    renumberAll();
+
+    // agregar serie
+    addBtn?.addEventListener('click', ()=>{
+      const i = wrap.querySelectorAll('[data-serie-card]').length;
+      wrap.insertAdjacentHTML('beforeend', serieCardHTML(i, {}));
+      renumberAll();
+      wrap.querySelector(`input[name="series[${i}][serie]"]`)?.focus();
     });
-  }
 
-  // Agregar fila
-  addBtn?.addEventListener('click', ()=>{
-    const index = wrap.querySelectorAll('.bulk-row').length;
-    const row = makeRow(index);
-    wrap.appendChild(row);
-    row.querySelector('input')?.focus();
-  });
+    // clicks delegados
+    wrap.addEventListener('click', (e)=>{
+      const tg = e.target.closest('[data-toggle]');
+      if(tg){
+        const card = tg.closest('.serie-card');
+        if(card){
+          card.classList.toggle('open');
+          tg.textContent = card.classList.contains('open') ? '▾' : '▸';
+        }
+        return;
+      }
 
-  // Quitar fila (delegado)
-  wrap?.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.btn-remove-row');
-    if(!btn) return;
+      const rm = e.target.closest('[data-remove-serie]');
+      if(rm){
+        const cards = wrap.querySelectorAll('[data-serie-card]');
+        if(cards.length <= 1){
+          const card = rm.closest('.serie-card');
+          card?.querySelectorAll('input,select,textarea').forEach(el=>{
+            if(el.tagName === 'SELECT') el.value = '';
+            else el.value = '';
+          });
+          return;
+        }
+        rm.closest('.serie-card')?.remove();
+        renumberAll();
+        return;
+      }
 
-    const rows = wrap.querySelectorAll('.bulk-row');
-    if(rows.length <= 1){
-      // si queda 1, solo limpiamos en vez de eliminar
-      const row = rows[0];
-      row.querySelector('input[name*="[serie]"]').value = '';
-      row.querySelector('select[name*="[subsidiaria_id]"]').value = '';
-      row.querySelector('select[name*="[unidad_servicio_id]"]').value = '';
-      row.querySelector('input')?.focus();
-      return;
-    }
+      const addAlmBtn = e.target.closest('[data-add-alm]');
+      if(addAlmBtn && tipoProd === 'equipo_pc'){
+        const card = addAlmBtn.closest('.serie-card');
+        const idx  = Number(addAlmBtn.getAttribute('data-serie-index') || 0);
+        const almWrap = card?.querySelector(`[data-alm-wrap="${idx}"]`);
+        if(!almWrap) return;
 
-    btn.closest('.bulk-row')?.remove();
-    renumber();
-  });
+        const j = almWrap.querySelectorAll('[data-alm-row]').length;
+        almWrap.insertAdjacentHTML('beforeend', almRowHTML(idx, j, '', ''));
+        renumberAll();
+        return;
+      }
 
-  // Previene doble submit
-  let sending = false;
-  form?.addEventListener('submit', (e)=>{
-    if(sending){ e.preventDefault(); return; }
-    sending = true;
-    if(btnSave){
-      btnSave.disabled = true;
-      btnSave.style.opacity = .7;
-    }
-  });
+      const delAlm = e.target.closest('[data-del-alm]');
+      if(delAlm && tipoProd === 'equipo_pc'){
+        const row = delAlm.closest('.alm-row');
+        const card = delAlm.closest('.serie-card');
 
-  // Si hubo errores de validación del bulk, abre modal
-  @if ($errors->has('series') || collect($errors->keys())->first(fn($k)=> str_starts_with($k, 'series.')))
-    openModal();
-  @endif
-})();
-</script>
+        const rows = card?.querySelectorAll('.alm-row') || [];
+        if(rows.length <= 1){
+          row?.querySelectorAll('input,select').forEach(el=> el.value = '');
+          return;
+        }
 
+        row?.remove();
+        renumberAll();
+        return;
+      }
+    });
+
+    // doble submit
+    let sending = false;
+    form?.addEventListener('submit', (e)=>{
+      if(sending){ e.preventDefault(); return; }
+      sending = true;
+      if(btnSave){
+        btnSave.disabled = true;
+        btnSave.style.opacity = .7;
+      }
+    });
+
+    // si hubo errores, abrir modal
+    @if ($errors->has('series') || collect($errors->keys())->first(fn($k)=> str_starts_with($k, 'series.')))
+      openModal();
+    @endif
+
+  })();
+  </script>
+  @endcan
+  {{-- ========================================================== --}}
 
 </x-app-layout>

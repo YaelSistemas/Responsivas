@@ -57,22 +57,6 @@
     // ✅ Detecta si esta responsiva es de celulares (CEL)
     $isCel = (($responsiva->tipo_documento ?? null) === 'CEL');
 
-    // ✅ Si es CEL: filtrar SOLO series de productos tipo celular/telefono
-    if ($isCel) {
-      $series = $series->filter(function ($s) {
-        $tipo = strtolower((string) optional($s->producto)->tipo);
-
-        // Ajusta aquí los tipos exactos que uses en tu BD
-        return in_array($tipo, [
-          'celular',
-          'telefono',
-          'teléfono',
-          'movil',
-          'móvil',
-        ], true);
-      })->values();
-    }
-
     // ====== preparar dataset para el selector de series ======
     $groups = $series->groupBy('producto_id');
 
@@ -433,13 +417,31 @@
           (function(){
             const DATA   = @json($data);
             const PRESEL = new Set(@json($selSeries));
+            const IS_CEL = @json((($responsiva->tipo_documento ?? null) === 'CEL'));
+
             const select = document.getElementById('seriesSelect');
             const search = document.getElementById('searchBox');
             const btnAll = document.getElementById('btnSelectVisible');
             const btnClr = document.getElementById('btnClearSel');
 
+            // ✅ normaliza (minúsculas + sin acentos)
+            function normalizeText(str='') {
+              return String(str)
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+            }
+
+            // ✅ true si contiene "celular" y "resguardo" (en cualquier orden)
+            function isCelularResguardo(text='') {
+              const t = normalizeText(text);
+              return t.includes('celular') && t.includes('resguardo');
+            }
+
             function render(filterText='') {
-              const q = (filterText || '').toLowerCase().trim();
+              const q = normalizeText(filterText || '').trim();
+
+              // ✅ mantener selección actual + preseleccionados (lo que ya trae la responsiva)
               const selected = new Set(Array.from(select.selectedOptions).map(o => String(o.value)));
               PRESEL.forEach(v => selected.add(String(v)));
 
@@ -447,11 +449,42 @@
               let groupsRendered = 0;
 
               DATA.forEach(g => {
-                const groupMatches = g.label.toLowerCase().includes(q) || g.producto.toLowerCase().includes(q);
+                const baseName = `${g.label || ''} ${g.producto || ''}`;
+                const isCR = isCelularResguardo(baseName);
+
+                // ✅ Si hay alguna opción preseleccionada dentro del grupo, NO ocultarlo nunca
+                const groupHasPreselected = (g.options || []).some(o => selected.has(String(o.id)));
+
+                // ✅ filtro por tipo de documento (CEL vs OES)
+                // - CEL: solo CR
+                // - OES: excluir CR
+                // - PERO: si el grupo tiene algo ya seleccionado, se muestra sí o sí
+                if (!groupHasPreselected) {
+                  if (IS_CEL) {
+                    if (!isCR) return;
+                  } else {
+                    if (isCR) return;
+                  }
+                }
+
+                // --- tu lógica de búsqueda ---
+                const labelN    = normalizeText(g.label || '');
+                const productoN = normalizeText(g.producto || '');
+                const groupMatches = labelN.includes(q) || productoN.includes(q);
+
                 const opts = [];
-                g.options.forEach(o => {
-                  const text = (o.text || '').toLowerCase();
-                  const match = groupMatches || text.includes(q) || (o.serie || '').toLowerCase().includes(q);
+                (g.options || []).forEach(o => {
+                  const textN = normalizeText(o.text || '');
+                  const serieN = normalizeText(o.serie || '');
+
+                  const match = groupMatches || textN.includes(q) || serieN.includes(q);
+
+                  // ✅ si está seleccionado/preseleccionado, lo mostramos aunque no matchee búsqueda
+                  if (selected.has(String(o.id))) {
+                    opts.push(o);
+                    return;
+                  }
+
                   if (q === '' || match) opts.push(o);
                 });
 
@@ -490,12 +523,18 @@
             }
 
             search.addEventListener('input', () => render(search.value));
+
+            // Seleccionar visibles (solo los que no estén disabled)
             btnAll.addEventListener('click', () => {
               Array.from(select.options).forEach(o => { if (!o.disabled) o.selected = true; });
               select.focus();
             });
+
             btnClr.addEventListener('click', () => {
               Array.from(select.options).forEach(o => { o.selected = false; });
+              // ✅ pero volvemos a aplicar PRESEL para no “perder” lo ya asignado sin querer
+              // (si quieres que "limpiar" realmente quite TODO, me dices y lo cambiamos)
+              render(search.value);
               select.focus();
             });
 
