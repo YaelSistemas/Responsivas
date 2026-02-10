@@ -1,5 +1,13 @@
 @php
   $tituloProd = trim("{$producto->nombre} {$producto->marca} {$producto->modelo}");
+
+  // ✅ Historial SOLO por ROL
+  $isAdmin = auth()->check() && auth()->user()->hasRole('Administrador');
+
+  // ✅ Acciones: mostrar columna si tiene AL MENOS UNO (edit o delete)
+  $canEdit    = auth()->check() && auth()->user()->can('productos.edit');
+  $canDelete  = auth()->check() && auth()->user()->can('productos.delete');
+  $canActions = $canEdit || $canDelete;
 @endphp
 
 <x-app-layout title="Series - {{ $tituloProd }}">
@@ -379,10 +387,19 @@
                   <th class="text-center" style="width:130px">Unidad</th>
                   <th class="text-center" style="width:130px">Fotos</th>
                   <th class="text-center" style="width:200px">Estado</th>
-                  <th class="text-center" style="width:120px">Historial</th>
-                  <th class="text-center" style="width:120px">Acciones</th>
+
+                  {{-- ✅ Historial SOLO Admin --}}
+                  @if($isAdmin)
+                    <th class="text-center" style="width:120px">Historial</th>
+                  @endif
+
+                  {{-- ✅ Acciones SOLO si tiene edit O delete --}}
+                  @if($canActions)
+                    <th class="text-center" style="width:120px">Acciones</th>
+                  @endif
                 </tr>
               </thead>
+
               <tbody id="series-tbody">
                 @forelse($series as $s)
                   @php
@@ -405,9 +422,6 @@
                     {{-- Serie + chips --}}
                     <td>
                       @php
-                        // ✅ Mostrar "Mod." SOLO si:
-                        // 1) ya fue editada (updated_at > created_at)
-                        // 2) y hay overrides reales
                         $overRaw = (array) ($s->especificaciones ?? []);
 
                         $clean = function ($v) use (&$clean) {
@@ -448,22 +462,18 @@
                       {{-- ===================== CHIPS POR TIPO ===================== --}}
                       @if($tipoProd === 'equipo_pc')
                         <div class="chips">
-                          {{-- Color/Descripción --}}
                           @if(!empty($sp['color']))
                             <span class="chip">Color: {{ $sp['color'] }}</span>
                           @endif
 
-                          {{-- RAM --}}
                           @if(!empty($sp['ram_gb']))
                             <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>
                           @endif
 
-                          {{-- Almacenamientos (plural nuevo) --}}
                           @php
                             $alms = data_get($sp, 'almacenamientos');
                             if (!is_array($alms)) $alms = [];
 
-                            // fallback por si existe data vieja en singular 'almacenamiento'
                             if (empty($alms)) {
                               $old = data_get($sp, 'almacenamiento');
                               if (is_array($old) && (!empty($old['tipo']) || !empty($old['capacidad_gb']))) {
@@ -484,7 +494,6 @@
                             @endif
                           @endforeach
 
-                          {{-- CPU --}}
                           @if(!empty($sp['procesador']))
                             <span class="chip">{{ $sp['procesador'] }}</span>
                           @endif
@@ -492,24 +501,20 @@
 
                       @elseif($tipoProd === 'celular')
                         <div class="chips">
-                          {{-- Color/Descripción --}}
                           @if(!empty($sp['color']))
                             <span class="chip">Color: {{ $sp['color'] }}</span>
                           @elseif($desc)
                             <span class="chip" title="{{ $desc }}">{{ \Illuminate\Support\Str::limit($desc, 70) }}</span>
                           @endif
 
-                          {{-- Almacenamiento --}}
                           @if(!empty($sp['almacenamiento_gb']))
                             <span class="chip">{{ (int)$sp['almacenamiento_gb'] }} GB</span>
                           @endif
 
-                          {{-- RAM --}}
                           @if(!empty($sp['ram_gb']))
                             <span class="chip">{{ (int)$sp['ram_gb'] }} GB RAM</span>
                           @endif
 
-                          {{-- IMEI --}}
                           @if(!empty($sp['imei']))
                             <span class="chip">IMEI: {{ $sp['imei'] }}</span>
                           @endif
@@ -557,85 +562,95 @@
 
                     {{-- Estado (solo lectura, calculado) --}}
                     <td class="text-center">
-                        @php
-                            $estadoRaw = $s->estado;
-                            $estado    = $estadoRaw;
+                      @php
+                        $estadoRaw = $s->estado;
+                        $estado    = $estadoRaw;
 
-                            if ($estadoRaw === 'asignado') {
-                                $ultimoEstado = $s->historial()
-                                    ->whereIn('accion', ['asignacion', 'edicion_asignacion'])
-                                    ->orderByDesc('id')
-                                    ->first();
+                        if ($estadoRaw === 'asignado') {
+                          $ultimoEstado = $s->historial()
+                            ->whereIn('accion', ['asignacion', 'edicion_asignacion'])
+                            ->orderByDesc('id')
+                            ->first();
 
-                                $estadoLogico = $ultimoEstado->estado_nuevo ?? null;
+                          $estadoLogico = $ultimoEstado->estado_nuevo ?? null;
 
-                                if ($estadoLogico === 'prestamo_provisional') {
-                                    $estado = 'prestamo';
-                                } elseif ($estadoLogico === 'asignado') {
-                                    $estado = 'asignado';
-                                }
-                            }
+                          if ($estadoLogico === 'prestamo_provisional') {
+                            $estado = 'prestamo';
+                          } elseif ($estadoLogico === 'asignado') {
+                            $estado = 'asignado';
+                          }
+                        }
 
-                            $labels = [
-                                'disponible' => 'Disponible',
-                                'asignado'   => 'Asignado',
-                                'prestamo'   => 'Préstamo',
-                                'devuelto'   => 'Devuelto',
-                                'baja'       => 'Baja',
-                                'reparacion' => 'Reparación',
-                            ];
+                        $labels = [
+                          'disponible' => 'Disponible',
+                          'asignado'   => 'Asignado',
+                          'prestamo'   => 'Préstamo',
+                          'devuelto'   => 'Devuelto',
+                          'baja'       => 'Baja',
+                          'reparacion' => 'Reparación',
+                        ];
 
-                            $badgeClass = match($estado) {
-                                'disponible' => 'badge-disponible',
-                                'asignado'   => 'badge-asignado',
-                                'prestamo'   => 'badge-prestamo',
-                                'devuelto'   => 'badge-devuelto',
-                                'baja'       => 'badge-baja',
-                                'reparacion' => 'badge-reparacion',
-                                default      => 'badge-disponible',
-                            };
-                        @endphp
+                        $badgeClass = match($estado) {
+                          'disponible' => 'badge-disponible',
+                          'asignado'   => 'badge-asignado',
+                          'prestamo'   => 'badge-prestamo',
+                          'devuelto'   => 'badge-devuelto',
+                          'baja'       => 'badge-baja',
+                          'reparacion' => 'badge-reparacion',
+                          default      => 'badge-disponible',
+                        };
+                      @endphp
 
-                        <span class="badge-estado {{ $badgeClass }}">
-                            {{ $labels[$estado] ?? ucfirst($estado) }}
-                        </span>
+                      <span class="badge-estado {{ $badgeClass }}">
+                        {{ $labels[$estado] ?? ucfirst($estado) }}
+                      </span>
                     </td>
 
-                    {{-- HISTORIAL --}}
-                    <td class="text-center">
-                      <button type="button"
-                              class="text-blue-600 hover:text-blue-800 font-semibold"
-                              onclick="openSerieHistorial('{{ $s->id }}')">
-                              Historial
-                      </button>
-                    </td>
+                    {{-- ✅ HISTORIAL SOLO Admin --}}
+                    @if($isAdmin)
+                      <td class="text-center">
+                        <button type="button"
+                                class="text-blue-600 hover:text-blue-800 font-semibold"
+                                onclick="openSerieHistorial('{{ $s->id }}')">
+                                Historial
+                        </button>
+                      </td>
+                    @endif
 
-                    {{-- Acciones --}}
-                    <td>
-                      <div class="flex items-center justify-center gap-3">
-                        @can('productos.edit')
-                          <a href="{{ route('productos.series.edit', [$producto, $s]) }}"
-                          class="text-gray-800 hover:text-gray-900" title="Editar">
-                            <i class="fa-solid fa-pen"></i>
-                          </a>
-                        @endcan
-
-                        @can('productos.delete')
-                          @if($s->estado === 'disponible')
-                            <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
-                                  onsubmit="return confirm('¿Eliminar esta serie?');">
-                              @csrf @method('DELETE')
-                              <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
-                                <i class="fa-solid fa-trash"></i>
-                              </button>
-                            </form>
+                    {{-- ✅ ACCIONES SOLO si tiene edit O delete (y muestra solo lo que tenga) --}}
+                    @if($canActions)
+                      <td>
+                        <div class="flex items-center justify-center gap-3">
+                          @if($canEdit)
+                            <a href="{{ route('productos.series.edit', [$producto, $s]) }}"
+                               class="text-gray-800 hover:text-gray-900" title="Editar">
+                              <i class="fa-solid fa-pen"></i>
+                            </a>
                           @endif
-                        @endcan
-                      </div>
-                    </td>
+
+                          @if($canDelete)
+                            @if($s->estado === 'disponible')
+                              <form method="POST" action="{{ route('productos.series.destroy', [$producto,$s]) }}"
+                                    onsubmit="return confirm('¿Eliminar esta serie?');">
+                                @csrf @method('DELETE')
+                                <button class="text-red-600 hover:text-red-800" type="submit" title="Eliminar">
+                                  <i class="fa-solid fa-trash"></i>
+                                </button>
+                              </form>
+                            @endif
+                          @endif
+                        </div>
+                      </td>
+                    @endif
                   </tr>
                 @empty
-                  <tr><td colspan="4" class="text-center text-gray-500 py-6">Sin series.</td></tr>
+                  @php
+                    // Columnas base: Serie, Subsidiaria, Unidad, Fotos, Estado => 5
+                    $colspan = 5 + ($isAdmin ? 1 : 0) + ($canActions ? 1 : 0);
+                  @endphp
+                  <tr>
+                    <td colspan="{{ $colspan }}" class="text-center text-gray-500 py-6">Sin series.</td>
+                  </tr>
                 @endforelse
               </tbody>
             </table>
@@ -841,73 +856,67 @@
     })();
   </script>
 
-  <script>
-  /* ===========================
-    ABRIR MODAL DE HISTORIAL
-  =========================== */
-  async function openSerieHistorial(id) {
-      try {
-          const res = await fetch(`/producto-series/${id}/historial`, {
-              headers: { 'X-Requested-With': 'XMLHttpRequest' }
-          });
+  {{-- ✅ Historial JS solo para Admin (si no, ni existe el botón) --}}
+  @if($isAdmin)
+    <script>
+    /* ===========================
+      ABRIR MODAL DE HISTORIAL
+    =========================== */
+    async function openSerieHistorial(id) {
+        try {
+            const res = await fetch(`/producto-series/${id}/historial`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
 
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-          const html = await res.text();
+            const html = await res.text();
 
-          // Si ya existe un modal previo → eliminarlo
-          const existing = document.querySelector('[data-modal-backdrop]');
-          if (existing) existing.remove();
+            const existing = document.querySelector('[data-modal-backdrop]');
+            if (existing) existing.remove();
 
-          // Insertar modal recibido desde AJAX
-          document.body.insertAdjacentHTML('beforeend', html);
+            document.body.insertAdjacentHTML('beforeend', html);
+            document.body.classList.add('modal-open');
 
-          // Bloquear scroll del fondo
-          document.body.classList.add('modal-open');
+        } catch (error) {
+            console.error("Error al abrir historial:", error);
+            alert("No se pudo abrir el historial de la serie.");
+        }
+    }
 
-      } catch (error) {
-          console.error("Error al abrir historial:", error);
-          alert("No se pudo abrir el historial de la serie.");
-      }
-  }
+    /* ===========================
+      CIERRE GLOBAL DEL MODAL
+    =========================== */
+    document.addEventListener('click', (e) => {
+        const closeBtn = e.target.closest('[data-modal-close]');
+        const backdrop = e.target.closest('[data-modal-backdrop]');
 
-  /* ===========================
-    CIERRE GLOBAL DEL MODAL
-  =========================== */
-  document.addEventListener('click', (e) => {
-      const closeBtn = e.target.closest('[data-modal-close]');
-      const backdrop = e.target.closest('[data-modal-backdrop]');
+        if (closeBtn && backdrop) {
+            backdrop.remove();
+            document.body.classList.remove('modal-open');
+        }
 
-      // Clic en la X
-      if (closeBtn && backdrop) {
-          backdrop.remove();
-          document.body.classList.remove('modal-open');
-      }
+        if (backdrop && !e.target.closest('.colab-modal')) {
+            backdrop.remove();
+            document.body.classList.remove('modal-open');
+        }
+    });
 
-      // Clic en fondo oscuro
-      if (backdrop && !e.target.closest('.colab-modal')) {
-          backdrop.remove();
-          document.body.classList.remove('modal-open');
-      }
-  });
-
-  // Cerrar con tecla ESC
-  document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-          const backdrop = document.querySelector('[data-modal-backdrop]');
-          if (backdrop) {
-              backdrop.remove();
-              document.body.classList.remove('modal-open');
-          }
-      }
-  });
-  </script>
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const backdrop = document.querySelector('[data-modal-backdrop]');
+            if (backdrop) {
+                backdrop.remove();
+                document.body.classList.remove('modal-open');
+            }
+        }
+    });
+    </script>
+  @endif
 
   {{-- ==========================================================
        ✅ CAMBIO: JS Alta masiva estilo CREATE (accordion)
-       - Respeta payload existente: series[i][serie], [subsidiaria_id], [unidad_servicio_id]
-       - En specs usa: series[i][specs][...]
-       - Para tipos simples: series[i][observaciones] (sin romper store si lo ignora)
+       (SIN CAMBIOS)
      ========================================================== --}}
   @can('productos.create')
   <script>
@@ -921,7 +930,6 @@
 
     const tipoProd = @json((string)($producto->tipo ?? ''));
 
-    // opciones para selects (seguro, sin clonar del DOM)
     const SUBS_OPTS = @json(collect($subsidiarias ?? [])->map(fn($s)=>['id'=>$s->id,'nombre'=>$s->nombre])->values());
     const UNI_OPTS  = @json(collect($unidadesServicio ?? [])->map(fn($u)=>['id'=>$u->id,'nombre'=>$u->nombre])->values());
 
@@ -1045,7 +1053,6 @@
         `;
       }
 
-      // tipos simples (impresora/monitor/pantalla/periferico/otro)
       return `
         <div class="section-title">Descripción (por serie)</div>
         <div class="grid-1">
@@ -1128,7 +1135,6 @@
         const title = card.querySelector('.serie-title');
         if(title) title.textContent = `Serie ${i+1}`;
 
-        // renumera series[old] -> series[i]
         card.querySelectorAll('[name^="series["]').forEach(el=>{
           el.name = el.name.replace(/^series\[\d+\]/, `series[${i}]`);
         });
@@ -1154,11 +1160,9 @@
       });
     }
 
-    // render inicial
     renderAllFromOld();
     renumberAll();
 
-    // agregar serie
     addBtn?.addEventListener('click', ()=>{
       const i = wrap.querySelectorAll('[data-serie-card]').length;
       wrap.insertAdjacentHTML('beforeend', serieCardHTML(i, {}));
@@ -1166,7 +1170,6 @@
       wrap.querySelector(`input[name="series[${i}][serie]"]`)?.focus();
     });
 
-    // clicks delegados
     wrap.addEventListener('click', (e)=>{
       const tg = e.target.closest('[data-toggle]');
       if(tg){
@@ -1224,7 +1227,6 @@
       }
     });
 
-    // doble submit
     let sending = false;
     form?.addEventListener('submit', (e)=>{
       if(sending){ e.preventDefault(); return; }
@@ -1235,7 +1237,6 @@
       }
     });
 
-    // si hubo errores, abrir modal
     @if ($errors->has('series') || collect($errors->keys())->first(fn($k)=> str_starts_with($k, 'series.')))
       openModal();
     @endif

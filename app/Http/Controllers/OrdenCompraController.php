@@ -1248,6 +1248,7 @@ class OrdenCompraController extends Controller implements HasMiddleware
         'Compras Superior',
         'Compras',
         'Compras IVA',
+        'Compras y Celulares',
     ])) {
         abort(403, 'No tienes permisos para cambiar la recepción de una orden.');
     }

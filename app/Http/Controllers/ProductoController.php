@@ -54,8 +54,19 @@ class ProductoController extends Controller implements HasMiddleware
         $perPage = (int) $request->query('per_page', 50);
         $q       = trim((string) $request->query('q', ''));
 
+        // ✅ Isidro (id=13): solo ver productos cuyo NOMBRE contenga "celular" y "resguardo"
+        $authUser = auth()->user();
+        $isIsidro = $authUser && (int) $authUser->id === 13;
+
         $productos = \App\Models\Producto::query()
             ->where('empresa_tenant_id', $tenant)
+
+            // ✅ Filtro exclusivo Isidro (NO afecta a otros usuarios)
+            ->when($isIsidro, function ($w) {
+                $w->whereRaw('LOWER(nombre) LIKE ?', ['%celular%'])
+                ->whereRaw('LOWER(nombre) LIKE ?', ['%resguardo%']);
+            })
+
             ->when($q, function ($w) use ($q, $tenant) {
                 $terms = preg_split('/\s+/', $q, -1, PREG_SPLIT_NO_EMPTY);
 

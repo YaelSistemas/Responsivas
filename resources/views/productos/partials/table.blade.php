@@ -9,6 +9,14 @@
     'consumible' => 'Consumible',
     'otro'       => 'Otro',
   ];
+
+  // ✅ SOLO POR ROL (Administrador) para Historial
+  $isAdmin = auth()->check() && auth()->user()->hasRole('Administrador');
+
+  // ✅ Acciones: mostrar columna si tiene AL MENOS UNO (edit o delete)
+  $canEdit    = auth()->check() && auth()->user()->can('productos.edit');
+  $canDelete  = auth()->check() && auth()->user()->can('productos.delete');
+  $canActions = $canEdit || $canDelete;
 @endphp
 
 <div id="tabla-productos">
@@ -42,10 +50,19 @@
         <th style="width:220px">Series / SKU</th>
         <th style="width:160px">Stock</th>
         <th style="width:150px">Series / Existencia</th>
-        <th style="width:130px">Historial</th> {{-- ✅ Nueva columna --}}
-        <th style="width:120px">Acciones</th>
+
+        {{-- ✅ Historial SOLO Admin --}}
+        @if($isAdmin)
+          <th style="width:130px">Historial</th>
+        @endif
+
+        {{-- ✅ Acciones SOLO si tiene edit O delete --}}
+        @if($canActions)
+          <th style="width:120px">Acciones</th>
+        @endif
       </tr>
     </thead>
+
     <tbody>
       @forelse ($productos as $p)
         <tr>
@@ -94,9 +111,7 @@
           {{-- Series / SKU (coloreado) --}}
           <td>
             @if($p->tracking === 'serial')
-              @php
-                $series = ($seriesByProduct[$p->id] ?? collect());
-              @endphp
+              @php $series = ($seriesByProduct[$p->id] ?? collect()); @endphp
               <div class="chips">
                 @forelse($series as $s)
                   @php
@@ -144,42 +159,50 @@
             @endcan
           </td>
 
-          {{-- Historial --}}
-          <td>
-            @can('productos.view')
+          {{-- ✅ Historial SOLO Admin --}}
+          @if($isAdmin)
+            <td>
               <button type="button"
                       class="text-blue-600 hover:text-blue-800 font-semibold"
                       onclick="openProductoHistorial('{{ $p->id }}')"
                       title="Ver historial">
                 Historial
               </button>
-            @endcan
-          </td>
+            </td>
+          @endif
 
-          {{-- Acciones --}}
-          <td>
-            <div class="flex justify-center items-center gap-4">
-              @can('productos.edit')
-                <a href="{{ route('productos.edit', $p) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
-                  <i class="fa-solid fa-pen"></i>
-                </a>
-              @endcan
+          {{-- ✅ Acciones SOLO si tiene edit O delete (y muestra solo lo que tenga) --}}
+          @if($canActions)
+            <td>
+              <div class="flex justify-center items-center gap-4">
+                @if($canEdit)
+                  <a href="{{ route('productos.edit', $p) }}" class="text-gray-800 hover:text-gray-900" title="Editar">
+                    <i class="fa-solid fa-pen"></i>
+                  </a>
+                @endif
 
-              @can('productos.delete')
-                <form action="{{ route('productos.destroy', $p) }}" method="POST"
-                      onsubmit="return confirm('¿Eliminar este producto?');">
-                  @csrf @method('DELETE')
-                  <button type="submit" class="text-red-600 hover:text-red-800" title="Eliminar">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </form>
-              @endcan
-            </div>
-          </td>
+                @if($canDelete)
+                  <form action="{{ route('productos.destroy', $p) }}" method="POST"
+                        onsubmit="return confirm('¿Eliminar este producto?');">
+                    @csrf @method('DELETE')
+                    <button type="submit" class="text-red-600 hover:text-red-800" title="Eliminar">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </form>
+                @endif
+              </div>
+            </td>
+          @endif
         </tr>
       @empty
         <tr>
-          <td colspan="8" class="text-center text-gray-500 py-6">No hay productos.</td>
+          @php
+            // Columnas base: Producto, Tipo, Series/SKU, Stock, Series/Existencia => 5
+            $colspan = 5 + ($isAdmin ? 1 : 0) + ($canActions ? 1 : 0);
+          @endphp
+          <td colspan="{{ $colspan }}" class="text-center text-gray-500 py-6">
+            No hay productos.
+          </td>
         </tr>
       @endforelse
     </tbody>
