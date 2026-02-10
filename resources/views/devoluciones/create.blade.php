@@ -220,7 +220,14 @@
                 <select name="psitio_colaborador_id" id="psitioSelect" required>
                   <option value="">— Selecciona —</option>
                   @foreach($colaboradores as $c)
-                    <option value="{{ $c->id }}">{{ $c->nombre }} {{ $c->apellidos }}</option>
+                    <option value="{{ $c->id }}"
+                      @selected(
+                        (string)old('psitio_colaborador_id',
+                          ($isCelCreate ? ($isidroColaboradorId ?? '') : '')
+                        ) === (string)$c->id
+                      )>
+                      {{ $c->nombre }} {{ $c->apellidos }}
+                    </option>
                   @endforeach
                 </select>
                 @error('psitio_colaborador_id') <div class="err">{{ $message }}</div> @enderror
@@ -276,7 +283,20 @@
         resp.detalles.forEach(d => {
             const p      = d.producto || {};
             const nombre = p.nombre || 'Producto sin nombre';
-            const desc   = p.descripcion || '-';
+
+            // ✅ Descripción/Color: primero specs de la SERIE, luego fallback a producto
+            const specSRaw = d?.serie?.especificaciones ?? d?.serie?.specs ?? null;
+
+            let specS = specSRaw;
+            if (typeof specSRaw === "string") {
+              try { specS = JSON.parse(specSRaw); } catch (e) { specS = null; }
+            }
+
+            const colorSerie = specS?.color ?? specS?.spec_pc?.color ?? specS?.spec_cel?.color ?? "";
+            const descSerie  = specS?.descripcion ?? specS?.spec_pc?.descripcion ?? specS?.spec_cel?.descripcion ?? "";
+
+            const desc = (colorSerie || descSerie || p.descripcion || "-");
+
             const marca  = p.marca || '-';
             const modelo = p.modelo || '-';
             const serie  = d.serie?.serie || d.producto_serie_id || '-';
@@ -404,11 +424,20 @@
 
         // Psitio (colaborador)
         if (document.getElementById('psitioSelect')) {
-          new TomSelect('#psitioSelect', {
+          const tsPsitio = new TomSelect('#psitioSelect', {
             ...baseConfig,
             placeholder: 'Selecciona colaborador (psitio)…',
           });
+
+          // ✅ Default Isidro SOLO en CELULARES y SOLO si viene vacío
+          const isCelCreate = @json($isCelCreate);
+          const isidroId = @json($isidroColaboradorId ?? null);
+
+          if (isCelCreate && isidroId && !tsPsitio.getValue()) {
+            tsPsitio.setValue(String(isidroId), true);
+          }
         }
+
       });
     </script>
   @endpush

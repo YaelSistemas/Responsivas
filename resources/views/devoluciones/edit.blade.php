@@ -167,23 +167,64 @@
                     <tbody>
                     @forelse ($detallesActuales as $d)
                         @php
-                        $p = $d->producto;
-                        $s = $d->serie;
-                        $checked = in_array($s->id, $seriesSeleccionadas) ? 'checked' : '';
+                          $p = $d->producto;
+                          $s = $d->serie;
+
+                          $checked = ($s && in_array($s->id, $seriesSeleccionadas)) ? 'checked' : '';
+
+                          // specs (serie y producto) como en show/pdf
+                          $specS = $s->especificaciones ?? $s->specs ?? null;
+                          if (is_string($specS)) {
+                            $tmp = json_decode($specS, true);
+                            if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp;
+                          }
+
+                          $specP = $p->especificaciones ?? $p->specs ?? null;
+                          if (is_string($specP)) {
+                            $tmp = json_decode($specP, true);
+                            if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp;
+                          }
+
+                          // Lógica descripción/color
+                          if (($p->tipo ?? null) === 'equipo_pc') {
+                            $colorSerie = data_get($specS, 'color');
+                            $colorProd  = data_get($specP, 'color');
+                            $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($p->descripcion ?? ''));
+                          } else {
+                            // ✅ Celulares y otros: primero descripcion, si no hay usa color (y soporta anidados)
+                            $descSerie =
+                                data_get($specS, 'descripcion')
+                                ?: data_get($specS, 'color')
+                                ?: data_get($specS, 'spec_cel.descripcion')
+                                ?: data_get($specS, 'spec_cel.color')
+                                ?: data_get($specS, 'cel.descripcion')
+                                ?: data_get($specS, 'cel.color');
+
+                            $descProd =
+                                data_get($specP, 'descripcion')
+                                ?: data_get($specP, 'color')
+                                ?: data_get($specP, 'spec_cel.descripcion')
+                                ?: data_get($specP, 'spec_cel.color')
+                                ?: data_get($specP, 'cel.descripcion')
+                                ?: data_get($specP, 'cel.color');
+
+                            $des = filled($descSerie) ? $descSerie : (filled($descProd) ? $descProd : ($p->descripcion ?? ''));
+                          }
                         @endphp
+
                         <tr>
-                          <td>{{ $p->nombre }}</td>
-                          <td>{{ $p->descripcion ?? '-' }}</td>
+                          <td>{{ $p->nombre ?? '-' }}</td>
+                          <td>{{ $des ?: '-' }}</td>
                           <td>{{ $p->marca ?? '-' }}</td>
                           <td>{{ $p->modelo ?? '-' }}</td>
                           <td>{{ $s?->serie ?? '-' }}</td>
                           <td>
-                              <input
-                                type="checkbox"
-                                name="productos[{{ $p->id }}][]"
-                                value="{{ $s->id }}"
-                                {{ $checked }}
-                              >
+                            <input
+                              type="checkbox"
+                              name="productos[{{ $p->id }}][]"
+                              value="{{ $s?->id }}"
+                              {{ $checked }}
+                            >
                           </td>
                         </tr>
                     @empty

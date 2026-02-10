@@ -449,15 +449,25 @@
             $specP = $p->especificaciones ?? $p->specs ?? null;
             if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-            // Lógica de descripción igual a tu show
-            if (($p->tipo ?? null) === 'equipo_pc') {
-              $colorSerie = is_array($specS) ? ($specS['color'] ?? '') : '';
-              $colorProd  = is_array($specP) ? ($specP['color'] ?? '') : '';
-              $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($p->descripcion ?? ''));
-            } else {
-              $descSerie = is_array($specS) ? ($specS['descripcion'] ?? '') : '';
-              $des = filled($descSerie) ? $descSerie : ($p->descripcion ?? '');
-            }
+            // ✅ Descripción universal (PDF):
+            // 1) color (serie)
+            // 2) descripcion (serie)
+            // 3) color (producto)
+            // 4) descripcion del producto
+            $colorSerie = data_get($specS, 'color');
+            $descSerie  = data_get($specS, 'descripcion');
+
+            $colorProd  = data_get($specP, 'color');
+            $descProd   = $p->descripcion ?? '';
+
+            $des = '';
+            if (filled($colorSerie))      $des = $colorSerie;
+            elseif (filled($descSerie))   $des = $descSerie;
+            elseif (filled($colorProd))   $des = $colorProd;
+            else                          $des = $descProd;
+
+            $des = trim((string)$des);
+            if ($des === '') $des = '—';
           @endphp
 
           <tr>

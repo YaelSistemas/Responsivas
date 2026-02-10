@@ -418,14 +418,26 @@
                 $specP = $p->especificaciones;
                 if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-                if (($p->tipo ?? null) === 'equipo_pc') {
-                    $colorSerie = data_get($specS, 'color');
-                    $colorProd  = data_get($specP, 'color');
-                    $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($p->descripcion ?? ''));
-                } else {
-                    $descSerie = data_get($specS, 'descripcion');
-                    $des = filled($descSerie) ? $descSerie : ($p->descripcion ?? '');
-                }
+                // ✅ Descripción visible en tabla:
+                // 1) primero intenta "color" (serie)
+                // 2) si no hay, intenta "descripcion" (serie)
+                // 3) si no hay, intenta "color" (producto)
+                // 4) si no hay, usa descripcion del producto
+                $colorSerie = data_get($specS, 'color');
+                $descSerie  = data_get($specS, 'descripcion');
+
+                $colorProd  = data_get($specP, 'color');
+                $descProd   = $p->descripcion ?? '';
+
+                $des = '';
+                if (filled($colorSerie))      $des = $colorSerie;
+                elseif (filled($descSerie))   $des = $descSerie;
+                elseif (filled($colorProd))   $des = $colorProd;
+                else                          $des = $descProd;
+
+                // fallback final por si todo viene vacío
+                $des = trim((string)$des);
+                if ($des === '') $des = '—';
               @endphp
 
               <tr>

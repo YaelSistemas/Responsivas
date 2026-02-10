@@ -331,17 +331,55 @@
       <tbody>
         @foreach($productos as $prod)
           @php
+            // === Serie seleccionada (pivot) ===
+            $serieModel = null;
             $serieSeleccionada = null;
-            if ($prod->pivot && $prod->pivot->producto_serie_id) {
-                $serieSeleccionada = \App\Models\ProductoSerie::find($prod->pivot->producto_serie_id)?->serie;
+
+            if (!empty($prod->pivot?->producto_serie_id)) {
+              $serieModel = \App\Models\ProductoSerie::find($prod->pivot->producto_serie_id);
+              $serieSeleccionada = $serieModel?->serie;
             }
+
             if (!$serieSeleccionada) {
-                $serieSeleccionada = $prod->series?->pluck('serie')->filter()->join(', ');
+              $serieSeleccionada = $prod->series?->pluck('serie')->filter()->join(', ');
+            }
+
+            // === specs (serie y producto) ===
+            $specS = $serieModel?->especificaciones ?? $serieModel?->specs ?? null;
+            if (is_string($specS)) { $tmp = json_decode($specS, true); if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp; }
+
+            $specP = $prod->especificaciones ?? $prod->specs ?? null;
+            if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
+
+            // === Lógica descripción/color (igual que edit/show corregido) ===
+            if (($prod->tipo ?? null) === 'equipo_pc') {
+              $colorSerie = data_get($specS, 'color');
+              $colorProd  = data_get($specP, 'color');
+              $des = filled($colorSerie) ? $colorSerie : (filled($colorProd) ? $colorProd : ($prod->descripcion ?? ''));
+            } else {
+              $descSerie =
+                  data_get($specS, 'descripcion')
+                  ?: data_get($specS, 'color')
+                  ?: data_get($specS, 'spec_cel.descripcion')
+                  ?: data_get($specS, 'spec_cel.color')
+                  ?: data_get($specS, 'cel.descripcion')
+                  ?: data_get($specS, 'cel.color');
+
+              $descProd =
+                  data_get($specP, 'descripcion')
+                  ?: data_get($specP, 'color')
+                  ?: data_get($specP, 'spec_cel.descripcion')
+                  ?: data_get($specP, 'spec_cel.color')
+                  ?: data_get($specP, 'cel.descripcion')
+                  ?: data_get($specP, 'cel.color');
+
+              $des = filled($descSerie) ? $descSerie : (filled($descProd) ? $descProd : ($prod->descripcion ?? ''));
             }
           @endphp
+
           <tr>
             <td>{{ $prod->nombre ?? '—' }}</td>
-            <td>{{ $prod->descripcion ?? '—' }}</td>
+            <td>{{ $des ?: '—' }}</td>
             <td>{{ $prod->marca ?? '—' }}</td>
             <td>{{ $prod->modelo ?? '—' }}</td>
             <td>{{ $serieSeleccionada ?: '—' }}</td>

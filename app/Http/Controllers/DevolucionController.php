@@ -155,8 +155,18 @@ class DevolucionController extends Controller implements HasMiddleware
             ->orderBy('nombre')
             ->orderBy('apellidos')
             ->get(['id', 'nombre', 'apellidos']);
+        
+        // ✅ Default PSITIO en CELULARES: Isidro Encinas Quijada (colaborador)
+        $isidroColaboradorId = null;
 
-        return view('devoluciones.create', compact('responsivas','admins','colaboradores','adminDefault','isCel','responsivaId','lockRecibi'));
+        if ($isCel) {
+            $isidroColaboradorId = Colaborador::where('empresa_tenant_id', $tenant)
+                ->where('activo', 1)
+                ->whereRaw("TRIM(CONCAT(nombre,' ',IFNULL(apellidos,''))) = ?", ['Isidro Encinas Quijada'])
+                ->value('id');
+        }
+
+        return view('devoluciones.create', compact('responsivas','admins','colaboradores','adminDefault','isCel','responsivaId','lockRecibi','isidroColaboradorId'));
     }
 
     /* ===================== GUARDAR ===================== */
