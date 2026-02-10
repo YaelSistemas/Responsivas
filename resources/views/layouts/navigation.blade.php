@@ -66,7 +66,8 @@
 
     $isRhActive       = request()->routeIs('colaboradores.*','unidades.*','areas.*','puestos.*','subsidiarias.*');
     $isProductosActive= request()->routeIs('productos.*');
-    $isFormatosActive = request()->routeIs('responsivas.*', 'devoluciones.*', 'cartuchos.*');
+    $isFormatosActive = request()->routeIs('responsivas.*', 'devoluciones.*', 'cartuchos.*')
+      || request()->is('celulares/*');
 
     // COMPRAS: marcar activo si estoy en oc.* o proveedores.*
     $isComprasActive  = request()->routeIs('oc.*','proveedores.*');
@@ -75,6 +76,8 @@
     $canOC       = auth()->user()->can('oc.view');
     $canProv     = auth()->user()->can('proveedores.view');
     $canCompras  = $canOC || $canProv; // oculta todo el menú si no tiene ninguno
+
+    $canFormatos = auth()->user()->canany(['responsivas.view','devoluciones.view','cartuchos.view','celulares.view',]);
   @endphp
 
   <div x-effect="document.body.style.overflow = open ? 'hidden' : ''"></div>
@@ -169,47 +172,50 @@
           </div>
           @endcanany
 
-          @can('responsivas.view')
-          <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
-            <button type="button"
-                    class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
-                           transition duration-150 ease-in-out
-                           {{ $isFormatosActive
-                                ? 'border-indigo-500 text-gray-900'
-                                : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
-              Formatos
-            </button>
+          @if($canFormatos)
+            <div x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false" class="relative">
+              <button type="button"
+                      class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium leading-5
+                            transition duration-150 ease-in-out
+                            {{ $isFormatosActive
+                                  ? 'border-indigo-500 text-gray-900'
+                                  : 'text-gray-500 hover:text-gray-700 hover:border-gray-300 border-transparent' }}">
+                Formatos
+              </button>
 
-            <div x-show="open" x-transition class="menu-panel">
-              <div class="p-2">
-                @can('responsivas.view')
-                <a href="{{ route('responsivas.index') }}"
-                   class="menu-item {{ request()->routeIs('responsivas.*') ? 'menu-item--active' : '' }}">
-                  Responsivas
-                </a>
-                @endcan
-                @can('devoluciones.view')
-                <a href="{{ route('devoluciones.index') }}"
-                  class="menu-item {{ request()->routeIs('devoluciones.*') ? 'menu-item--active' : '' }}">
-                  Devoluciones
-                </a>
-                @endcan
-                @can('celulares.view')
-                  <a href="{{ url('/celulares/responsivas') }}"
-                    class="menu-item {{ request()->is('celulares/responsivas*') ? 'menu-item--active' : '' }}">
-                    Bitácora de celulares
-                  </a>
-                @endcan
-                @can('cartuchos.view')
-                <a href="{{ route('cartuchos.index') }}"
-                  class="menu-item {{ request()->routeIs('cartuchos.*') ? 'menu-item--active' : '' }}">
-                  Entrega de Cartuchos
-                </a>
-                @endcan
+              <div x-show="open" x-transition class="menu-panel">
+                <div class="p-2">
+                  @can('responsivas.view')
+                    <a href="{{ route('responsivas.index') }}"
+                      class="menu-item {{ request()->routeIs('responsivas.*') ? 'menu-item--active' : '' }}">
+                      Responsivas
+                    </a>
+                  @endcan
+
+                  @can('devoluciones.view')
+                    <a href="{{ route('devoluciones.index') }}"
+                      class="menu-item {{ request()->routeIs('devoluciones.*') ? 'menu-item--active' : '' }}">
+                      Devoluciones
+                    </a>
+                  @endcan
+
+                  @can('celulares.view')
+                    <a href="{{ url('/celulares/responsivas') }}"
+                      class="menu-item {{ request()->is('celulares/responsivas*') ? 'menu-item--active' : '' }}">
+                      Bitácora de celulares
+                    </a>
+                  @endcan
+
+                  @can('cartuchos.view')
+                    <a href="{{ route('cartuchos.index') }}"
+                      class="menu-item {{ request()->routeIs('cartuchos.*') ? 'menu-item--active' : '' }}">
+                      Entrega de Cartuchos
+                    </a>
+                  @endcan
+                </div>
               </div>
             </div>
-          </div>
-          @endcan
+          @endif
 
           {{-- ===== COMPRAS (desktop) ===== --}}
           @if($canCompras)
@@ -408,41 +414,57 @@
       </a>
       @endcanany
 
-      <!-- Formatos -->
-      @can('responsivas.view')
-      <div class="mt-1">
-        <button class="mobile-link" @click="formatos = !formatos" :aria-expanded="formatos">
-          <span>Formatos</span>
-          <svg :class="{'rotate-180': formatos}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor"><path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/></svg>
-        </button>
-        <div x-show="formatos" x-transition class="mobile-sub">
-          @can('responsivas.view')
-          <a href="{{ route('responsivas.index') }}"
-             class="mobile-a {{ request()->routeIs('responsivas.*') ? 'mobile-a--active' : '' }}">
-            Responsivas
-          </a>
-          @endcan
-          @can('devoluciones.view')
-          <a href="{{ route('devoluciones.index') }}"
-            class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
-            Devoluciones
-          </a>
-          @endcan
-          @can('celulares.view')
-            <a href="{{ url('/celulares/responsivas') }}"
-              class="mobile-a {{ request()->is('celulares/responsivas*') ? 'mobile-a--active' : '' }}">
-              Bitácora de celulares
-            </a>
-          @endcan
-          @can('cartuchos.view')
-          <a href="{{ route('cartuchos.index') }}"
-            class="mobile-a {{ request()->routeIs('cartuchos.*') ? 'mobile-a--active' : '' }}">
-            Cartuchos
-          </a>
-          @endcan
+      <!-- Formatos (MÓVIL) -->
+      @php
+        // ✅ Mostrar “Formatos” si tiene AL MENOS 1 permiso del bloque
+        $canFormatos = auth()->user()->canany([
+          'responsivas.view',
+          'devoluciones.view',
+          'cartuchos.view',
+          'celulares.view',
+        ]);
+      @endphp
+
+      @if($canFormatos)
+        <div class="mt-1">
+          <button class="mobile-link" @click="formatos = !formatos" :aria-expanded="formatos">
+            <span>Formatos</span>
+            <svg :class="{'rotate-180': formatos}" class="h-4 w-4 transition-transform" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.586l3.71-3.356a.75.75 0 111.02 1.1l-4.22 3.817a.75.75 0 01-1.02 0L5.21 8.33a.75.75 0 01.02-1.12z"/>
+            </svg>
+          </button>
+
+          <div x-show="formatos" x-transition class="mobile-sub">
+            @can('responsivas.view')
+              <a href="{{ route('responsivas.index') }}"
+                class="mobile-a {{ request()->routeIs('responsivas.*') ? 'mobile-a--active' : '' }}">
+                Responsivas
+              </a>
+            @endcan
+
+            @can('devoluciones.view')
+              <a href="{{ route('devoluciones.index') }}"
+                class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
+                Devoluciones
+              </a>
+            @endcan
+
+            @can('celulares.view')
+              <a href="{{ url('/celulares/responsivas') }}"
+                class="mobile-a {{ request()->is('celulares/responsivas*') ? 'mobile-a--active' : '' }}">
+                Bitácora de celulares
+              </a>
+            @endcan
+
+            @can('cartuchos.view')
+              <a href="{{ route('cartuchos.index') }}"
+                class="mobile-a {{ request()->routeIs('cartuchos.*') ? 'mobile-a--active' : '' }}">
+                Cartuchos
+              </a>
+            @endcan
+          </div>
         </div>
-      </div>
-      @endcan
+      @endif
 
       {{-- ===== COMPRAS (móvil) ===== --}}
       @if($canCompras)
