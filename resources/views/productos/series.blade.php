@@ -54,24 +54,14 @@
     .badge-mod{font-size:.65rem;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:9999px;padding:.08rem .4rem}
 
     .state-wrap{position:relative;display:inline-block}
-    .state-select{
-      -webkit-appearance:none;appearance:none;
-      background:#fff;border:1px solid #d1d5db;border-radius:8px;
-      padding:.4rem 2rem .4rem .6rem;
-      min-width:160px;font-size:.9rem;line-height:1.25;
-    }
-    .state-wrap::after{
-      content:'▾';position:absolute;right:.55rem;top:50%;transform:translateY(-50%);
-      color:#6b7280;pointer-events:none;font-size:.85rem;
-    }
-
+    .state-select{-webkit-appearance:none;appearance:none;background:#fff;border:1px solid #d1d5db;border-radius:8px;
+      padding:.4rem 2rem .4rem .6rem;min-width:160px;font-size:.9rem;line-height:1.25;}
+    .state-wrap::after{content:'▾';position:absolute;right:.55rem;top:50%;transform:translateY(-50%);color:#6b7280;pointer-events:none;font-size:.85rem;}
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
     .modal.open{display:flex}
     .modal .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
-    .modal .panel{
-      position:relative;background:#fff;border-radius:10px;box-shadow:0 15px 35px rgba(0,0,0,.25);
-      width:min(900px,96vw);max-height:90vh;padding:18px;display:flex;flex-direction:column;overflow:hidden
-    }
+    .modal .panel{position:relative;background:#fff;border-radius:10px;box-shadow:0 15px 35px rgba(0,0,0,.25);
+      width:min(900px,96vw);max-height:90vh;padding:18px;display:flex;flex-direction:column;overflow:hidden}
     .modal .panel h3{font-weight:700;font-size:18px;margin:2px 0 10px}
     .modal .close{position:absolute;right:10px;top:10px;font-size:22px;line-height:1;cursor:pointer;color:#6b7280}
     .modal textarea{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px}
@@ -100,54 +90,14 @@
     /* antes era nth-child(3) porque Fotos estaba en 3; ahora Fotos es 4 */
     .tbl td:nth-child(4) form{display:inline-block;}
 
-    .badge-estado{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      padding:.25rem .75rem;
-      border-radius:9999px;
-      font-size:.75rem;
-      font-weight:600;
-      border-width:1px;
-      border-style:solid;
-    }
-
-    .badge-disponible{
-      background:#f3f4f6;
-      color:#374151;
-      border-color:#d1d5db;
-    }
-
-    .badge-asignado{
-      background:#dcfce7;
-      color:#166534;
-      border-color:#4ade80;
-    }
-
-    .badge-prestamo{
-      background:#fef9c3;
-      color:#92400e;
-      border-color:#eab308;
-    }
-
-    .badge-devuelto{
-      background:#dbeafe;
-      color:#1d4ed8;
-      border-color:#93c5fd;
-    }
-
-    .badge-baja{
-      background:#fee2e2;
-      color:#b91c1c;
-      border-color:#fecaca;
-    }
-
-    .badge-reparacion{
-      background:#ffedd5;
-      color:#c2410c;
-      border-color:#fed7aa;
-    }
-
+    .badge-estado{display:inline-flex;align-items:center;justify-content:center;padding:.25rem .75rem;border-radius:9999px;
+      font-size:.75rem;font-weight:600;border-width:1px;border-style:solid;}
+    .badge-disponible{background:#f3f4f6;color:#374151;border-color:#d1d5db;}
+    .badge-asignado{background:#dcfce7;color:#166534;border-color:#4ade80;}
+    .badge-prestamo{background:#fef9c3;color:#92400e;border-color:#eab308;}
+    .badge-devuelto{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;}
+    .badge-baja{background:#fee2e2;color:#b91c1c;border-color:#fecaca;}
+    .badge-reparacion{background:#ffedd5;color:#c2410c;border-color:#fed7aa;}
     .loading::after{
       content: '';
       width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#1d4ed8;border-radius:50%;
@@ -156,114 +106,29 @@
     @keyframes spin{to{transform:rotate(360deg)}}
 
     /* ====== Subsidiaria pill azul ====== */
-    .sub-pill{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      padding:.28rem .75rem;
-      border-radius:9999px;
-      font-size:.75rem;
-      font-weight:700;
-      line-height:1;
-      border:1px solid #93c5fd;
-      background:#dbeafe;
-      color:#1d4ed8;
-      max-width: 180px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .sub-pill--none{
-      border-color:#93c5fd;
-      background:#dbeafe;
-      color:#1d4ed8;
-    }
+    .sub-pill{display:inline-flex;align-items:center;justify-content:center;padding:.28rem .75rem;border-radius:9999px;font-size:.75rem;font-weight:700;line-height:1;
+      border:1px solid #93c5fd;background:#dbeafe;color:#1d4ed8;max-width: 180px;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+    .sub-pill--none{border-color:#93c5fd;background:#dbeafe;color:#1d4ed8;}
 
     /* ====== Unidad de servicio pill morado ====== */
-    .unit-pill{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      padding:.28rem .75rem;
-      border-radius:9999px;
-      font-size:.75rem;
-      font-weight:700;
-      line-height:1;
-      border:1px solid #c4b5fd;
-      background:#ede9fe;
-      color:#5b21b6;
-      max-width: 180px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .unit-pill--none{
-      border-color:#c4b5fd;
-      background:#ede9fe;
-      color:#5b21b6;
-    }
+    .unit-pill{display:inline-flex;align-items:center;justify-content:center;padding:.28rem .75rem;border-radius:9999px;font-size:.75rem;font-weight:700;line-height:1;
+      border:1px solid #c4b5fd;background:#ede9fe;color:#5b21b6;max-width: 180px;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+    .unit-pill--none{border-color:#c4b5fd;background:#ede9fe;color:#5b21b6;}
 
-    /* ==========================================================
-       ✅ CAMBIO: Bulk modal tipo CREATE (tarjetas/accordion)
-       ========================================================== */
+    /* CAMBIO: Bulk modal tipo CREATE (tarjetas/accordion) */
     #bulk-modal .panel{ width:min(1100px,96vw); }
 
-    .bulk-scroll{
-      overflow:auto;
-      padding-right:6px;
-      margin-top:10px;
-      max-height: calc(90vh - 160px);
-    }
-
-    .serie-card{
-      border:1px solid #e5e7eb;
-      border-radius:12px;
-      padding:12px;
-      background:#fff;
-    }
-    .serie-head{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      padding:6px 6px 10px;
-    }
-    .serie-title{
-      font-weight:800;
-      font-size:14px;
-      line-height:1.2;
-    }
-    .serie-sub{
-      font-size:12px;
-      color:#6b7280;
-      margin-top:2px;
-    }
-    .serie-toggle{
-      border:1px solid #e5e7eb;
-      background:#fff;
-      border-radius:10px;
-      padding:6px 10px;
-      cursor:pointer;
-      font-size:14px;
-      line-height:1;
-    }
-
+    .bulk-scroll{overflow:auto;padding-right:6px;margin-top:10px;max-height: calc(90vh - 160px);}
+    .serie-card{border:1px solid #e5e7eb;border-radius:12px;padding:12px;background:#fff;}
+    .serie-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 6px 10px;}
+    .serie-title{font-weight:800;font-size:14px;line-height:1.2;}
+    .serie-sub{font-size:12px;color:#6b7280;margin-top:2px;}
+    .serie-toggle{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;font-size:14px;line-height:1;}
     .serie-body{ display:none; padding:10px 6px 6px; }
     .serie-card.open .serie-body{ display:block; }
 
-    .grid-3{
-      display:grid;
-      grid-template-columns:repeat(3,minmax(220px,1fr));
-      gap:12px;
-      align-items:end;
-    }
-    .grid-2{
-      display:grid;
-      grid-template-columns:repeat(2,minmax(240px,1fr));
-      gap:12px;
-      align-items:end;
-    }
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:12px;align-items:end;}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(240px,1fr));gap:12px;align-items:end;}
     .grid-1{ display:grid; grid-template-columns:1fr; gap:12px; }
 
     @media (max-width: 900px){
@@ -272,72 +137,47 @@
     }
 
     .field label{ display:block; font-size:12px; color:#374151; font-weight:700; margin-bottom:6px; }
-    .inp{
-      width:100%;
-      border:1px solid #d1d5db;
-      border-radius:10px;
-      padding:10px 12px;
-      outline:none;
-    }
+    .inp{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:none;}
     .inp:focus{ border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
 
-    .section-title{
-      font-weight:800;
-      font-size:13px;
-      margin:14px 0 10px;
-      color:#111827;
-    }
+    .section-title{font-weight:800;font-size:13px;margin:14px 0 10px;color:#111827;}
     .muted{ color:#6b7280; font-size:12px; }
-
-    .alm-wrap{
-      border:1px dashed #d1d5db;
-      border-radius:12px;
-      padding:10px;
-      background:#f9fafb;
-    }
-    .alm-row{
-      display:grid;
-      grid-template-columns: 1fr 1fr auto;
-      gap:10px;
-      align-items:end;
-      margin-top:10px;
-    }
+    .alm-wrap{border:1px dashed #d1d5db;border-radius:12px;padding:10px;background:#f9fafb;}
+    .alm-row{display:grid;grid-template-columns: 1fr 1fr auto;gap:10px;align-items:end;margin-top:10px;}
     @media (max-width: 900px){
       .alm-row{ grid-template-columns:1fr; }
     }
 
-    .btn-green{
-      background:#16a34a;
-      color:#fff;
-      border:none;
-      padding:.45rem .9rem;
-      border-radius:.6rem;
-      font-weight:800;
-      cursor:pointer;
-    }
+    .btn-green{background:#16a34a;color:#fff;border:none;padding:.45rem .9rem;border-radius:.6rem;font-weight:800;cursor:pointer;}
     .btn-green:hover{ background:#15803d; }
-
-    .btn-red{
-      background:#ef4444;
-      color:#fff;
-      border:none;
-      padding:.45rem .9rem;
-      border-radius:.6rem;
-      font-weight:800;
-      cursor:pointer;
-    }
+    .btn-red{background:#ef4444;color:#fff;border:none;padding:.45rem .9rem;border-radius:.6rem;font-weight:800;cursor:pointer;}
     .btn-red:hover{ background:#dc2626; }
 
-    .btn-gray{
-      background:#f3f4f6;
-      border:1px solid #e5e7eb;
-      color:#374151;
-      padding:.45rem .9rem;
-      border-radius:.6rem;
-      font-weight:800;
-      cursor:pointer;
+    .btn-gray{background:#f3f4f6;border:1px solid #e5e7eb;color:#374151;padding:.45rem .9rem;border-radius:.6rem;font-weight:800;cursor:pointer;}
+
+    /* ✅ NUEVO: estilo accesorio checkbox (visual consistente) */
+    .acc-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(220px,1fr));
+      gap:10px;
+      margin-top:6px;
     }
-    /* ========================================================== */
+    @media (max-width: 900px){
+      .acc-grid{ grid-template-columns:1fr; }
+    }
+    .acc-item{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      background:#fff;
+      font-size:13px;
+      color:#374151;
+      font-weight:700;
+    }
+    .acc-item input{ width:16px; height:16px; }
   </style>
 
   <!-- Escalamos SOLO el contenido principal.
@@ -406,6 +246,12 @@
                     // sp = valores efectivos por serie (producto + overrides) si existe accessor specs
                     $sp = (array) ($s->specs ?? $s->especificaciones ?? []);
                     $tipoProd = (string) ($producto->tipo ?? '');
+
+                    // ✅ NUEVO: fecha compra / numero / accesorios (si existen)
+                    $fechaCompra = data_get($sp, 'fecha_compra');
+                    $numeroCel   = data_get($sp, 'numero_celular');
+                    $acc         = data_get($sp, 'accesorios', []);
+                    if (!is_array($acc)) $acc = [];
 
                     // Descripción por serie (nuevo: observaciones) + fallbacks legacy/producto
                     $descSerieObs = $s->observaciones ?? null;
@@ -497,6 +343,11 @@
                           @if(!empty($sp['procesador']))
                             <span class="chip">{{ $sp['procesador'] }}</span>
                           @endif
+
+                          {{-- ✅ NUEVO: fecha compra chip (opcional) --}}
+                          @if(!empty($fechaCompra))
+                            <span class="chip">Compra: {{ \Illuminate\Support\Str::of($fechaCompra)->limit(10,'') }}</span>
+                          @endif
                         </div>
 
                       @elseif($tipoProd === 'celular')
@@ -518,16 +369,43 @@
                           @if(!empty($sp['imei']))
                             <span class="chip">IMEI: {{ $sp['imei'] }}</span>
                           @endif
+
+                          {{-- ✅ NUEVO: número + fecha compra --}}
+                          @if(!empty($numeroCel))
+                            <span class="chip">Tel: {{ $numeroCel }}</span>
+                          @endif
+                          @if(!empty($fechaCompra))
+                            <span class="chip">Compra: {{ \Illuminate\Support\Str::of($fechaCompra)->limit(10,'') }}</span>
+                          @endif
+
+                          {{-- ✅ NUEVO: accesorios (si vienen) --}}
+                          @php
+                            $accLabels = [];
+                            if (!empty($acc['funda'])) $accLabels[] = 'Funda';
+                            if (!empty($acc['mica_protectora'])) $accLabels[] = 'Mica';
+                            if (!empty($acc['cargador'])) $accLabels[] = 'Cargador';
+                            if (!empty($acc['cable_usb'])) $accLabels[] = 'Cable';
+                          @endphp
+                          @if(!empty($accLabels))
+                            <span class="chip" title="{{ implode(', ', $accLabels) }}">
+                              Acc: {{ \Illuminate\Support\Str::limit(implode(', ', $accLabels), 40) }}
+                            </span>
+                          @endif
                         </div>
 
                       @elseif(in_array($tipoProd, ['impresora','monitor','pantalla','periferico','otro'], true))
-                        @if($desc)
-                          <div class="chips">
+                        <div class="chips">
+                          @if($desc)
                             <span class="chip" title="{{ $desc }}">
                               {{ \Illuminate\Support\Str::limit($desc, 70) }}
                             </span>
-                          </div>
-                        @endif
+                          @endif
+
+                          {{-- ✅ NUEVO: fecha compra chip (opcional) --}}
+                          @if(!empty($fechaCompra))
+                            <span class="chip">Compra: {{ \Illuminate\Support\Str::of($fechaCompra)->limit(10,'') }}</span>
+                          @endif
+                        </div>
                       @endif
                     </td>
 
@@ -665,8 +543,12 @@
   </div>
 
   {{-- ==========================================================
-       ✅ CAMBIO: MODAL Alta masiva estilo CREATE (accordion)
+       ✅ MODAL Alta masiva estilo CREATE (accordion)
        Mantiene el POST a la MISMA ruta: productos.series.store
+       ✅ CAMBIOS:
+         - PC: fecha_compra a la derecha del procesador
+         - Otros: fecha_compra debajo de descripcion
+         - Cel: numero_celular + fecha_compra (misma fila) + accesorios debajo
      ========================================================== --}}
   @can('productos.create')
     @php
@@ -859,9 +741,6 @@
   {{-- ✅ Historial JS solo para Admin (si no, ni existe el botón) --}}
   @if($isAdmin)
     <script>
-    /* ===========================
-      ABRIR MODAL DE HISTORIAL
-    =========================== */
     async function openSerieHistorial(id) {
         try {
             const res = await fetch(`/producto-series/${id}/historial`, {
@@ -884,9 +763,6 @@
         }
     }
 
-    /* ===========================
-      CIERRE GLOBAL DEL MODAL
-    =========================== */
     document.addEventListener('click', (e) => {
         const closeBtn = e.target.closest('[data-modal-close]');
         const backdrop = e.target.closest('[data-modal-backdrop]');
@@ -915,8 +791,11 @@
   @endif
 
   {{-- ==========================================================
-       ✅ CAMBIO: JS Alta masiva estilo CREATE (accordion)
-       (SIN CAMBIOS)
+       ✅ JS Alta masiva estilo CREATE (accordion)
+       ✅ CAMBIOS:
+         - PC: fecha_compra a la derecha de procesador
+         - Otros: fecha_compra debajo de descripcion
+         - Cel: numero_celular + fecha_compra y accesorios debajo
      ========================================================== --}}
   @can('productos.create')
   <script>
@@ -982,13 +861,50 @@
       `;
     }
 
+    function accesoriosHTML(i, specs){
+      const acc = (specs && typeof specs === 'object' && specs.accesorios && typeof specs.accesorios === 'object')
+        ? specs.accesorios
+        : {};
+
+      const checked = (v) => (v === true || v === 1 || v === '1' || v === 'on');
+
+      return `
+        <div class="section-title">Accesorios</div>
+        <div class="acc-grid">
+          <label class="acc-item">
+            <input type="checkbox" name="series[${i}][specs][accesorios][funda]" value="1" ${checked(acc.funda) ? 'checked':''}>
+            Funda
+          </label>
+
+          <label class="acc-item">
+            <input type="checkbox" name="series[${i}][specs][accesorios][mica_protectora]" value="1" ${checked(acc.mica_protectora) ? 'checked':''}>
+            Mica protectora
+          </label>
+
+          <label class="acc-item">
+            <input type="checkbox" name="series[${i}][specs][accesorios][cargador]" value="1" ${checked(acc.cargador) ? 'checked':''}>
+            Cargador
+          </label>
+
+          <label class="acc-item">
+            <input type="checkbox" name="series[${i}][specs][accesorios][cable_usb]" value="1" ${checked(acc.cable_usb) ? 'checked':''}>
+            Cable USB
+          </label>
+        </div>
+      `;
+    }
+
     function buildSpecsHTML(i, data){
       const specs = (data && typeof data === 'object') ? (data.specs || {}) : {};
       const get = (k, fallback='') => (specs?.[k] ?? data?.[k] ?? fallback);
 
+      // ✅ nuevo campo común
+      const fechaCompraVal = get('fecha_compra', '');
+
       if(tipoProd === 'celular'){
         return `
           <div class="section-title">Especificaciones (por serie) - Celular / Teléfono</div>
+
           <div class="grid-2">
             <div class="field">
               <label>Descripción o Color</label>
@@ -1006,7 +922,20 @@
               <label>IMEI</label>
               <input class="inp" name="series[${i}][specs][imei]" value="${esc(get('imei'))}" placeholder="Ej. 356xxxxxxxxxxxxx">
             </div>
+
+            <!-- ✅ NUEVO: número + fecha compra (misma fila) -->
+            <div class="field">
+              <label>Número de celular</label>
+              <input class="inp" name="series[${i}][specs][numero_celular]" value="${esc(get('numero_celular'))}" placeholder="Ej. 2221234567">
+            </div>
+            <div class="field">
+              <label>Fecha de compra</label>
+              <input class="inp" type="date" name="series[${i}][specs][fecha_compra]" value="${esc(fechaCompraVal)}">
+            </div>
           </div>
+
+          <!-- ✅ NUEVO: accesorios debajo -->
+          ${accesoriosHTML(i, specs)}
         `;
       }
 
@@ -1043,22 +972,34 @@
             <div class="muted" style="margin-top:8px;">Si capturas capacidad, selecciona el tipo (SSD/HDD/M.2).</div>
           </div>
 
+          <!-- ✅ CAMBIO: Procesador + Fecha de compra (lado derecho) -->
           <div class="section-title">Procesador</div>
-          <div class="grid-1">
+          <div class="grid-2">
             <div class="field">
               <label>Procesador</label>
               <input class="inp" name="series[${i}][specs][procesador]" value="${esc(get('procesador'))}" placeholder="Ej. Intel Core i5-1135G7">
+            </div>
+            <div class="field">
+              <label>Fecha de compra</label>
+              <input class="inp" type="date" name="series[${i}][specs][fecha_compra]" value="${esc(fechaCompraVal)}">
             </div>
           </div>
         `;
       }
 
+      // impresora/monitor/pantalla/periferico/otro
       return `
         <div class="section-title">Descripción (por serie)</div>
         <div class="grid-1">
           <div class="field">
             <label>Detalles relevantes de esta pieza/serie</label>
             <textarea class="inp" name="series[${i}][observaciones]" rows="4" placeholder="Detalles relevantes de esta pieza/serie...">${esc(data?.observaciones ?? '')}</textarea>
+          </div>
+
+          <!-- ✅ NUEVO: fecha compra debajo -->
+          <div class="field">
+            <label>Fecha de compra</label>
+            <input class="inp" type="date" name="series[${i}][specs][fecha_compra]" value="${esc(fechaCompraVal)}">
           </div>
         </div>
       `;
@@ -1190,6 +1131,9 @@
             if(el.tagName === 'SELECT') el.value = '';
             else el.value = '';
           });
+
+          // limpiar checks accesorios si aplica
+          card?.querySelectorAll('input[type="checkbox"]').forEach(ch=> ch.checked = false);
           return;
         }
         rm.closest('.serie-card')?.remove();

@@ -292,6 +292,13 @@
 
       // Construir lista dinámica como en show.blade.php
       $productos = $devolucion->productos ?? collect();
+
+      // si viene al menos 1 producto tipo celular/telefono en la tabla
+      $hasCelularRow = $productos->contains(function($p){
+        $tipo = (string) ($p->tipo ?? '');
+        return in_array($tipo, ['celular','telefono'], true);
+      });
+
       $productosTexto = $productos->map(function ($p) use ($tipos) {
           $tipoClave    = $p->tipo ?? 'otro';
           $tipoProducto = $tipos[$tipoClave] ?? ucfirst(str_replace('_', ' ', $tipoClave));
@@ -322,12 +329,24 @@
       $filasVacias = max(0, 4 - $totalProductos);
     @endphp
 
-    <table style="margin-top: 10px; border-collapse: collapse; width: 100%; text-align: center;">
+    <table class="productos" style="margin-top: 10px; border-collapse: collapse; width: 100%; text-align: center;">
       <thead>
         <tr style="background-color: #f5f5f5; font-weight: bold;">
-          <th>PRODUCTO</th><th>DESCRIPCIÓN</th><th>MARCA</th><th>MODELO</th><th>N° DE SERIE</th>
+          <th>PRODUCTO</th>
+          <th>DESCRIPCIÓN</th>
+
+          @if($hasCelularRow)
+            <th>MARCA Y MODELO</th>
+            <th>ACCESORIOS</th>
+            <th>N° DE SERIE</th>
+          @else
+            <th>MARCA</th>
+            <th>MODELO</th>
+            <th>N° DE SERIE</th>
+          @endif
         </tr>
       </thead>
+
       <tbody>
         @foreach($productos as $prod)
           @php
@@ -351,7 +370,7 @@
             $specP = $prod->especificaciones ?? $prod->specs ?? null;
             if (is_string($specP)) { $tmp = json_decode($specP, true); if (json_last_error() === JSON_ERROR_NONE) $specP = $tmp; }
 
-            // === Lógica descripción/color (igual que edit/show corregido) ===
+            // === Lógica descripción/color (igual que show) ===
             if (($prod->tipo ?? null) === 'equipo_pc') {
               $colorSerie = data_get($specS, 'color');
               $colorProd  = data_get($specP, 'color');
@@ -375,28 +394,88 @@
 
               $des = filled($descSerie) ? $descSerie : (filled($descProd) ? $descProd : ($prod->descripcion ?? ''));
             }
+
+            $tipoRow = (string) ($prod->tipo ?? '');
+
+            // ✅ Marca+Modelo (una sola celda)
+            $marca = trim((string)($prod->marca ?? ''));
+            $modelo = trim((string)($prod->modelo ?? ''));
+            $marcaModelo = trim($marca.' '.$modelo);
+            if ($marcaModelo === '') $marcaModelo = '—';
+
+            // ✅ Accesorios (solo aplica si el row es celular/telefono)
+            $accCell = '—';
+
+            if (in_array($tipoRow, ['celular','telefono'], true)) {
+              $acc = data_get($specS, 'accesorios');
+
+              // si viene JSON string -> array
+              if (is_string($acc)) {
+                $tmp = json_decode($acc, true);
+                if (json_last_error() === JSON_ERROR_NONE) $acc = $tmp;
+              }
+
+              // si viene array tipo {mica_protectora: true, ...}
+              if (is_array($acc)) {
+                $accLabels = [
+                  'mica_protectora' => 'Mica',
+                  'funda'           => 'Funda',
+                  'cargador'        => 'Cargador',
+                  'cable_usb'       => 'Cable USB',
+                ];
+
+                $accList = [];
+                foreach ($accLabels as $k => $label) {
+                  if (!empty($acc[$k])) $accList[] = $label;
+                }
+
+                $accCell = count($accList) ? implode(', ', $accList) : '—';
+              } else {
+                // si viene como texto plano
+                $accText = trim((string)$acc);
+                $accCell = $accText !== '' ? $accText : '—';
+              }
+            }
           @endphp
 
           <tr>
             <td>{{ $prod->nombre ?? '—' }}</td>
             <td>{{ $des ?: '—' }}</td>
-            <td>{{ $prod->marca ?? '—' }}</td>
-            <td>{{ $prod->modelo ?? '—' }}</td>
-            <td>{{ $serieSeleccionada ?: '—' }}</td>
+
+            @if($hasCelularRow)
+              <td>{{ $marcaModelo }}</td>
+              <td>{{ $accCell }}</td>
+              <td>{{ $serieSeleccionada ?: '—' }}</td>
+            @else
+              <td>{{ $marca ?: '—' }}</td>
+              <td>{{ $modelo ?: '—' }}</td>
+              <td>{{ $serieSeleccionada ?: '—' }}</td>
+            @endif
           </tr>
         @endforeach
 
         @for($i = 0; $i < $filasVacias; $i++)
-          <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          @if($hasCelularRow)
+            <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          @else
+            <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+          @endif
         @endfor
       </tbody>
     </table>
 
-    <p class="paragraph" style="margin-top: 12px;">
-      El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas.
-      Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la cuenta de correo electrónico
-      asignada a mi usuario.
-    </p>
+    @if($isCel)
+      <p class="paragraph" style="margin-top: 12px;">
+        El usuario realiza la devolución del equipo asignado en calidad de préstamo, confirmando que se entrega en buen estado de funcionamiento.
+        El equipo quedará bajo resguardo para su futura asignación.
+      </p>
+    @else
+      <p class="paragraph" style="margin-top: 12px;">
+        El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas.
+        Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la cuenta de correo electrónico
+        asignada a mi usuario.
+      </p>
+    @endif
 
     <!-- ===== FECHA DE DEVOLUCIÓN (mantiene posición original) ===== -->
     <table style="width: 100%; border: none; margin-top: 10px; margin-bottom: 65px;"> {{-- margen inferior para dejar espacio a las firmas --}}

@@ -13,6 +13,12 @@
     $psitio  = $devolucion->psitioColaborador ?? null;
     $productos = $devolucion->productos ?? collect();
 
+    // ✅ NUEVO: si en la devolución viene al menos 1 producto tipo celular/telefono
+    $hasCelularRow = $productos->contains(function($p){
+      $tipo = (string) ($p->tipo ?? '');
+      return in_array($tipo, ['celular','telefono'], true);
+    });
+
     // Empresa / logo
     $empresaId     = (int) session('empresa_activa', auth()->user()?->empresa_id);
     $empresaNombre = config('app.name', 'Laravel');
@@ -442,13 +448,20 @@
 
           <table class="tbl" style="margin-top:10px">
             <thead>
-                <tr>
+              <tr>
                 <th>Equipo</th>
                 <th>Descripción</th>
-                <th>Marca</th>
-                <th>Modelo</th>
-                <th>Serie</th>
-                </tr>
+
+                @if($hasCelularRow)
+                  <th>Marca y modelo</th>
+                  <th>Accesorios</th>
+                  <th>Serie</th>
+                @else
+                  <th>Marca</th>
+                  <th>Modelo</th>
+                  <th>Serie</th>
+                @endif
+              </tr>
             </thead>
             <tbody>
                 {{-- Productos reales --}}
@@ -488,14 +501,56 @@
 
                     $des = filled($descSerie) ? $descSerie : (filled($descProd) ? $descProd : ($p->descripcion ?? ''));
                   }
+
+                  $tipoRow = (string) ($p->tipo ?? '');
+
+                  // ✅ accesorios (solo para celular/telefono, por serie)
+                  $acc = data_get($specS, 'accesorios');
+                  if (is_string($acc)) { $tmp = json_decode($acc, true); if (json_last_error() === JSON_ERROR_NONE) $acc = $tmp; }
+                  $acc = is_array($acc) ? $acc : [];
+
+                  $accLabels = [
+                    'mica_protectora' => 'Mica',
+                    'funda'           => 'Funda',
+                    'cargador'        => 'Cargador',
+                    'cable_usb'       => 'Cable USB',
+                  ];
+
+                  $accList = [];
+                  foreach ($accLabels as $k => $label) {
+                    if (!empty($acc[$k])) $accList[] = $label;
+                  }
+
+                  // ✅ Marca + Modelo en una sola celda
+                  $marcaModelo = trim(trim((string)($p?->marca ?? '')).' '.trim((string)($p?->modelo ?? '')));
+                  if ($marcaModelo === '') $marcaModelo = '—';
                 @endphp
 
                 <tr>
                   <td>{{ $p->nombre ?? '-' }}</td>
                   <td>{{ $des ?: '-' }}</td>
-                  <td>{{ $p->marca ?? '-' }}</td>
-                  <td>{{ $p->modelo ?? '-' }}</td>
-                  <td>{{ $serie?->serie ?? '-' }}</td>
+
+                  @if($hasCelularRow)
+                    <td>{{ $marcaModelo }}</td>
+
+                    <td>
+                      @if(in_array($tipoRow, ['celular','telefono'], true))
+                        @if(count($accList))
+                          {{ implode(', ', $accList) }}
+                        @else
+                          —
+                        @endif
+                      @else
+                        —
+                      @endif
+                    </td>
+
+                    <td>{{ $serie?->serie ?? '-' }}</td>
+                  @else
+                    <td>{{ $p->marca ?? '-' }}</td>
+                    <td>{{ $p->modelo ?? '-' }}</td>
+                    <td>{{ $serie?->serie ?? '-' }}</td>
+                  @endif
                 </tr>
                 @endforeach
 
@@ -515,11 +570,17 @@
           <br>
 
           {{-- TEXTO ENTERADO --}}
-          <div class="blk">
-            <span>El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas.</span> 
-            <span>Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la 
-                cuenta de correo electrónico asignada a mi usuario.</span>
-          </div>
+          @if($isCel)
+            <div class="blk">
+              <span>El usuario realiza la devolución del equipo asignado en calidad de préstamo, confirmando que se entrega en buen estado de funcionamiento.</span>
+              <span>El equipo quedará bajo resguardo para su futura asignación.</span>
+            </div>
+          @else
+            <div class="blk">
+              <span>El usuario realiza la devolución del equipo en óptimas condiciones. La entrega se hizo llegar al departamento de sistemas.</span>
+              <span>Asimismo, confirmo que estoy enterado de que se realizará un respaldo y la posterior baja de la cuenta de correo electrónico asignada a mi usuario.</span>
+            </div>
+          @endif
 
           <br>
 

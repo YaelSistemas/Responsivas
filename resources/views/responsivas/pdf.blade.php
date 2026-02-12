@@ -82,19 +82,63 @@
 
     // ✅ SOLO si es CEL: agrega producto(s) y luego observaciones
     if ($isCel) {
+      // 1) Nombre(s) de producto(s) (limpia "resguardo")
       $productoCel = $productosLista
-        ? implode(', ', $productosLista)
-        : 'celular';
+        ? implode(', ', array_map(function ($n) {
+            $n = trim((string)$n);
+            $n = preg_replace('/\bresguardo\b/i', '', $n);
+            $n = trim(preg_replace('/\s+/', ' ', $n));
+            return $n !== '' ? $n : 'Celular';
+          }, $productosLista))
+        : 'Celular';
 
-      // "Se hace entrega de equipo {producto}."
-      $fraseEntrega = 'Se hace entrega de equipo '.$productoCel.',';
+      // 2) Num celular desde especificaciones de SERIE (primer match)
+      $numCel = null;
+      foreach ($detalles as $d) {
+        $s = $d->serie;
+        if (!$s) continue;
 
-      // "Observaciones: {obs}."
-      if ($obs !== '') {
-        $fraseEntrega .= ' para '.$obs.'.';
+        $specS = $s->especificaciones ?? $s->specs ?? null;
+        if (is_string($specS)) {
+          $tmp = json_decode($specS, true);
+          if (json_last_error() === JSON_ERROR_NONE) $specS = $tmp;
+        }
+
+        $cand = data_get($specS, 'num_celular')
+            ?? data_get($specS, 'numero_celular')
+            ?? data_get($specS, 'telefono')
+            ?? data_get($specS, 'numero_telefono')
+            ?? data_get($specS, 'linea')
+            ?? data_get($specS, 'numero_linea');
+
+        $cand = trim((string)$cand);
+        if ($cand !== '') { $numCel = $cand; break; }
+      }
+
+      // 3) Frase final
+      $fraseEntrega = 'Se hace entrega de equipo '.$productoCel;
+
+      if (!empty($numCel)) {
+        $fraseEntrega .= ' (Num. Celular: '.$numCel.')';
+      }
+
+      $fraseEntrega .= ','; // coma obligatoria
+
+      $obsCel = trim((string)($responsiva->observaciones ?? ''));
+      if ($obsCel === '') {
+        $fraseEntrega .= ' para actividades.';
+      } else {
+        $fraseEntrega .= ' para '.$obsCel.'.';
       }
     }
-
+  
+  // ✅ NUEVO: si en la responsiva viene al menos 1 producto tipo celular/telefono,
+  // mostramos columna "Accesorios" entre Modelo y Número de serie.
+  $hasCelularRow = $detalles->contains(function($d){
+    $tipo = (string) ($d->producto->tipo ?? '');
+    return in_array($tipo, ['celular','telefono'], true);
+  }); 
+  
   // Razón social emisor (igual que tu show/pdf anterior)
   $emisorRazon = $empresaNombre;
   if ($col) {
@@ -431,9 +475,16 @@
         <tr style="background:#f5f5f5; font-weight:bold;">
           <th style="width:20%;">EQUIPO</th>
           <th style="width:28%;">DESCRIPCIÓN</th>
-          <th style="width:16%;">MARCA</th>
-          <th style="width:16%;">MODELO</th>
-          <th>NÚMERO DE SERIE</th>
+
+          @if($hasCelularRow)
+            <th style="width:22%;">MARCA Y MODELO</th>
+            <th style="width:14%;">ACCESORIOS</th>
+            <th>NÚMERO DE SERIE</th>
+          @else
+            <th style="width:16%;">MARCA</th>
+            <th style="width:16%;">MODELO</th>
+            <th>NÚMERO DE SERIE</th>
+          @endif
         </tr>
       </thead>
       <tbody>
@@ -468,21 +519,68 @@
 
             $des = trim((string)$des);
             if ($des === '') $des = '—';
+
+            $tipoRow = (string) ($p->tipo ?? '');
+
+            // accesorios (solo para celular/telefono, por serie)
+            $acc = data_get($specS, 'accesorios');
+            if (is_string($acc)) { $tmp = json_decode($acc, true); if (json_last_error() === JSON_ERROR_NONE) $acc = $tmp; }
+            $acc = is_array($acc) ? $acc : [];
+
+            $accLabels = [
+              'mica_protectora' => 'Mica',
+              'funda'           => 'Funda',
+              'cargador'        => 'Cargador',
+              'cable_usb'       => 'Cable USB',
+            ];
+
+            $accList = [];
+            foreach ($accLabels as $k => $label) {
+              if (!empty($acc[$k])) $accList[] = $label;
+            }
+
+            $marcaModelo = trim(trim((string)($p?->marca ?? '')).' '.trim((string)($p?->modelo ?? '')));
+            if ($marcaModelo === '') $marcaModelo = '—';
           @endphp
 
           <tr>
             <td style="text-transform:uppercase;">{{ $p?->nombre ?? '—' }}</td>
             <td>{{ $des ?: '—' }}</td>
-            <td>{{ $p?->marca ?? '—' }}</td>
-            <td>{{ $p?->modelo ?? '—' }}</td>
-            <td>{{ $s?->serie ?? '—' }}</td>
+
+            @if($hasCelularRow)
+              <td>{{ $marcaModelo }}</td>
+
+              <td>
+                @if(in_array($tipoRow, ['celular','telefono'], true))
+                  @if(count($accList))
+                    {{ implode(', ', $accList) }}
+                  @else
+                    —
+                  @endif
+                @else
+                  —
+                @endif
+              </td>
+
+              <td>{{ $s?->serie ?? '—' }}</td>
+            @else
+              <td>{{ $p?->marca ?? '—' }}</td>
+              <td>{{ $p?->modelo ?? '—' }}</td>
+              <td>{{ $s?->serie ?? '—' }}</td>
+            @endif
           </tr>
         @endforeach
 
         @for($i=0; $i<$faltan; $i++)
-          <tr>
-            <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-          </tr>
+          @if($hasCelularRow)
+            <tr>
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+          @else
+            <tr>
+              <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+            </tr>
+          @endif
         @endfor
       </tbody>
     </table>

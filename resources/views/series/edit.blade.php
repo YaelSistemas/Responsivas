@@ -18,6 +18,15 @@
     // fallback por si vienes de algo anterior
     $descActual = old('descripcion', $serie->observaciones ?? data_get($over, 'descripcion'));
 
+    // Fecha compra (siempre debe existir en UI en el mismo lugar que create)
+    $fechaCompraActual = old('fecha_compra', data_get($over,'fecha_compra')); // guardada en especificaciones[fecha_compra]
+
+    // Cel extras
+    $numeroCelActual = old('spec_cel.numero_celular', data_get($over,'numero_celular'));
+
+    $acc = old('spec_cel.accesorios', data_get($over,'accesorios', []));
+    if (!is_array($acc)) $acc = [];
+
     // Almacenamientos por serie (PC) (overrides)
     $overStor = old('spec_pc.almacenamientos', data_get($over, 'almacenamientos', []));
     if (!is_array($overStor)) $overStor = [];
@@ -56,6 +65,11 @@
     .btn-mini-del:hover{ background:#fecaca; }
     .storage-row{ border:1px dashed #e5e7eb; border-radius:10px; padding:10px; margin-bottom:10px; background:#fff; }
     .storage-row:last-child{ margin-bottom:0; }
+
+    /* accesorios (mejor visual) */
+    .acc-wrap{ display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+    .acc-item{ display:flex; gap:8px; align-items:center; margin:0; }
+    .acc-item input[type="checkbox"]{ width:18px; height:18px; accent-color:#16a34a; }
   </style>
 
   <div class="zoom-outer">
@@ -205,6 +219,13 @@
                          placeholder="{{ data_get($eff,'procesador') }}">
                   @error('spec_pc.procesador') <div class="err">{{ $message }}</div> @enderror
                 </div>
+
+                {{-- ✅ SIEMPRE: fecha de compra (mismo lugar que create: al final del bloque) --}}
+                <div style="grid-column:1/-1">
+                  <label>Fecha de compra</label>
+                  <input class="inp" type="date" name="fecha_compra" value="{{ $fechaCompraActual }}">
+                  @error('fecha_compra') <div class="err">{{ $message }}</div> @enderror
+                </div>
               </div>
             </div>
 
@@ -240,6 +261,47 @@
                          value="{{ old('spec_cel.imei', data_get($over,'imei')) }}">
                   @error('spec_cel.imei') <div class="err">{{ $message }}</div> @enderror
                 </div>
+
+                {{-- ✅ NUEVO: número de celular (mismo lugar que create: después de IMEI y antes de fecha) --}}
+                <div>
+                  <label>Número de celular</label>
+                  <input class="inp" name="spec_cel[numero_celular]" value="{{ $numeroCelActual }}" placeholder="Ej. 55 1234 5678">
+                  @error('spec_cel.numero_celular') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- ✅ SIEMPRE: fecha de compra (mismo lugar que create) --}}
+                <div>
+                  <label>Fecha de compra</label>
+                  <input class="inp" type="date" name="fecha_compra" value="{{ $fechaCompraActual }}">
+                  @error('fecha_compra') <div class="err">{{ $message }}</div> @enderror
+                </div>
+
+                {{-- ✅ NUEVO: Accesorios (mismo feeling del create) --}}
+                <div style="grid-column:1/-1; margin-top:6px;">
+                  <div style="font-weight:900;color:#111827;margin-top:2px;">Accesorios</div>
+
+                  <div class="acc-wrap">
+                    <label class="acc-item">
+                      <input type="checkbox" name="spec_cel[accesorios][funda]" value="1" @checked(data_get($acc,'funda'))>
+                      <span>Funda</span>
+                    </label>
+
+                    <label class="acc-item">
+                      <input type="checkbox" name="spec_cel[accesorios][mica_protectora]" value="1" @checked(data_get($acc,'mica_protectora'))>
+                      <span>Mica Protectora</span>
+                    </label>
+
+                    <label class="acc-item">
+                      <input type="checkbox" name="spec_cel[accesorios][cargador]" value="1" @checked(data_get($acc,'cargador'))>
+                      <span>Cargador</span>
+                    </label>
+
+                    <label class="acc-item">
+                      <input type="checkbox" name="spec_cel[accesorios][cable_usb]" value="1" @checked(data_get($acc,'cable_usb'))>
+                      <span>Cable USB</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -252,6 +314,13 @@
               <textarea class="inp" name="descripcion" id="descripcion" rows="6"
                         placeholder="{{ $producto->descripcion ?? 'Escribe la descripción o notas…' }}">{{ $descActual }}</textarea>
               @error('descripcion') <div class="err">{{ $message }}</div> @enderror
+
+              {{-- ✅ SIEMPRE: fecha de compra (mismo lugar que create: debajo de la descripción) --}}
+              <div style="margin-top:10px;">
+                <label>Fecha de compra</label>
+                <input class="inp" type="date" name="fecha_compra" value="{{ $fechaCompraActual }}">
+                @error('fecha_compra') <div class="err">{{ $message }}</div> @enderror
+              </div>
             </div>
 
             <div class="actions">
@@ -292,7 +361,6 @@
         const btnAdd = box.querySelector('[data-add-storage]');
         if (!rowsWrap || !tpl || !btnAdd) return;
 
-        // calcula siguiente índice j tomando el mayor existente
         function getNextIndex(){
           const inputs = rowsWrap.querySelectorAll('select[name^="spec_pc[almacenamientos]"], input[name^="spec_pc[almacenamientos]"]');
           let max = -1;
@@ -310,7 +378,6 @@
             btn.addEventListener('click', () => {
               const row = btn.closest('[data-storage-row]');
               row?.remove();
-              // si se queda sin filas, deja 1 fila por default
               if (rowsWrap.querySelectorAll('[data-storage-row]').length === 0) addStorageRow();
             });
           });
@@ -329,7 +396,6 @@
         btnAdd.addEventListener('click', addStorageRow);
         wireDelButtons();
 
-        // asegura mínimo 1
         if (rowsWrap.querySelectorAll('[data-storage-row]').length === 0) addStorageRow();
       }
 
@@ -338,28 +404,35 @@
       // ===== Limpiar según sección =====
       function clearPC(){
         document.querySelectorAll('[name="spec_pc[color]"], [name="spec_pc[ram_gb]"], [name="spec_pc[procesador]"]').forEach(el => el.value = '');
-        // limpia almacenamientos y deja uno
         const rowsWrap = document.querySelector('[data-storage-rows]');
-        if (rowsWrap){
-          rowsWrap.innerHTML = '';
-        }
+        if (rowsWrap){ rowsWrap.innerHTML = ''; }
         initStorageRepeater();
+
+        // fecha compra
+        document.querySelectorAll('[name="fecha_compra"]').forEach(el => el.value = '');
       }
 
       function clearCEL(){
-        document.querySelectorAll('[name="spec_cel[color]"], [name="spec_cel[almacenamiento_gb]"], [name="spec_cel[ram_gb]"], [name="spec_cel[imei]"]').forEach(el => el.value = '');
+        document.querySelectorAll(
+          '[name="spec_cel[color]"], [name="spec_cel[almacenamiento_gb]"], [name="spec_cel[ram_gb]"], [name="spec_cel[imei]"], [name="spec_cel[numero_celular]"]'
+        ).forEach(el => el.value = '');
+
+        // accesorios
+        document.querySelectorAll('[name^="spec_cel[accesorios]"]').forEach(el => el.checked = false);
+
+        // fecha compra
+        document.querySelectorAll('[name="fecha_compra"]').forEach(el => el.value = '');
       }
 
       function clearDESC(){
         const desc = document.getElementById('descripcion');
         if (desc) desc.value = '';
+
+        // fecha compra
+        document.querySelectorAll('[name="fecha_compra"]').forEach(el => el.value = '');
       }
 
       btnClear?.addEventListener('click', () => {
-        // también puedes limpiar subsidiaria/unidad si quieres:
-        // document.getElementById('subsidiaria_id').value = '';
-        // document.getElementById('unidad_servicio_id').value = '';
-
         if (tipo === 'equipo_pc') clearPC();
         else if (tipo === 'celular') clearCEL();
         else clearDESC();
@@ -409,7 +482,6 @@
         }
       });
 
-      // autofocus
       setTimeout(() => {
         const first = form?.querySelector('input,select,textarea');
         first?.focus?.();

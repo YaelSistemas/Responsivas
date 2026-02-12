@@ -48,45 +48,29 @@
     .storage-row:last-child{ margin-bottom:0; }
 
     /* ===== Serie Cards (borde más negro + acordeón libre) ===== */
-    .serie-row{
-      border:1px solid #9ca3af;
-      border-radius:12px;
-      padding:12px;
-      margin-bottom:12px;
-      background:#fff;
-    }
-    .serie-header{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      cursor:pointer;
-      user-select:none;
-      padding:10px 10px;
-      border-radius:10px;
-      background:#f9fafb;
-      border:1px solid #e5e7eb;
-    }
+    .serie-row{ border:1px solid #9ca3af; border-radius:12px; padding:12px; margin-bottom:12px; background:#fff; }
+    .serie-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; user-select:none; padding:10px 10px; 
+      border-radius:10px; background:#f9fafb; border:1px solid #e5e7eb; }
     .serie-title{ font-weight:800; color:#111827; }
     .serie-subtitle{ font-size:12px; color:#6b7280; margin-top:2px; }
     .serie-left{ display:flex; flex-direction:column; gap:2px; min-width:0; }
     .serie-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
-    .serie-toggle{
-      font-weight:900;
-      color:#111827;
-      font-size:16px;
-      line-height:1;
-      padding:4px 10px;
-      border-radius:8px;
-      border:1px solid #e5e7eb;
-      background:#fff;
-    }
+    .serie-toggle{ font-weight:900; color:#111827; font-size:16px; line-height:1; padding:4px 10px; border-radius:8px; border:1px solid #e5e7eb; background:#fff; }
     .serie-body{ margin-top:12px; }
     .serie-row.is-collapsed .serie-body{ display:none; }
-    .serie-row.has-error .serie-header{
-    border-color:#ef4444 !important;
-    box-shadow:0 0 0 2px rgba(239,68,68,.15);
-  }
+    .serie-row.has-error .serie-header{ border-color:#ef4444 !important; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+    
+    /* ✅ FIX: no aplicar estilos de input normal a checkbox/radio */
+    .form-container input[type="checkbox"],
+    .form-container input[type="radio"]{ width: auto !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; 
+      box-shadow: none !important; appearance: auto !important; -webkit-appearance: auto !important; accent-color: #2563eb; }
+    
+    /* ✅ bloque accesorios: 4 en línea, responsivo */
+    .acc-grid{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: center; }
+      @media (max-width: 720px){
+    .acc-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .acc-item{ display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: #111827; user-select: none; }
+    .acc-item input[type="checkbox"]{ width: 16px !important; height: 16px !important; }
   </style>
 
   <div class="zoom-outer">
@@ -302,9 +286,16 @@
                           </div>
                         </div>
 
-                        <div style="grid-column:1/-1">
-                          <label>Procesador</label>
-                          <input name="series[__i__][spec_pc][procesador]" placeholder="Ej. Intel Core i5-1135G7">
+                        <div class="grid-2" style="grid-column:1/-1">
+                          <div>
+                            <label>Procesador</label>
+                            <input name="series[__i__][spec_pc][procesador]" placeholder="Ej. Intel Core i5-1135G7">
+                          </div>
+
+                          <div>
+                            <label>Fecha de compra</label>
+                            <input type="date" name="series[__i__][spec_pc][fecha_compra]">
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -331,6 +322,43 @@
                           <label>IMEI</label>
                           <input name="series[__i__][spec_cel][imei]" placeholder="Ej. 356xxxxxxxxxxxxx">
                         </div>
+                      
+                        <div>
+                          <label>Número de celular</label>
+                          <input name="series[__i__][spec_cel][numero_celular]" placeholder="Ej. 55 1234 5678">
+                        </div>
+
+                        <div>
+                          <label>Fecha de compra</label>
+                          <input type="date" name="series[__i__][spec_cel][fecha_compra]">
+                        </div>
+
+                        <div style="grid-column:1/-1; margin-top:6px;">
+                          <div style="font-weight:700; margin:4px 0 6px; color:#111827;">Accesorios</div>
+
+                          <div class="acc-grid">
+                            <label class="acc-item">
+                              <input type="checkbox" name="series[__i__][spec_cel][accesorios][funda]" value="1">
+                              <span>Funda</span>
+                            </label>
+
+                            <label class="acc-item">
+                              <input type="checkbox" name="series[__i__][spec_cel][accesorios][mica_protectora]" value="1">
+                              <span>Mica Protectora</span>
+                            </label>
+
+                            <label class="acc-item">
+                              <input type="checkbox" name="series[__i__][spec_cel][accesorios][cargador]" value="1">
+                              <span>Cargador</span>
+                            </label>
+
+                            <label class="acc-item">
+                              <input type="checkbox" name="series[__i__][spec_cel][accesorios][cable_usb]" value="1">
+                              <span>Cable USB</span>
+                            </label>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
 
@@ -342,6 +370,11 @@
                         placeholder="Detalles relevantes de esta pieza/serie…"
                         style="width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px"
                       ></textarea>
+
+                      <div style="margin-top:10px;">
+                        <label>Fecha de compra</label>
+                        <input type="date" name="series[__i__][spec_desc][fecha_compra]">
+                      </div>
                     </div>
 
                     <div style="display:flex; justify-content:flex-end; margin-top:12px;">

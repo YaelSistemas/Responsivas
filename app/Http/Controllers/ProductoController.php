@@ -182,16 +182,17 @@ class ProductoController extends Controller implements HasMiddleware
                 Rule::exists('unidades_servicio', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
 
-            // ✅ NUEVO: SPECS POR SERIE (PC)
-            'series.*.spec_pc.color'      => ['nullable','string','max:50'],
-            'series.*.spec_pc.ram_gb'     => ['nullable','integer','min:1','max:32767'],
-            'series.*.spec_pc.procesador' => ['nullable','string','max:120'],
+            // ✅ SPECS POR SERIE (PC)
+            'series.*.spec_pc.color'        => ['nullable','string','max:50'],
+            'series.*.spec_pc.ram_gb'       => ['nullable','integer','min:1','max:32767'],
+            'series.*.spec_pc.procesador'   => ['nullable','string','max:120'],
+            // ✅ NUEVO: fecha compra PC
+            'series.*.spec_pc.fecha_compra' => ['nullable','date'],
 
-            // ✅ NUEVO (A): múltiples almacenamientos por serie
-            'series.*.spec_pc.almacenamientos'                       => ['nullable','array'],
-            'series.*.spec_pc.almacenamientos.*.tipo'                => ['nullable', Rule::in(['ssd','hdd','m2'])],
-            'series.*.spec_pc.almacenamientos.*.capacidad_gb'        => ['nullable','integer','min:1','max:50000'],
-            // Validación cruzada: si hay capacidad -> tipo requerido (por cada almacenamiento)
+            // ✅ (A): múltiples almacenamientos por serie
+            'series.*.spec_pc.almacenamientos'                => ['nullable','array'],
+            'series.*.spec_pc.almacenamientos.*.tipo'         => ['nullable', Rule::in(['ssd','hdd','m2'])],
+            'series.*.spec_pc.almacenamientos.*.capacidad_gb' => ['nullable','integer','min:1','max:50000'],
             'series.*.spec_pc.almacenamientos.*' => [
                 'nullable',
                 function ($attr, $value, $fail) {
@@ -206,14 +207,26 @@ class ProductoController extends Controller implements HasMiddleware
                 }
             ],
 
-            // ✅ NUEVO: SPECS POR SERIE (CELULAR)
+            // ✅ SPECS POR SERIE (CELULAR)
             'series.*.spec_cel.color'             => ['nullable','string','max:255'],
             'series.*.spec_cel.almacenamiento_gb' => ['nullable','integer','min:1','max:50000'],
             'series.*.spec_cel.ram_gb'            => ['nullable','integer','min:1','max:32767'],
             'series.*.spec_cel.imei'              => ['nullable','string','max:30'],
+            // ✅ NUEVO: num + fecha compra CEL
+            'series.*.spec_cel.numero_celular'    => ['nullable','string','max:30'],
+            'series.*.spec_cel.fecha_compra'      => ['nullable','date'],
 
-            // ✅ NUEVO: DESCRIPCIÓN POR SERIE (impresora/monitor/pantalla/periferico/otro)
-            'series.*.descripcion' => ['nullable','string','max:2000'],
+            // ✅ NUEVO: accesorios (CELULAR)
+            'series.*.spec_cel.accesorios'                 => ['nullable','array'],
+            'series.*.spec_cel.accesorios.funda'           => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'series.*.spec_cel.accesorios.mica_protectora' => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'series.*.spec_cel.accesorios.cargador'        => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'series.*.spec_cel.accesorios.cable_usb'       => ['nullable', Rule::in(['1', 1, true, 'on'])],
+
+            // ✅ DESCRIPCIÓN POR SERIE (impresora/monitor/pantalla/periferico/otro)
+            'series.*.descripcion'                => ['nullable','string','max:2000'],
+            // ✅ NUEVO: fecha compra para tipos con descripción por serie
+            'series.*.spec_desc.fecha_compra'     => ['nullable','date'],
 
             'stock_inicial_attach' => ['nullable'], // (si algún form viejo lo manda; no afecta)
             'stock_inicial'        => 'nullable|integer|min:0',
@@ -305,7 +318,7 @@ class ProductoController extends Controller implements HasMiddleware
                         if ($tipoProducto === 'equipo_pc') {
                             $pc = is_array($row['spec_pc'] ?? null) ? ($row['spec_pc'] ?? []) : [];
 
-                            // ✅ NUEVO (A): almacenamientos[]
+                            // ✅ (A): almacenamientos[]
                             $almacenamientos = [];
                             $almRows = $pc['almacenamientos'] ?? [];
                             if (is_array($almRows)) {
@@ -319,7 +332,7 @@ class ProductoController extends Controller implements HasMiddleware
                                     // ignorar filas vacías
                                     if ($t === '' && ($c === null || $c <= 0)) continue;
 
-                                    // si tiene capacidad, forzar que tenga tipo (ya lo valida validate, pero mantenemos defensa)
+                                    // si tiene capacidad, forzar que tenga tipo
                                     if ($c !== null && $c > 0 && $t === '') continue;
 
                                     $almacenamientos[] = array_filter([
@@ -336,24 +349,54 @@ class ProductoController extends Controller implements HasMiddleware
                                 // ✅ guardamos como array de discos
                                 'almacenamientos' => $almacenamientos ?: null,
 
-                                'procesador' => isset($pc['procesador']) ? trim((string)$pc['procesador']) : null,
+                                'procesador'   => isset($pc['procesador']) ? trim((string)$pc['procesador']) : null,
+                                // ✅ NUEVO: fecha compra
+                                'fecha_compra' => isset($pc['fecha_compra']) ? trim((string)$pc['fecha_compra']) : null,
                             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
                         }
 
                         if ($tipoProducto === 'celular') {
                             $cel = is_array($row['spec_cel'] ?? null) ? ($row['spec_cel'] ?? []) : [];
+
+                            // ✅ accesorios (checkboxes)
+                            $accIn = is_array($cel['accesorios'] ?? null) ? ($cel['accesorios'] ?? []) : [];
+                            $accesorios = array_filter([
+                                'funda'           => !empty($accIn['funda']),
+                                'mica_protectora' => !empty($accIn['mica_protectora']),
+                                'cargador'        => !empty($accIn['cargador']),
+                                'cable_usb'       => !empty($accIn['cable_usb']),
+                            ], fn($v) => $v === true);
+
                             $serieSpecs = array_filter([
                                 'color' => isset($cel['color']) ? trim((string)$cel['color']) : null,
                                 'almacenamiento_gb' => isset($cel['almacenamiento_gb']) && $cel['almacenamiento_gb'] !== '' ? (int) $cel['almacenamiento_gb'] : null,
                                 'ram_gb' => isset($cel['ram_gb']) && $cel['ram_gb'] !== '' ? (int) $cel['ram_gb'] : null,
                                 'imei' => isset($cel['imei']) ? trim((string)$cel['imei']) : null,
+
+                                // ✅ NUEVO
+                                'numero_celular' => isset($cel['numero_celular']) ? trim((string)$cel['numero_celular']) : null,
+                                'fecha_compra'   => isset($cel['fecha_compra']) ? trim((string)$cel['fecha_compra']) : null,
+
+                                // ✅ NUEVO: accesorios
+                                'accesorios'     => $accesorios ?: null,
                             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
                         }
 
                         // ✅ descripción por serie (otros tipos)
                         $serieDesc = null;
+
                         if (in_array($tipoProducto, ['impresora','monitor','pantalla','periferico','otro'], true)) {
                             $serieDesc = trim((string)($row['descripcion'] ?? '')) ?: null;
+
+                            // ✅ NUEVO: fecha compra para tipos con descripción por serie -> a especificaciones
+                            $descSpec = is_array($row['spec_desc'] ?? null) ? ($row['spec_desc'] ?? []) : [];
+                            $fechaCompra = isset($descSpec['fecha_compra']) ? trim((string)$descSpec['fecha_compra']) : null;
+
+                            $serieSpecs = array_filter([
+                                'fecha_compra' => $fechaCompra,
+                            ], fn($v)=>$v!==null && $v!=='');
+
+                            $serieSpecs = $serieSpecs ?: null;
                         }
 
                         return [
@@ -418,8 +461,8 @@ class ProductoController extends Controller implements HasMiddleware
                         'subsidiaria_id'      => $row['subsidiaria_id'],
                         'unidad_servicio_id'  => $row['unidad_servicio_id'],
 
-                        // ✅ NUEVO: guardar lo capturado en el create
-                        'especificaciones'    => $row['especificaciones'], // PC/CEL
+                        // ✅ guardar lo capturado en el create
+                        'especificaciones'    => $row['especificaciones'], // PC/CEL/otros(fecha_compra)
                         'observaciones'       => $row['observaciones'],    // impresora/monitor/...
                     ]);
 
@@ -618,13 +661,24 @@ class ProductoController extends Controller implements HasMiddleware
                     ->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
 
-            // ✅ NUEVO: el Blade manda specs unificados: series[i][specs][...]
-            'series.*.specs.color' => ['nullable', 'string', 'max:255'],
-            'series.*.specs.ram_gb' => ['nullable', 'integer', 'min:1', 'max:32767'],
-            'series.*.specs.procesador' => ['nullable', 'string', 'max:120'],
+            // ✅ NUEVO: specs unificados: series[i][specs][...]
+            'series.*.specs.color'       => ['nullable', 'string', 'max:255'],
+            'series.*.specs.ram_gb'      => ['nullable', 'integer', 'min:1', 'max:32767'],
+            'series.*.specs.procesador'  => ['nullable', 'string', 'max:120'],
 
             'series.*.specs.almacenamiento_gb' => ['nullable', 'integer', 'min:1', 'max:50000'],
-            'series.*.specs.imei' => ['nullable', 'string', 'max:30'],
+            'series.*.specs.imei'              => ['nullable', 'string', 'max:30'],
+
+            // ✅ NUEVO: Fecha de compra (común)
+            'series.*.specs.fecha_compra' => ['nullable', 'date'],
+
+            // ✅ NUEVO (celular): número + accesorios
+            'series.*.specs.numero_celular' => ['nullable', 'string', 'max:30'],
+            'series.*.specs.accesorios' => ['nullable', 'array'],
+            'series.*.specs.accesorios.funda'           => ['nullable', 'boolean'],
+            'series.*.specs.accesorios.mica_protectora' => ['nullable', 'boolean'],
+            'series.*.specs.accesorios.cargador'        => ['nullable', 'boolean'],
+            'series.*.specs.accesorios.cable_usb'       => ['nullable', 'boolean'],
 
             // ✅ NUEVO (PC): múltiples almacenamientos
             'series.*.specs.almacenamientos' => ['nullable', 'array'],
@@ -644,7 +698,7 @@ class ProductoController extends Controller implements HasMiddleware
                 }
             ],
 
-            // ✅ NUEVO: el Blade manda observaciones por serie (tipos simples)
+            // ✅ NUEVO: observaciones por serie (tipos simples)
             'series.*.observaciones' => ['nullable', 'string', 'max:2000'],
 
             // ✅ LEGACY: textarea
@@ -653,7 +707,7 @@ class ProductoController extends Controller implements HasMiddleware
 
         // ===============================
         // 1) Construir items desde series[]
-        // (ahora incluye especificaciones/observaciones)
+        // (incluye especificaciones/observaciones)
         // ===============================
         $itemsFromArray = collect($data['series'] ?? [])
             ->map(function ($row) use ($tipoProducto) {
@@ -667,6 +721,11 @@ class ProductoController extends Controller implements HasMiddleware
                 $unidadId = ($unidadId === '' || $unidadId === null) ? null : (int)$unidadId;
 
                 $specsIn = is_array($row['specs'] ?? null) ? $row['specs'] : [];
+
+                // normaliza fecha_compra (YYYY-MM-DD) si viene como string/date
+                $fechaCompra = $specsIn['fecha_compra'] ?? null;
+                $fechaCompra = is_string($fechaCompra) ? trim($fechaCompra) : $fechaCompra;
+                $fechaCompra = ($fechaCompra === '' || $fechaCompra === null) ? null : (string)$fechaCompra;
 
                 $serieSpecs = null;
                 $serieObs   = null;
@@ -687,8 +746,6 @@ class ProductoController extends Controller implements HasMiddleware
                             if ($t === '' && ($c === null || $c <= 0)) continue;
                             if ($c !== null && $c > 0 && $t === '') continue;
 
-                            // normaliza valores tipo a un set estable si quieres (opcional)
-                            // aquí lo dejamos como venga (SSD/HDD/M.2 o ssd/hdd/m2)
                             $almacenamientos[] = array_filter([
                                 'tipo'         => $t ?: null,
                                 'capacidad_gb' => $c,
@@ -697,25 +754,47 @@ class ProductoController extends Controller implements HasMiddleware
                     }
 
                     $serieSpecs = array_filter([
-                        'color'          => isset($specsIn['color']) ? trim((string)$specsIn['color']) : null,
-                        'ram_gb'         => isset($specsIn['ram_gb']) && $specsIn['ram_gb'] !== '' ? (int)$specsIn['ram_gb'] : null,
-                        'almacenamientos'=> $almacenamientos ?: null,
-                        'procesador'     => isset($specsIn['procesador']) ? trim((string)$specsIn['procesador']) : null,
+                        'color'           => isset($specsIn['color']) ? trim((string)$specsIn['color']) : null,
+                        'ram_gb'          => isset($specsIn['ram_gb']) && $specsIn['ram_gb'] !== '' ? (int)$specsIn['ram_gb'] : null,
+                        'almacenamientos' => $almacenamientos ?: null,
+                        'procesador'      => isset($specsIn['procesador']) ? trim((string)$specsIn['procesador']) : null,
+                        'fecha_compra'    => $fechaCompra,
                     ], fn($v) => $v !== null && $v !== '' && $v !== []);
 
+
                 } elseif ($tipoProducto === 'celular') {
+
+                    // accesorios (checkboxes): guardar solo los true
+                    $accIn = is_array($specsIn['accesorios'] ?? null) ? $specsIn['accesorios'] : [];
+                    $acc = [
+                        'funda'           => !empty($accIn['funda']),
+                        'mica_protectora' => !empty($accIn['mica_protectora']),
+                        'cargador'        => !empty($accIn['cargador']),
+                        'cable_usb'       => !empty($accIn['cable_usb']),
+                    ];
+                    $acc = array_filter($acc, fn($v) => $v === true);
 
                     $serieSpecs = array_filter([
                         'color'             => isset($specsIn['color']) ? trim((string)$specsIn['color']) : null,
                         'almacenamiento_gb' => isset($specsIn['almacenamiento_gb']) && $specsIn['almacenamiento_gb'] !== '' ? (int)$specsIn['almacenamiento_gb'] : null,
                         'ram_gb'            => isset($specsIn['ram_gb']) && $specsIn['ram_gb'] !== '' ? (int)$specsIn['ram_gb'] : null,
                         'imei'              => isset($specsIn['imei']) ? trim((string)$specsIn['imei']) : null,
+
+                        'numero_celular'    => isset($specsIn['numero_celular']) ? trim((string)$specsIn['numero_celular']) : null,
+                        'fecha_compra'      => $fechaCompra,
+                        'accesorios'        => $acc ?: null,
                     ], fn($v) => $v !== null && $v !== '' && $v !== []);
+
 
                 } else {
                     // impresora/monitor/pantalla/periferico/otro
                     $serieObs = trim((string)($row['observaciones'] ?? '')) ?: null;
-                    $serieSpecs = null;
+
+                    // ✅ ahora también puede venir fecha_compra
+                    $serieSpecs = array_filter([
+                        'fecha_compra' => $fechaCompra,
+                    ], fn($v) => $v !== null && $v !== '' && $v !== []);
+                    $serieSpecs = $serieSpecs ?: null;
                 }
 
                 return [
@@ -840,7 +919,7 @@ class ProductoController extends Controller implements HasMiddleware
                     'subsidiaria_id'      => $subsId,
                     'unidad_servicio_id'  => $unidadId,
 
-                    // ✅ NUEVO: guardar lo capturado en alta masiva
+                    // ✅ guardar lo capturado en alta masiva
                     'especificaciones'    => $especificaciones,
                     'observaciones'       => $observaciones,
                 ]);
@@ -962,6 +1041,9 @@ class ProductoController extends Controller implements HasMiddleware
                 Rule::exists('unidades_servicio', 'id')->where(fn($q) => $q->where('empresa_tenant_id', $tenant)),
             ],
 
+            // ✅ NUEVO: fecha de compra (SIEMPRE en todas)
+            'fecha_compra' => ['nullable','date'],
+
             // ✅ PC (como create: spec_pc + almacenamientos[])
             'spec_pc.color' => ['nullable','string','max:50'],
             'spec_pc.ram_gb' => ['nullable','integer','min:1','max:32767'],
@@ -988,6 +1070,16 @@ class ProductoController extends Controller implements HasMiddleware
             'spec_cel.ram_gb' => ['nullable','integer','min:1','max:32767'],
             'spec_cel.imei' => ['nullable','string','max:30'],
 
+            // ✅ NUEVO: celular
+            'spec_cel.numero_celular' => ['nullable','string','max:30'],
+
+            // ✅ NUEVO: accesorios (checkboxes)
+            'spec_cel.accesorios'                 => ['nullable','array'],
+            'spec_cel.accesorios.funda'           => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'spec_cel.accesorios.mica_protectora' => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'spec_cel.accesorios.cargador'        => ['nullable', Rule::in(['1', 1, true, 'on'])],
+            'spec_cel.accesorios.cable_usb'       => ['nullable', Rule::in(['1', 1, true, 'on'])],
+
             // ✅ DESC (otros tipos) -> se guardará en observaciones
             'descripcion' => ['nullable','string','max:2000'],
         ]);
@@ -1004,6 +1096,11 @@ class ProductoController extends Controller implements HasMiddleware
 
         $nuevoSpecs = null;
         $nuevaObs   = $serie->observaciones; // default: conservar
+
+        // ✅ fecha compra viene como campo plano (todas las vistas)
+        $fechaCompra = $request->filled('fecha_compra')
+            ? trim((string)$request->input('fecha_compra'))
+            : null;
 
         if ($tipo === 'equipo_pc') {
 
@@ -1029,35 +1126,55 @@ class ProductoController extends Controller implements HasMiddleware
             }
 
             $nuevoSpecs = array_filter([
-                'color' => $request->input('spec_pc.color'),
-                'ram_gb' => $request->filled('spec_pc.ram_gb') ? (int)$request->input('spec_pc.ram_gb') : null,
-                'almacenamientos' => $almacenamientos ?: null,
-                'procesador' => $request->input('spec_pc.procesador'),
+                'color'          => $request->input('spec_pc.color'),
+                'ram_gb'         => $request->filled('spec_pc.ram_gb') ? (int)$request->input('spec_pc.ram_gb') : null,
+                'almacenamientos'=> $almacenamientos ?: null,
+                'procesador'     => $request->input('spec_pc.procesador'),
+
+                // ✅ NUEVO: fecha compra
+                'fecha_compra'   => $fechaCompra,
             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
 
-            // PC: observaciones por serie no aplica (puedes conservar o limpiar; yo conservo)
+            // PC: observaciones por serie no aplica (conservar)
             // $nuevaObs = $serie->observaciones;
 
         } elseif ($tipo === 'celular') {
 
+            // ✅ accesorios (checkboxes)
+            $accIn = is_array($request->input('spec_cel.accesorios')) ? $request->input('spec_cel.accesorios') : [];
+            $accesorios = array_filter([
+                'funda'           => !empty($accIn['funda']),
+                'mica_protectora' => !empty($accIn['mica_protectora']),
+                'cargador'        => !empty($accIn['cargador']),
+                'cable_usb'       => !empty($accIn['cable_usb']),
+            ], fn($v) => $v === true);
+
             $nuevoSpecs = array_filter([
-                'color' => $request->input('spec_cel.color'),
+                'color'             => $request->input('spec_cel.color'),
                 'almacenamiento_gb' => $request->filled('spec_cel.almacenamiento_gb') ? (int)$request->input('spec_cel.almacenamiento_gb') : null,
-                'ram_gb' => $request->filled('spec_cel.ram_gb') ? (int)$request->input('spec_cel.ram_gb') : null,
-                'imei' => $request->input('spec_cel.imei'),
+                'ram_gb'            => $request->filled('spec_cel.ram_gb') ? (int)$request->input('spec_cel.ram_gb') : null,
+                'imei'              => $request->input('spec_cel.imei'),
+
+                // ✅ NUEVOS: celular
+                'numero_celular'    => $request->input('spec_cel.numero_celular'),
+                'fecha_compra'      => $fechaCompra,
+                'accesorios'        => $accesorios ?: null,
             ], fn($v)=>$v!==null && $v!=='' && $v!==[]);
 
-            // celular: observaciones no aplica (conservar o limpiar; yo conservo)
+            // celular: observaciones no aplica (conservar)
             // $nuevaObs = $serie->observaciones;
 
         } else {
             // impresora/monitor/pantalla/periferico/otro
+
             // ✅ descripción por serie VA EN observaciones (como en tu store)
             $desc = trim((string)($data['descripcion'] ?? ''));
             $nuevaObs = $desc !== '' ? $desc : null;
 
-            // y ya no guardamos descripcion en JSON
-            $nuevoSpecs = null;
+            // ✅ NUEVO: fecha compra también en especificaciones (aunque estos tipos usen observaciones)
+            $nuevoSpecs = array_filter([
+                'fecha_compra' => $fechaCompra,
+            ], fn($v)=>$v!==null && $v!=='');
         }
 
         $serie->especificaciones = $nuevoSpecs ?: null;
