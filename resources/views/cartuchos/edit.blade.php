@@ -1,8 +1,8 @@
 {{-- resources/views/cartuchos/edit.blade.php --}}
-<x-app-layout title="Editar Cartucho">
+<x-app-layout title="Editar Consumible">
   <x-slot name="header">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">
-      Editar Entrega de cartucho ({{ $cartucho->folio ?? ('#'.$cartucho->id) }})
+      Editar Entrega de Consumible ({{ $cartucho->folio ?? ('#'.$cartucho->id) }})
     </h2>
   </x-slot>
 
@@ -202,7 +202,7 @@
             <div class="section-sep"><div class="line"></div><div class="label">Productos</div><div class="line"></div></div>
 
             <div class="row">
-              <div class="hint">Edita cartuchos/consumibles y sus cantidades.</div>
+              <div class="hint">Edita consumibles y sus cantidades.</div>
             </div>
 
             <div id="itemsWrap"></div>
@@ -218,7 +218,7 @@
             <template id="itemTpl">
               <div class="grid2 row itemRow">
                 <div>
-                  <label>Cartucho / Consumible</label>
+                  <label>Consumible</label>
                   <select class="itemProducto" name="">
                     <option value="" disabled selected>— Selecciona —</option>
 
@@ -304,7 +304,7 @@
                   @endforeach
                 </select>
                 @error('firma_recibio') <div class="err">{{ $message }}</div> @enderror
-                <div class="hint">Quién recibió los cartuchos.</div>
+                <div class="hint">Quién recibió los consumibles.</div>
               </div>
             </div>
 

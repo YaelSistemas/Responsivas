@@ -192,7 +192,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Salida de cartuchos {{ $cartucho->folio ?? ('#'.$cartucho->id) }}</title>
+  <title>Salida de Consumibles {{ $cartucho->folio ?? ('#'.$cartucho->id) }}</title>
 
   <style>
     @page { size: letter portrait; margin: 15px 18px 10px 18px; }
@@ -339,7 +339,7 @@
         <td class="title-main">{{ $empresaNombre }}</td>
       </tr>
       <tr><td class="title-sub">Departamento de Sistemas</td></tr>
-      <tr><td class="title-sub">Formato de Entrega de Cartuchos</td></tr>
+      <tr><td class="title-sub">Formato de Entrega de Consumibles</td></tr>
     </table>
 
     <br>

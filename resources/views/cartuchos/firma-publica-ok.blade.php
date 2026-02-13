@@ -15,7 +15,7 @@
 
         <h1 class="text-lg font-bold mb-2">¡Gracias!</h1>
         <p class="text-sm mb-2">
-            Tu firma para la salida de cartuchos <strong>{{ $folio }}</strong> ha sido registrada correctamente.
+            Tu firma para la salida de consumibles <strong>{{ $folio }}</strong> ha sido registrada correctamente.
         </p>
 
         <p class="text-xs text-gray-500 mt-3">

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Firmar cartucho {{ $cartucho->folio ?? ('#'.$cartucho->id) }}</title>
+  <title>Firmar Consumibles {{ $cartucho->folio ?? ('#'.$cartucho->id) }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   @vite('resources/css/app.css')
 </head>
@@ -19,7 +19,7 @@
     <div class="bg-white shadow-md rounded-xl p-4 md:p-6">
       <div class="mb-4">
         <h1 class="text-lg md:text-xl font-bold text-center">
-          Firma de Salida de Cartuchos {{ $folio }}
+          Firma de Salida de Consumibles {{ $folio }}
         </h1>
 
         <p class="text-xs text-gray-500 text-center mt-1">
@@ -103,7 +103,7 @@
               </div>
 
               <p class="text-[11px] text-gray-500 mt-4">
-                Al presionar "Firmar y enviar" autorizas el registro de tu firma para la salida de cartuchos.
+                Al presionar "Firmar y enviar" autorizas el registro de tu firma para la salida de consumibles.
               </p>
             </form>
           </div>
@@ -118,7 +118,7 @@
       <div class="bg-white w-full max-w-6xl rounded-xl shadow-xl overflow-hidden relative">
         <div class="flex items-center justify-between px-4 py-2 border-b">
           <p class="text-sm font-semibold">
-            Vista previa — Salida de cartuchos {{ $folio }}
+            Vista previa — Salida de consumibles {{ $folio }}
           </p>
 
           <button type="button" id="btnClosePdf"

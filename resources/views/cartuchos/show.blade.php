@@ -1,8 +1,8 @@
 {{-- resources/views/cartuchos/show.blade.php --}}
-<x-app-layout title="Salida de cartuchos {{ $cartucho->folio ?? ('#'.$cartucho->id) }}">
+<x-app-layout title="Salida de Consumibles {{ $cartucho->folio ?? ('#'.$cartucho->id) }}">
   <x-slot name="header">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">
-      Entrega de Cartuchos {{ $cartucho->folio ?? ('#'.$cartucho->id) }}
+      Entrega de Consumibles {{ $cartucho->folio ?? ('#'.$cartucho->id) }}
     </h2>
   </x-slot>
 
@@ -257,7 +257,7 @@
         {{-- ===== BOTONES / ACCIONES (IGUAL QUE RESPONSIVAS) ===== --}}
         <div class="actions">
           {{-- IZQUIERDA: volver + PDF --}}
-          <a href="{{ url('/cartuchos') }}" class="btn btn-secondary">← Cartuchos</a>
+          <a href="{{ url('/cartuchos') }}" class="btn btn-secondary">← Consumibles</a>
 
           {{-- Si ya tienes route para PDF, úsalo. Si no existe, deja comentado hasta crearlo. --}}
           @if(\Illuminate\Support\Facades\Route::has('cartuchos.pdf'))
@@ -315,7 +315,7 @@
               <td class="title-row title-main">Grupo Vysisa</td>
             </tr>
             <tr><td class="title-row title-sub">Departamento de Sistemas</td></tr>
-            <tr><td class="title-row title-sub">Formato de Entrega de Cartuchos</td></tr>
+            <tr><td class="title-row title-sub">Formato de Entrega de Consumibles</td></tr>
           </table>
 
           {{-- ===== METADATOS 1 ===== --}}

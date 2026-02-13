@@ -1,7 +1,7 @@
 {{-- resources/views/cartuchos/create.blade.php --}}
-<x-app-layout title="Nuevo Cartucho">
+<x-app-layout title="Nuevo Consumible">
   <x-slot name="header">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Nueva solicitud de Entrega de Cartucho</h2>
+    <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Nueva solicitud de Entrega de Consumible</h2>
   </x-slot>
 
   <style>
@@ -211,7 +211,7 @@
             <div class="section-sep"><div class="line"></div><div class="label">Productos</div><div class="line"></div></div>
 
             <div class="row">
-              <div class="hint">Agrega uno o varios cartuchos/consumibles con su cantidad.</div>
+              <div class="hint">Agrega uno o varios consumibles con su cantidad.</div>
             </div>
 
             <div id="itemsWrap"></div>
@@ -227,7 +227,7 @@
             <template id="itemTpl">
               <div class="grid2 row itemRow">
                 <div>
-                  <label>Cartucho / Consumible</label>
+                  <label>Consumible</label>
                   <select class="itemProducto" name="">
                     <option value="" disabled selected>— Selecciona —</option>
 
@@ -314,7 +314,7 @@
                   @endforeach
                 </select>
                 @error('firma_recibio') <div class="err">{{ $message }}</div> @enderror
-                <div class="hint">Quién recibió los cartuchos.</div>
+                <div class="hint">Quién recibió los consumibles.</div>
               </div>
             </div>
 

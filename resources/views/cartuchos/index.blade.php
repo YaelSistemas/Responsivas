@@ -1,7 +1,7 @@
 {{-- resources/views/cartuchos/index.blade.php --}}
-<x-app-layout title="Cartuchos">
+<x-app-layout title="Consumibles">
   <x-slot name="header">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Entrega de Cartuchos</h2>
+    <h2 class="font-semibold text-xl text-gray-800 leading-tight text-center">Entrega de Consumibles</h2>
   </x-slot>
 
   <style>
@@ -80,7 +80,7 @@
       <div class="page-wrap py-6">
         {{-- Header --}}
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-semibold">Entrega de Cartuchos</h2>
+          <h2 class="text-xl font-semibold">Entrega de Consumibles</h2>
           @can('cartuchos.create')
             <a href="{{ route('cartuchos.create') }}" class="btn btn-primary">+ Nueva</a>
           @endcan
