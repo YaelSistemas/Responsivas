@@ -43,18 +43,16 @@
     background: #3b82f6;
   }
 
-  /* Colores existentes */
   .timeline li.asignacion::before { background: #3b82f6; }
   .timeline li.devolucion::before { background: #22c55e; }
   .timeline li.edicion::before    { background: #a855f7; }
   .timeline li.baja::before       { background: #ef4444; }
-
-  /* NUEVO PUNTO DE COLOR PARA "removido_edicion" */
   .timeline li.removido::before   { background: #6366f1; }
 
   .ev-head { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
   .ev-title { font-weight: 700; color: #111827; }
   .ev-meta { font-size: .80rem; color: #6b7280; }
+
   .diff-table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
   .diff-table th, .diff-table td {
     border: 1px solid #e5e7eb; padding: .35rem .45rem; font-size: .88rem;
@@ -70,20 +68,62 @@
   .badge-yellow { background: #fef9c3; color: #b45309; }
   .badge-red { background: #fee2e2; color: #b91c1c; }
   .badge-orange { background: #ffedd5; color: #c2410c; }
-
   .badge-blue { background:#dbeafe; color:#1e40af; }
 </style>
 
 @php
-  // Mapas id => nombre (para que el historial no muestre IDs)
+  // ✅ Orden: Creación arriba, y lo demás hacia abajo (más viejo -> más nuevo)
+  $historialOrdenado = $historial->sortBy('id');
+
+  // Mapas id => nombre
   $subsMap = \App\Models\Subsidiaria::query()->pluck('nombre', 'id')->toArray();
   $uniMap  = \App\Models\UnidadServicio::query()->pluck('nombre', 'id')->toArray();
 
-  // Labels bonitos para los campos
+  // Labels bonitos para campos base
   $labelsCampo = [
     'subsidiaria_id'      => 'Subsidiaria',
     'unidad_servicio_id'  => 'Unidad de servicio',
   ];
+
+  // ===== Helpers para ESPECIFICACIONES (diff interno) =====
+  $toArr = function ($v) {
+    if (is_string($v)) {
+      $try = json_decode($v, true);
+      if (json_last_error() === JSON_ERROR_NONE) return $try;
+    }
+    return $v;
+  };
+
+  $flatten = function ($arr, $prefix = '') use (&$flatten) {
+    $out = [];
+    if (!is_array($arr)) return $out;
+
+    foreach ($arr as $k => $v) {
+      $key = $prefix === '' ? $k : ($prefix . '.' . $k);
+      if (is_array($v)) {
+        $out = array_merge($out, $flatten($v, $key));
+      } else {
+        $out[$key] = $v;
+      }
+    }
+    return $out;
+  };
+
+  // Etiquetas bonitas para algunas rutas comunes (lo demás sale como "Especificaciones: X")
+  $labelsSpec = [
+    'color' => 'Color',
+    'ram_gb' => 'RAM',
+    'procesador' => 'Procesador',
+    'almacenamiento.tipo' => 'Almacenamiento (tipo)',
+    'almacenamiento.capacidad_gb' => 'Almacenamiento (capacidad GB)',
+  ];
+
+  $fmtVal = function($k, $v) {
+    if ($v === null || $v === '') return '—';
+    if ($k === 'ram_gb' && is_numeric($v)) return $v.' GB';
+    if ($k === 'almacenamiento.capacidad_gb' && is_numeric($v)) return $v.' GB';
+    return (string)$v;
+  };
 @endphp
 
 <div class="colab-modal-backdrop" data-modal-backdrop>
@@ -100,854 +140,714 @@
     </header>
 
     <div class="content">
-      @if($historial->isEmpty())
+      @if($historialOrdenado->isEmpty())
         <p class="ev-meta">Sin historial registrado para esta serie.</p>
       @else
         <ul class="timeline">
 
-        @foreach($historial as $log)
-        @php
-          $user  = $log->usuario->name ?? 'Sistema';
-          $fecha = $log->created_at?->format('d-m-Y H:i');
-          $accion = strtolower($log->accion);
+        @foreach($historialOrdenado as $log)
+          @php
+            $user  = $log->usuario->name ?? 'Sistema';
+            $fecha = $log->created_at?->format('d-m-Y H:i');
+            $accion = strtolower($log->accion);
 
-          /* NUEVA LÓGICA DE NOMBRES */
-          switch ($accion) {
+            // Nombre bonito
+            switch ($accion) {
               case 'edicion':
-                  $accionMostrar = 'Actualización';
-                  break;
+                $accionMostrar = 'Actualización';
+                break;
               case 'removido_edicion':
-                  $accionMostrar = 'Liberado por edición';
-                  break;
+                $accionMostrar = 'Liberado por edición';
+                break;
               case 'liberado_eliminacion':
-                  $accionMostrar = 'Liberado por eliminación';
-                  break;
+                $accionMostrar = 'Liberado por eliminación';
+                break;
               default:
-                  $accionMostrar = ucfirst($accion);
-          }
+                $accionMostrar = ucfirst($accion);
+            }
 
-          /* NUEVA CLASE PARA EL COLOR */
-          $accionClass = match($accion) {
-              'creacion'         => 'edicion',
-              'asignacion'       => 'asignacion',
-              'devolucion'       => 'devolucion',
-              'removido_edicion' => 'removido',
-              'liberado_eliminacion' => 'removido',
-              'baja'             => 'baja',
-              default            => 'edicion',
-          };
+            // Clase (color)
+            $accionClass = match($accion) {
+              'creacion'              => 'edicion',
+              'asignacion'            => 'asignacion',
+              'devolucion'            => 'devolucion',
+              'removido_edicion'      => 'removido',
+              'liberado_eliminacion'  => 'removido',
+              'baja'                  => 'baja',
+              default                 => 'edicion',
+            };
 
-          $cambios = $log->cambios ?? [];
-        @endphp
+            $cambios = $log->cambios ?? [];
+          @endphp
 
-        @php
+          @php
+            // Para cuando eliminaron la responsiva y ya no existe: recuperamos folio anterior global
             $folioEliminadoGlobal = null;
 
-            foreach ($historial as $h) {
-                if (
-                    $h->accion === 'liberado_eliminacion' &&
-                    isset($h->cambios['responsiva_folio']['antes'])
-                ) {
-                    $folioEliminadoGlobal = $h->cambios['responsiva_folio']['antes'];
-                }
+            foreach ($historialOrdenado as $h) {
+              if (
+                $h->accion === 'liberado_eliminacion' &&
+                isset($h->cambios['responsiva_folio']['antes'])
+              ) {
+                $folioEliminadoGlobal = $h->cambios['responsiva_folio']['antes'];
+              }
             }
-        @endphp
+          @endphp
 
-        <li class="{{ $accionClass }}">
-          <div class="ev-head">
+          <li class="{{ $accionClass }}">
+            <div class="ev-head">
               <span class="ev-title">{{ $accionMostrar }}</span>
               <span class="ev-meta">— {{ $user }} · {{ $fecha }}</span>
 
               {{-- ====================== RESPONSIVA ====================== --}}
               @if($log->responsiva_id)
+                <span class="ev-meta">· Responsiva:
 
-                  <span class="ev-meta">· Responsiva:
+                  @if(!$log->responsiva && $folioEliminadoGlobal)
+                    <span class="text-red-600 font-semibold">
+                      {{ $folioEliminadoGlobal }}
+                    </span>
+                  @elseif($log->responsiva)
+                    <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
+                      class="underline text-indigo-600">
+                      {{ $log->responsiva->folio }}
+                    </a>
+                  @else
+                    <span class="text-gray-500">SIN FOLIO</span>
+                  @endif
 
-                      {{-- Caso 1: La responsiva ya no existe y sí tenemos folio eliminado global --}}
-                      @if(!$log->responsiva && $folioEliminadoGlobal)
-                          <span class="text-red-600 font-semibold">
-                              {{ $folioEliminadoGlobal }}
-                          </span>
-
-                      {{-- Caso 2: Responsiva existe normalmente --}}
-                      @elseif($log->responsiva)
-                          <a href="{{ route('responsivas.show', $log->responsiva_id) }}"
-                            class="underline text-indigo-600">
-                              {{ $log->responsiva->folio }}
-                          </a>
-
-                      {{-- Caso 3: No tenemos responsiva ni historial (muy raro) --}}
-                      @else
-                          <span class="text-gray-500">SIN FOLIO</span>
-                      @endif
-
-                  </span>
+                </span>
               @endif
 
               {{-- ====================== DEVOLUCIÓN (SIEMPRE MOSTRAR FOLIO) ====================== --}}
               @if($accion === 'devolucion')
+                @php
+                  $folioDev =
+                    ($log->devolucion?->folio ?? null)
+                    ?? ($cambios['devolucion_folio']['antes'] ?? null)
+                    ?? ($cambios['devolucion_folio'] ?? null)
+                    ?? ($cambios['folio_devolucion']['antes'] ?? null)
+                    ?? ($cambios['folio']['antes'] ?? null)
+                    ?? null;
+                @endphp
 
-                  @php
-                      // Folio de devolución: buscar en todos los lugares posibles
-                      $folioDev =
-                          ($log->devolucion?->folio ?? null)                           // Existe en la BD
-                          ?? ($cambios['devolucion_folio']['antes'] ?? null)          // Guardado en destroy()
-                          ?? ($cambios['devolucion_folio'] ?? null)                   // Guardado directo
-                          ?? ($cambios['folio_devolucion']['antes'] ?? null)          // Variante
-                          ?? ($cambios['folio']['antes'] ?? null)                     // Otra variante
-                          ?? null;
-                  @endphp
-
-                  <span class="ev-meta">· Devolución:
-
-                      {{-- Caso 1: Si existe en BD --}}
-                      @if($log->devolucion_id && $log->devolucion?->folio)
-                          <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
-                            class="underline text-indigo-600">
-                              {{ $log->devolucion->folio }}
-                          </a>
-
-                      {{-- Caso 2: Eliminada pero SÍ tenemos folio --}}
-                      @elseif($folioDev)
-                          <span class="text-red-600 font-semibold">
-                              {{ $folioDev }} (ELIMINADA)
-                          </span>
-
-                      {{-- Caso 3: Nunca tuvo folio --}}
-                      @else
-                          <span class="text-gray-500">SIN FOLIO</span>
-                      @endif
-
-                  </span>
-
+                <span class="ev-meta">· Devolución:
+                  @if($log->devolucion_id && $log->devolucion?->folio)
+                    <a href="{{ route('devoluciones.show', $log->devolucion_id) }}"
+                      class="underline text-indigo-600">
+                      {{ $log->devolucion->folio }}
+                    </a>
+                  @elseif($folioDev)
+                    <span class="text-red-600 font-semibold">
+                      {{ $folioDev }} (ELIMINADA)
+                    </span>
+                  @else
+                    <span class="text-gray-500">SIN FOLIO</span>
+                  @endif
+                </span>
               @endif
 
               {{-- ==================== SI SE ELIMINA UNA RESPONSIVA ==================== --}}
               @if($accion === 'liberado_eliminacion')
-
-                  {{-- Mostrar el folio anterior de la responsiva --}}
-                  @if(isset($cambios['responsiva_folio']['antes']))
-                      <span class="ev-meta">· Responsiva:
-                          <span class="text-red-600 font-semibold">
-                              {{ $cambios['responsiva_folio']['antes'] }} (ELIMINADA)
-                          </span>
-                      </span>
-                  @endif
-                  {{-- NO mostrar devolución --}}
-                  @php $omitDevolucion = true; @endphp
-              @endif
-
-              {{-- Mostrar SIN FOLIO solo cuando la acción es "devolucion" --}}
-              @if($accion === 'devolucion' && !$log->devolucion_id)
-                  <span class="ev-meta">· Devolución:
-                      <span class="text-gray-500">SIN FOLIO</span>
+                @if(isset($cambios['responsiva_folio']['antes']))
+                  <span class="ev-meta">· Responsiva:
+                    <span class="text-red-600 font-semibold">
+                      {{ $cambios['responsiva_folio']['antes'] }} (ELIMINADA)
+                    </span>
                   </span>
+                @endif
               @endif
 
-          </div>
+              {{-- Mostrar SIN FOLIO solo cuando la acción es devolucion --}}
+              @if($accion === 'devolucion' && !$log->devolucion_id)
+                <span class="ev-meta">· Devolución:
+                  <span class="text-gray-500">SIN FOLIO</span>
+                </span>
+              @endif
+            </div>
 
-          {{-- ================= ESTADO ESPECIAL DE ASIGNACIÓN ================= --}}
-          @if($accion === 'asignacion')
-
+            {{-- ================= ESTADO ESPECIAL DE ASIGNACIÓN ================= --}}
+            @if($accion === 'asignacion')
               @php
-                  // Motivo entregado REAL desde historial
-                  $motivo = strtolower(
-                      $cambios['motivo_entrega']['despues']
-                      ?? $cambios['motivo_entrega']['antes']
-                      ?? ''
-                  );
+                $motivo = strtolower(
+                  $cambios['motivo_entrega']['despues']
+                  ?? $cambios['motivo_entrega']['antes']
+                  ?? ''
+                );
 
-                  // Si por alguna razón no se guardó, tomar del objeto responsiva (solo si existe)
-                  if (!$motivo && $log->responsiva?->motivo_entrega) {
-                      $motivo = strtolower($log->responsiva->motivo_entrega);
-                  }
+                if (!$motivo && $log->responsiva?->motivo_entrega) {
+                  $motivo = strtolower($log->responsiva->motivo_entrega);
+                }
 
-                  $motivoBonito = match($motivo) {
-                      'prestamo_provisional' => 'Préstamo provisional',
-                      'asignacion'           => 'Asignado',
-                      default                => 'Asignado', // fallback seguro
+                $motivoBonito = match($motivo) {
+                  'prestamo_provisional' => 'Préstamo provisional',
+                  'asignacion'           => 'Asignado',
+                  default                => 'Asignado',
+                };
+
+                $badge = function ($estado) {
+                  $e = strtolower($estado);
+                  return match(true) {
+                    str_contains($e, 'asignado') => 'badge-green',
+                    str_contains($e, 'préstamo'),
+                    str_contains($e, 'prestamo') => 'badge-yellow',
+                    default                      => 'badge-gray',
                   };
-
-                  // COLOR DEL BADGE (solo 3 estados)
-                  $badge = function ($estado) {
-                      $e = strtolower($estado);
-
-                      return match(true) {
-                          str_contains($e, 'asignado') => 'badge-green',      // Verde
-                          str_contains($e, 'préstamo'),
-                          str_contains($e, 'prestamo') => 'badge-yellow',     // Amarillo
-                          default                      => 'badge-gray',       // Gris
-                      };
-                  };
+                };
               @endphp
 
               <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
-
-                  <span class="badge {{ $badge($log->estado_anterior) }}">
-                      {{ ucfirst($log->estado_anterior ?? '—') }}
-                  </span>
-
-                  →
-
-                  <span class="badge {{ $badge($motivoBonito) }}">
-                      {{ $motivoBonito }}
-                  </span>
+                <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                <span class="badge {{ $badge($log->estado_anterior) }}">
+                  {{ ucfirst($log->estado_anterior ?? '—') }}
+                </span>
+                →
+                <span class="badge {{ $badge($motivoBonito) }}">
+                  {{ $motivoBonito }}
+                </span>
               </div>
 
               @php
-  $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
-  $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
+                $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
+                $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
 
-  $unidadAntesTxt = is_numeric($unidadAntesRaw)
-      ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
-      : ($unidadAntesRaw ?: 'Sin unidad');
+                $unidadAntesTxt = is_numeric($unidadAntesRaw)
+                  ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
+                  : ($unidadAntesRaw ?: 'Sin unidad');
 
-  $unidadDespTxt = is_numeric($unidadDespRaw)
-      ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
-      : ($unidadDespRaw ?: 'Sin unidad');
-@endphp
+                $unidadDespTxt = is_numeric($unidadDespRaw)
+                  ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
+                  : ($unidadDespRaw ?: 'Sin unidad');
+              @endphp
 
-@if($unidadAntesRaw !== null || $unidadDespRaw !== null)
-  @if($unidadAntesTxt !== $unidadDespTxt)
-    <div style="margin-top:.25rem;margin-bottom:.5rem;">
-      <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
-      <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
-      →
-      <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
-    </div>
-  @endif
-@endif
-
-          @endif
-
-          
-          {{-- ================= ESTADO ESPECIAL PARA EDICIÓN DE ASIGNACIÓN ================= --}}
-          @if($accion === 'edicion_asignacion')  
-  
-              @php
-                  // 1. Recuperar el motivo ANTERIOR y NUEVO si existen
-                  $motivoAntes  = strtolower($cambios['motivo_entrega']['antes']   ?? '');
-                  $motivoDespues = strtolower($cambios['motivo_entrega']['despues'] ?? '');
-  
-                  // 2. Si NO existían en cambios, usar estado_anterior / estado_nuevo reales
-                  $estadoAnterior = $motivoAntes ?: strtolower(trim($log->estado_anterior ?? 'asignado'));
-                  $estadoNuevo    = $motivoDespues ?: strtolower(trim($log->estado_nuevo ?? 'asignado'));
-  
-                  // 3. Mapeo bonito
-                  $map = [
-                      'prestamo_provisional' => 'Préstamo provisional',
-                      'préstamo_provisional' => 'Préstamo provisional',
-                      'prestamo'             => 'Préstamo provisional',
-                      'asignacion'           => 'Asignado',
-                      'asignado'             => 'Asignado',
-                  ];
-  
-                  $textoAnterior = $map[$estadoAnterior] ?? ucfirst($estadoAnterior);
-                  $textoNuevo    = $map[$estadoNuevo]    ?? ucfirst($estadoNuevo);
-  
-                  // 4. Badges
-                  $badge = function($txt) {
-                      $t = strtolower($txt);
-                      return match(true) {
-                          str_contains($t, 'préstamo'),
-                          str_contains($t, 'prestamo') => 'badge-yellow',
-  
-                          str_contains($t, 'asignado') => 'badge-green',
-  
-                          default => 'badge-gray',
-                      };
-                  };
-  
-                  // 5. Detectar si se editaron campos extra
-                  $cambioAsignadoA    = isset($cambios['asignado_a']);
-                  $cambioEntregadoPor = isset($cambios['entregado_por']);
-                  $cambioFecha        = isset($cambios['fecha_entrega']);
-  
-                  $mostrarTabla = $cambioAsignadoA || $cambioEntregadoPor || $cambioFecha;
-              @endphp  
-  
-  
-              {{-- === SIEMPRE mostrar estado arriba === --}}
-              <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
-  
-                  {{-- Si NO cambió el estado, mostrar solo 1 --}}
-                  @if($textoAnterior === $textoNuevo)
-                      <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
-  
-                  {{-- Si SÍ cambió, mostrar ambos --}}
-                  @else
-                      <span class="badge {{ $badge($textoAnterior) }}">{{ $textoAnterior }}</span>
-                      →
-                      <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
-                  @endif
-              </div>
-  
-              {{-- === TABLA === --}}
-            @if($mostrarTabla)
-                <table class="diff-table">
-                    <thead>
-                        <tr>
-                            <th>Campo</th>
-                            <th>Antes</th>
-                            <th>Después</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-
-                        {{-- 1. ASIGNADO A --}}
-                        @if($cambioAsignadoA)
-                            <tr>
-                                <td>Asignado a</td>
-                                <td class="mono">{{ $cambios['asignado_a']['antes'] }}</td>
-                                <td class="mono">{{ $cambios['asignado_a']['despues'] }}</td>
-                            </tr>
-                        @endif
-
-                        {{-- 2. ENTREGADO POR --}}
-                        @if($cambioEntregadoPor)
-                            <tr>
-                                <td>Entregado por</td>
-                                <td class="mono">{{ $cambios['entregado_por']['antes'] }}</td>
-                                <td class="mono">{{ $cambios['entregado_por']['despues'] }}</td>
-                            </tr>
-                        @endif
-
-                        {{-- 3. FECHA ENTREGA --}}
-                        @if($cambioFecha)
-                            <tr>
-                                <td>Fecha entrega</td>
-                                <td class="mono">{{ $cambios['fecha_entrega']['antes'] }}</td>
-                                <td class="mono">{{ $cambios['fecha_entrega']['despues'] }}</td>
-                            </tr>
-                        @endif
-
-                        {{-- 4. SUBSIDIARIA — SOLO SI SE EDITÓ ASIGNADO A --}}
-                        @if($cambioAsignadoA)
-                            <tr>
-                                <td>Subsidiaria</td>
-                                <td class="mono">{{ $cambios['subsidiaria']['antes'] ?? '—' }}</td>
-                                <td class="mono">{{ $cambios['subsidiaria']['despues'] ?? '—' }}</td>
-                            </tr>
-                        @endif
-
-                    </tbody>
-                </table>
+              @if($unidadAntesRaw !== null || $unidadDespRaw !== null)
+                @if($unidadAntesTxt !== $unidadDespTxt)
+                  <div style="margin-top:.25rem;margin-bottom:.5rem;">
+                    <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
+                    <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
+                    →
+                    <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
+                  </div>
+                @endif
+              @endif
             @endif
 
-            @php
-  $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
-  $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
-
-  $unidadAntesTxt = is_numeric($unidadAntesRaw)
-      ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
-      : ($unidadAntesRaw ?: 'Sin unidad');
-
-  $unidadDespTxt = is_numeric($unidadDespRaw)
-      ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
-      : ($unidadDespRaw ?: 'Sin unidad');
-@endphp
-
-@if($unidadAntesRaw !== null || $unidadDespRaw !== null)
-  @if($unidadAntesTxt !== $unidadDespTxt)
-    <div style="margin-top:.25rem;margin-bottom:.5rem;">
-      <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
-      <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
-      →
-      <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
-    </div>
-  @endif
-@endif
-
-
-              @continue
-          @endif
-
-          {{-- ====================== ESTADO ESPECIAL PARA DEVOLUCIÓN ====================== --}}
-          @if($accion === 'devolucion')
+            {{-- ================= ESTADO ESPECIAL PARA EDICIÓN DE ASIGNACIÓN ================= --}}
+            @if($accion === 'edicion_asignacion')
               @php
-                  // Siempre debemos declararlo ANTES de usarlo
-                  $logEliminacion = $historial->first(function($h) use ($log) {
-                      return $h->accion === 'liberado_eliminacion'
-                          && $h->responsiva_id === $log->responsiva_id;
-                  });
+                $motivoAntes  = strtolower($cambios['motivo_entrega']['antes']   ?? '');
+                $motivoDespues = strtolower($cambios['motivo_entrega']['despues'] ?? '');
 
-                  // 1. Estado anterior
-                  $estadoAnterior = strtolower($log->estado_anterior ?? '');
+                $estadoAnterior = $motivoAntes ?: strtolower(trim($log->estado_anterior ?? 'asignado'));
+                $estadoNuevo    = $motivoDespues ?: strtolower(trim($log->estado_nuevo ?? 'asignado'));
 
-                  $estadoAnteriorBonito = match($estadoAnterior) {
-                      'asignado'              => 'Asignado',
-                      'prestamo_provisional'  => 'Préstamo provisional',
-                      'baja_colaborador'      => 'Baja colaborador',
-                      'renovacion'            => 'Renovación',
-                      default                 => ucfirst($estadoAnterior ?: '—'),
+                $map = [
+                  'prestamo_provisional' => 'Préstamo provisional',
+                  'préstamo_provisional' => 'Préstamo provisional',
+                  'prestamo'             => 'Préstamo provisional',
+                  'asignacion'           => 'Asignado',
+                  'asignado'             => 'Asignado',
+                ];
+
+                $textoAnterior = $map[$estadoAnterior] ?? ucfirst($estadoAnterior);
+                $textoNuevo    = $map[$estadoNuevo]    ?? ucfirst($estadoNuevo);
+
+                $badge = function($txt) {
+                  $t = strtolower($txt);
+                  return match(true) {
+                    str_contains($t, 'préstamo'),
+                    str_contains($t, 'prestamo') => 'badge-yellow',
+                    str_contains($t, 'asignado') => 'badge-green',
+                    default => 'badge-gray',
                   };
+                };
 
-                  // 2. Motivo de la devolución — SOLO desde devolución
-                  $motivo = strtolower(
-                      $cambios['motivo_devolucion']['antes']
-                      ?? $log->motivo
-                      ?? $log->devolucion?->motivo
-                      ?? ($logEliminacion->cambios['motivo_devolucion']['antes'] ?? null)
-                      ?? ''
-                  );
-
-                  $motivoBonito = match($motivo) {
-                      'baja_colaborador' => 'Baja colaborador',
-                      'renovacion'       => 'Renovación',
-                      default            => ucfirst($motivo ?: '—'),
-                  };
-
-                  // 3. Estado final
-                  $estadoFinalBonito = "Disponible";
-
-                  // Badge color
-                  $badge = fn($txt) => match(true) {
-                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
-                      str_contains(strtolower($txt), 'préstamo'),
-                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
-                      str_contains(strtolower($txt), 'renovación'),
-                      str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
-                      str_contains(strtolower($txt), 'baja') => 'badge-red',
-                      default => 'badge-gray',
-                  };
+                $cambioAsignadoA    = isset($cambios['asignado_a']);
+                $cambioEntregadoPor = isset($cambios['entregado_por']);
+                $cambioFecha        = isset($cambios['fecha_entrega']);
+                $mostrarTabla = $cambioAsignadoA || $cambioEntregadoPor || $cambioFecha;
               @endphp
 
               <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
-
-                  {{-- Estado anterior --}}
-                  <span class="badge {{ $badge($estadoAnteriorBonito) }}">
-                      {{ $estadoAnteriorBonito }}
-                  </span>
-
+                <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                @if($textoAnterior === $textoNuevo)
+                  <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
+                @else
+                  <span class="badge {{ $badge($textoAnterior) }}">{{ $textoAnterior }}</span>
                   →
-
-                  {{-- Motivo de la devolución --}}
-                  <span class="badge {{ $badge($motivoBonito) }}">
-                      {{ $motivoBonito }}
-                  </span>
-
-                  →
-
-                  {{-- Estado final --}}
-                  <span class="badge {{ $badge($estadoFinalBonito) }}">
-                      {{ $estadoFinalBonito }}
-                  </span>
-              </div>
-          @endif
-
-          {{-- ====================== TABLA DE CAMBIOS ====================== --}}
-          @if(!empty($cambios))
-
-          {{-- === "removido_edicion" === --}}
-          @if($accion === 'removido_edicion')
-
-              {{-- === ESTADO LÓGICO INVERTIDO PARA LIBERADO POR EDICIÓN === --}}
-              @php
-                  // Motivo original antes de la edición
-                  $motivoOriginal = strtolower($cambios['motivo_entrega']['antes'] ?? '');
-
-                  $estadoBonito = match($motivoOriginal) {
-                      'prestamo_provisional' => 'Préstamo provisional',
-                      'asignacion'           => 'Asignado',
-                      default                => 'Asignado', // fallback
-                  };
-
-                  $badge = fn($txt) => match(true) {
-                      str_contains(strtolower($txt), 'préstamo'),
-                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
-                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
-                      default => 'badge-gray',
-                  };
-              @endphp
-
-              <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
-
-                  {{-- Estado ORIGINAL --}}
-                  <span class="badge {{ $badge($estadoBonito) }}">
-                      {{ $estadoBonito }}
-                  </span>
-
-                  →
-
-                  {{-- Estado FINAL --}}
-                  <span class="badge badge-gray">Disponible</span>
+                  <span class="badge {{ $badge($textoNuevo) }}">{{ $textoNuevo }}</span>
+                @endif
               </div>
 
-              <table class="diff-table">
+              @if($mostrarTabla)
+                <table class="diff-table">
                   <thead>
-                      <tr>
-                          <th>Campo</th>
-                          <th>Valor anterior</th>
-                      </tr>
+                    <tr>
+                      <th>Campo</th>
+                      <th>Antes</th>
+                      <th>Después</th>
+                    </tr>
                   </thead>
                   <tbody>
-
-                      @if(isset($cambios['asignado_a']))
+                    @if($cambioAsignadoA)
                       <tr>
-                          <td>Removido de</td>
-                          <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
+                        <td>Asignado a</td>
+                        <td class="mono">{{ $cambios['asignado_a']['antes'] }}</td>
+                        <td class="mono">{{ $cambios['asignado_a']['despues'] }}</td>
                       </tr>
-                      @endif
+                    @endif
 
-                      @if(isset($cambios['actualizado_por']))
+                    @if($cambioEntregadoPor)
                       <tr>
-                          <td>Actualizado por</td>
-                          <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
+                        <td>Entregado por</td>
+                        <td class="mono">{{ $cambios['entregado_por']['antes'] }}</td>
+                        <td class="mono">{{ $cambios['entregado_por']['despues'] }}</td>
                       </tr>
-                      @endif
+                    @endif
 
+                    @if($cambioFecha)
+                      <tr>
+                        <td>Fecha entrega</td>
+                        <td class="mono">{{ $cambios['fecha_entrega']['antes'] }}</td>
+                        <td class="mono">{{ $cambios['fecha_entrega']['despues'] }}</td>
+                      </tr>
+                    @endif
+
+                    @if($cambioAsignadoA)
+                      <tr>
+                        <td>Subsidiaria</td>
+                        <td class="mono">{{ $cambios['subsidiaria']['antes'] ?? '—' }}</td>
+                        <td class="mono">{{ $cambios['subsidiaria']['despues'] ?? '—' }}</td>
+                      </tr>
+                    @endif
                   </tbody>
-              </table>
-
-              @continue
-          @endif
-          {{-- ============================================================= --}}
-
-          {{-- "liberado_eliminacion" --}}
-          @if($accion === 'liberado_eliminacion')
+                </table>
+              @endif
 
               @php
-                  $esDevolucionEliminada = isset($cambios['devolucion_folio']); // <-- Detecta si fue devolución
+                $unidadAntesRaw = $cambios['unidad_servicio_id']['antes'] ?? ($cambios['unidad']['antes'] ?? null);
+                $unidadDespRaw  = $cambios['unidad_servicio_id']['despues'] ?? ($cambios['unidad']['despues'] ?? null);
 
-                  // Buscar estado anterior
+                $unidadAntesTxt = is_numeric($unidadAntesRaw)
+                  ? ($uniMap[(int)$unidadAntesRaw] ?? "ID: $unidadAntesRaw")
+                  : ($unidadAntesRaw ?: 'Sin unidad');
+
+                $unidadDespTxt = is_numeric($unidadDespRaw)
+                  ? ($uniMap[(int)$unidadDespRaw] ?? "ID: $unidadDespRaw")
+                  : ($unidadDespRaw ?: 'Sin unidad');
+              @endphp
+
+              @if($unidadAntesRaw !== null || $unidadDespRaw !== null)
+                @if($unidadAntesTxt !== $unidadDespTxt)
+                  <div style="margin-top:.25rem;margin-bottom:.5rem;">
+                    <span class="ev-meta" style="font-weight:600;">Unidad de servicio:</span>
+                    <span class="badge badge-blue">{{ $unidadAntesTxt }}</span>
+                    →
+                    <span class="badge badge-blue">{{ $unidadDespTxt }}</span>
+                  </div>
+                @endif
+              @endif
+
+              @continue
+            @endif
+
+            {{-- ====================== ESTADO ESPECIAL PARA DEVOLUCIÓN ====================== --}}
+            @if($accion === 'devolucion')
+              @php
+                $logEliminacion = $historialOrdenado->first(function($h) use ($log) {
+                  return $h->accion === 'liberado_eliminacion'
+                    && $h->responsiva_id === $log->responsiva_id;
+                });
+
+                $estadoAnterior = strtolower($log->estado_anterior ?? '');
+                $estadoAnteriorBonito = match($estadoAnterior) {
+                  'asignado'              => 'Asignado',
+                  'prestamo_provisional'  => 'Préstamo provisional',
+                  'baja_colaborador'      => 'Baja colaborador',
+                  'renovacion'            => 'Renovación',
+                  default                 => ucfirst($estadoAnterior ?: '—'),
+                };
+
+                $motivo = strtolower(
+                  $cambios['motivo_devolucion']['antes']
+                  ?? $log->motivo
+                  ?? $log->devolucion?->motivo
+                  ?? ($logEliminacion->cambios['motivo_devolucion']['antes'] ?? null)
+                  ?? ''
+                );
+
+                $motivoBonito = match($motivo) {
+                  'baja_colaborador' => 'Baja colaborador',
+                  'renovacion'       => 'Renovación',
+                  default            => ucfirst($motivo ?: '—'),
+                };
+
+                $estadoFinalBonito = "Disponible";
+
+                $badge = fn($txt) => match(true) {
+                  str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                  str_contains(strtolower($txt), 'préstamo'),
+                  str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                  str_contains(strtolower($txt), 'renovación'),
+                  str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
+                  str_contains(strtolower($txt), 'baja') => 'badge-red',
+                  default => 'badge-gray',
+                };
+              @endphp
+
+              <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                <span class="badge {{ $badge($estadoAnteriorBonito) }}">{{ $estadoAnteriorBonito }}</span>
+                →
+                <span class="badge {{ $badge($motivoBonito) }}">{{ $motivoBonito }}</span>
+                →
+                <span class="badge {{ $badge($estadoFinalBonito) }}">{{ $estadoFinalBonito }}</span>
+              </div>
+            @endif
+
+            {{-- ====================== TABLA DE CAMBIOS ====================== --}}
+            @if(!empty($cambios))
+
+              {{-- === removido_edicion === --}}
+              @if($accion === 'removido_edicion')
+                @php
+                  $motivoOriginal = strtolower($cambios['motivo_entrega']['antes'] ?? '');
+                  $estadoBonito = match($motivoOriginal) {
+                    'prestamo_provisional' => 'Préstamo provisional',
+                    'asignacion'           => 'Asignado',
+                    default                => 'Asignado',
+                  };
+
+                  $badge = fn($txt) => match(true) {
+                    str_contains(strtolower($txt), 'préstamo'),
+                    str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                    str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                    default => 'badge-gray',
+                  };
+                @endphp
+
+                <div style="margin-top:.5rem;margin-bottom:.5rem;">
+                  <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                  <span class="badge {{ $badge($estadoBonito) }}">{{ $estadoBonito }}</span>
+                  →
+                  <span class="badge badge-gray">Disponible</span>
+                </div>
+
+                <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th>Campo</th>
+                      <th>Valor anterior</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @if(isset($cambios['asignado_a']))
+                      <tr>
+                        <td>Removido de</td>
+                        <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
+                      </tr>
+                    @endif
+
+                    @if(isset($cambios['actualizado_por']))
+                      <tr>
+                        <td>Actualizado por</td>
+                        <td class="mono">{{ $cambios['actualizado_por']['despues'] ?? '—' }}</td>
+                      </tr>
+                    @endif
+                  </tbody>
+                </table>
+
+                @continue
+              @endif
+
+              {{-- === liberado_eliminacion === --}}
+              @if($accion === 'liberado_eliminacion')
+                @php
+                  $esDevolucionEliminada = isset($cambios['devolucion_folio']);
+
                   $estadoAnterior = strtolower(
-                      $cambios['estado_anterior']['antes']
-                      ?? $log->estado_anterior
-                      ?? ($cambios['motivo_entrega']['antes'] ?? '')   // <-- NUEVO (necesario)
-                      ?? ''
+                    $cambios['estado_anterior']['antes']
+                    ?? $log->estado_anterior
+                    ?? ($cambios['motivo_entrega']['antes'] ?? '')
+                    ?? ''
                   );
 
                   $estadoAnteriorBonito = match($estadoAnterior) {
-                      'asignacion', 'asignado' => 'Asignado',
-                      'prestamo_provisional'   => 'Préstamo provisional',
-                      'baja_colaborador'       => 'Baja colaborador',
-                      'renovacion'             => 'Renovación',
-                      default                  => ucfirst($estadoAnterior ?: '—'),
+                    'asignacion', 'asignado' => 'Asignado',
+                    'prestamo_provisional'   => 'Préstamo provisional',
+                    'baja_colaborador'       => 'Baja colaborador',
+                    'renovacion'             => 'Renovación',
+                    default                  => ucfirst($estadoAnterior ?: '—'),
                   };
 
-                  // Badge helper
                   $badge = fn($txt) => match(true) {
-                      str_contains(strtolower($txt), 'asignado') => 'badge-green',
-                      str_contains(strtolower($txt), 'préstamo'),
-                      str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
-                      str_contains(strtolower($txt), 'renovación'),
-                      str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
-                      str_contains(strtolower($txt), 'baja') => 'badge-red',
-                      default => 'badge-gray',
+                    str_contains(strtolower($txt), 'asignado') => 'badge-green',
+                    str_contains(strtolower($txt), 'préstamo'),
+                    str_contains(strtolower($txt), 'prestamo') => 'badge-yellow',
+                    str_contains(strtolower($txt), 'renovación'),
+                    str_contains(strtolower($txt), 'renovacion') => 'badge-orange',
+                    str_contains(strtolower($txt), 'baja') => 'badge-red',
+                    default => 'badge-gray',
                   };
-              @endphp
+                @endphp
 
-              {{-- ========================================================= --}}
-              {{--   CASO 1: Eliminación de DEVOLUCIÓN → 3 pasos             --}}
-              {{-- ========================================================= --}}
-              @if($esDevolucionEliminada)
-
+                @if($esDevolucionEliminada)
                   @php
-                      $motivoDev = $cambios['motivo_devolucion']['antes'] ?? '';
-                      $motivoBonito = match($motivoDev) {
-                          'baja_colaborador' => 'Baja colaborador',
-                          'renovacion'       => 'Renovación',
-                          default            => ucfirst($motivoDev ?: '—'),
-                      };
+                    $motivoDev = $cambios['motivo_devolucion']['antes'] ?? '';
+                    $motivoBonito = match($motivoDev) {
+                      'baja_colaborador' => 'Baja colaborador',
+                      'renovacion'       => 'Renovación',
+                      default            => ucfirst($motivoDev ?: '—'),
+                    };
                   @endphp
 
                   <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                      <span class="ev-meta" style="font-weight:600;">Estado:</span>
-
-                      <span class="badge {{ $badge('Disponible') }}">Disponible</span>
-                      →
-                      <span class="badge {{ $badge($motivoBonito) }}">{{ $motivoBonito }}</span>
-                      →
-                      <span class="badge {{ $badge($estadoAnteriorBonito) }}">{{ $estadoAnteriorBonito }}</span>
+                    <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                    <span class="badge {{ $badge('Disponible') }}">Disponible</span>
+                    →
+                    <span class="badge {{ $badge($motivoBonito) }}">{{ $motivoBonito }}</span>
+                    →
+                    <span class="badge {{ $badge($estadoAnteriorBonito) }}">{{ $estadoAnteriorBonito }}</span>
                   </div>
-
-              {{-- ========================================================= --}}
-              {{--   CASO 2: Eliminación de RESPONSIVA → SOLO 2 pasos         --}}
-              {{-- ========================================================= --}}
-              @else
+                @else
                   <div style="margin-top:.5rem;margin-bottom:.5rem;">
-                      <span class="ev-meta" style="font-weight:600;">Estado:</span>
-
-                      {{-- Estado anterior (Asignado / Prestamo provisional) --}}
-                      <span class="badge {{ $badge($estadoAnteriorBonito) }}">
-                          {{ $estadoAnteriorBonito }}
-                      </span>
-
-                      →
-
-                      {{-- Estado final --}}
-                      <span class="badge badge-gray">Disponible</span>
+                    <span class="ev-meta" style="font-weight:600;">Estado:</span>
+                    <span class="badge {{ $badge($estadoAnteriorBonito) }}">{{ $estadoAnteriorBonito }}</span>
+                    →
+                    <span class="badge badge-gray">Disponible</span>
                   </div>
+                @endif
+
+                <table class="diff-table">
+                  <thead><tr><th>Campo</th><th>Valor anterior</th></tr></thead>
+                  <tbody>
+                    @if(isset($cambios['asignado_a']))
+                      <tr>
+                        <td>Removido de</td>
+                        <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
+                      </tr>
+                    @endif
+                    @if(isset($cambios['eliminado_por']))
+                      <tr>
+                        <td>Eliminado por</td>
+                        <td class="mono">{{ $cambios['eliminado_por']['despues'] ?? '—' }}</td>
+                      </tr>
+                    @endif
+                  </tbody>
+                </table>
+
+                @continue
               @endif
 
-
-              {{-- ===== Tablas de cambios (se deja igual) ===== --}}
-              <table class="diff-table">
-                  <thead>
-                      <tr><th>Campo</th><th>Valor anterior</th></tr>
-                  </thead>
-                  <tbody>
-                      @if(isset($cambios['asignado_a']))
-                      <tr>
-                          <td>Removido de</td>
-                          <td class="mono">{{ $cambios['asignado_a']['antes'] ?? '—' }}</td>
-                      </tr>
-                      @endif
-
-                      @if(isset($cambios['eliminado_por']))
-                      <tr>
-                          <td>Eliminado por</td>
-                          <td class="mono">{{ $cambios['eliminado_por']['despues'] ?? '—' }}</td>
-                      </tr>
-                      @endif
-                  </tbody>
-              </table>
-
-              @continue
-          @endif
-          {{-- ============================================================= --}}
-
-          {{-- === VISTA ESPECIAL PARA DEVOLUCIÓN REAL === --}}
-          @if($accion === 'devolucion')
-              @php
-                  // Buscar si existe un registro de eliminación relacionado para recuperar datos
-                  $logEliminacion = $historial->first(function($h) use ($log) {
-                      return $h->accion === 'liberado_eliminacion'
-                          && $h->responsiva_id === $log->responsiva_id;
+              {{-- === devolución REAL (tabla propia) === --}}
+              @if($accion === 'devolucion')
+                @php
+                  $logEliminacion = $historialOrdenado->first(function($h) use ($log) {
+                    return $h->accion === 'liberado_eliminacion'
+                      && $h->responsiva_id === $log->responsiva_id;
                   });
 
-                  // Fecha devolución: primero cambios del propio log, luego relación, luego log de eliminación
                   $fechaDev = $cambios['fecha_devolucion']['antes']
-                      ?? ($log->devolucion?->fecha_devolucion
-                          ? \Carbon\Carbon::parse($log->devolucion->fecha_devolucion)->format('d-m-Y')
-                          : (
-                              $logEliminacion->cambios['fecha_devolucion']['antes']
-                                  ?? 'SIN FECHA'
-                          ));
+                    ?? ($log->devolucion?->fecha_devolucion
+                      ? \Carbon\Carbon::parse($log->devolucion->fecha_devolucion)->format('d-m-Y')
+                      : ($logEliminacion->cambios['fecha_devolucion']['antes'] ?? 'SIN FECHA'));
 
-                  // Subsidiaria: primero cambios del propio log, luego relación, luego log eliminación
                   $subsidiariaDev = $cambios['subsidiaria']['antes']
-                      ?? ($log->devolucion?->responsiva?->colaborador?->subsidiaria?->descripcion
-                          ?? (
-                              $logEliminacion->cambios['subsidiaria']['antes']
-                                  ?? 'SIN SUBSIDIARIA'
-                          ));
+                    ?? ($log->devolucion?->responsiva?->colaborador?->subsidiaria?->descripcion
+                      ?? ($logEliminacion->cambios['subsidiaria']['antes'] ?? 'SIN SUBSIDIARIA'));
 
-                  // Actualizado por: viene del propio log de devolución
                   $actualizadoPor = $cambios['actualizado_por']['despues'] ?? '—';
-              @endphp
+                @endphp
 
-              <table class="diff-table">
-                  <thead>
-                      <tr>
-                          <th>Campo</th>
-                          <th>Valor anterior</th>
-                      </tr>
-                  </thead>
+                <table class="diff-table">
+                  <thead><tr><th>Campo</th><th>Valor anterior</th></tr></thead>
                   <tbody>
-                      @if(isset($cambios['removido_de']))
-                          <tr>
-                              <td>Removido de</td>
-                              <td class="mono">{{ $cambios['removido_de']['antes'] ?? '—' }}</td>
-                          </tr>
-                      @endif
-
-                      @if(isset($cambios['actualizado_por']))
-                          <tr>
-                              <td>Actualizado por</td>
-                              <td class="mono">{{ $actualizadoPor }}</td>
-                          </tr>
-                      @endif
-
+                    @if(isset($cambios['removido_de']))
                       <tr>
-                          <td>Fecha devolución</td>
-                          <td class="mono">{{ $fechaDev }}</td>
+                        <td>Removido de</td>
+                        <td class="mono">{{ $cambios['removido_de']['antes'] ?? '—' }}</td>
                       </tr>
-
+                    @endif
+                    @if(isset($cambios['actualizado_por']))
                       <tr>
-                          <td>Subsidiaria</td>
-                          <td class="mono">{{ $subsidiariaDev }}</td>
+                        <td>Actualizado por</td>
+                        <td class="mono">{{ $actualizadoPor }}</td>
                       </tr>
+                    @endif
+                    <tr>
+                      <td>Fecha devolución</td>
+                      <td class="mono">{{ $fechaDev }}</td>
+                    </tr>
+                    <tr>
+                      <td>Subsidiaria</td>
+                      <td class="mono">{{ $subsidiariaDev }}</td>
+                    </tr>
                   </tbody>
-              </table>
+                </table>
 
-              @continue
-          @endif
-          {{-- ============================================================= --}}
+                @continue
+              @endif
 
-          {{-- === CREACIÓN === --}}
-          @if($accion === 'creacion')
+              {{-- === CREACIÓN === --}}
+              @if($accion === 'creacion')
+                @php
+                  $spec = $cambios['especificaciones_base']
+                    ?? $cambios['especificaciones']
+                    ?? null;
 
-              @php
-                $spec = $cambios['especificaciones_base']
-                      ?? $cambios['especificaciones']
-                      ?? null;
+                  $descripcionProducto = $serie->producto->descripcion ?? null;
+                @endphp
 
-                $descripcionProducto = $serie->producto->descripcion ?? null;
-              @endphp
-
-              <table class="diff-table">
-                <thead>
-                    <tr><th>Campo</th><th>Valor</th></tr>
-                </thead>
-                <tbody>
-
+                <table class="diff-table">
+                  <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+                  <tbody>
                     @if(!$spec && $descripcionProducto)
-                    <tr><td>Descripción</td><td class="mono">{{ $descripcionProducto }}</td></tr>
+                      <tr><td>Descripción</td><td class="mono">{{ $descripcionProducto }}</td></tr>
                     @endif
 
                     @if($spec)
-                        @if(isset($spec['color']))
-                          <tr><td>Color</td><td class="mono">{{ $spec['color'] }}</td></tr>
-                        @endif
-
-                        @if(isset($spec['ram_gb']))
-                          <tr><td>RAM</td><td class="mono">{{ $spec['ram_gb'] }} GB</td></tr>
-                        @endif
-
-                        @if(isset($spec['procesador']))
-                          <tr><td>Procesador</td><td class="mono">{{ $spec['procesador'] }}</td></tr>
-                        @endif
-
-                        @if(isset($spec['almacenamiento']))
+                      @php $specArr = is_array($spec) ? $spec : $toArr($spec); @endphp
+                      @if(is_array($specArr))
+                        @foreach($flatten($specArr) as $k => $v)
                           <tr>
-                            <td>Almacenamiento</td>
-                            <td class="mono">
-                              {{ $spec['almacenamiento']['tipo'] ?? '' }} —
-                              {{ $spec['almacenamiento']['capacidad_gb'] ?? '' }} GB
-                            </td>
+                            <td>{{ $labelsSpec[$k] ?? ('Especificaciones: ' . ucfirst(str_replace(['_','.'],' ', $k))) }}</td>
+                            <td class="mono">{{ $fmtVal($k, $v) }}</td>
                           </tr>
-                        @endif
+                        @endforeach
+                      @endif
                     @endif
 
                     @if(isset($cambios['serie']))
                       <tr><td>Serie</td><td class="mono">{{ $cambios['serie'] }}</td></tr>
                     @endif
+                  </tbody>
+                </table>
 
-                </tbody>
-              </table>
-
-          @else
-          {{-- === EDICIÓN GENERAL === --}}
-          <table class="diff-table">
-            <thead>
-              <tr>
-                <th>Campo</th>
-
-                @if($accion !== 'asignacion')
-                    <th>Valor anterior</th>
-                @endif
-
-                <th>Nuevo valor</th>
-              </tr>
-            </thead>
-
-            <tbody>
-
-            @if($accion === 'asignacion')
-                <tr><td>Asignado a</td><td class="mono">{{ $cambios['asignado_a']['despues'] ?? '—' }}</td></tr>
-                <tr><td>Entregado por</td><td class="mono">{{ $cambios['entregado_por']['despues'] ?? '—' }}</td></tr>
-
-                <tr>
-                  <td>Fecha entrega</td>
-                  <td class="mono">
-                      {{
-                          $cambios['fecha_entrega']['antes']
-                          ?? ($log->responsiva?->fecha_entrega
-                                  ? \Carbon\Carbon::parse($log->responsiva->fecha_entrega)->format('d-m-Y')
-                                  : 'SIN FECHA')
-                      }}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td>Subsidiaria</td>
-                  <td class="mono">
-                      {{
-                          $cambios['subsidiaria']['antes']
-                          ?? ($log->responsiva?->colaborador?->subsidiaria?->descripcion
-                                  ?? 'SIN SUBSIDIARIA')
-                      }}
-                  </td>
-                </tr>
-            @endif
-
-            @foreach($cambios as $campo => $valor)
-
-                @if(in_array($campo, ['asignado_a','entregado_por','fecha_entrega','subsidiaria']))
-                    @continue
-                @endif
-
-                {{-- ✅ Solo omitir unidad_servicio_id cuando la acción sea asignación --}}
-                @if($accion === 'asignacion' && $campo === 'unidad_servicio_id')
-                    @continue
-                @endif
-
-                @if(is_array($valor) && isset($valor['antes']) && isset($valor['despues']))
-                    @php
-                      $antes = $valor['antes'];
-                      $despues = $valor['despues'];
-
-                      $format = function($v) use ($campo, $subsMap, $uniMap) {
-
-                            // ✅ Convertir IDs a nombres
-                            if ($campo === 'subsidiaria_id') {
-                                if (!$v) return 'Sin subsidiaria';
-                                return $subsMap[(int)$v] ?? "ID: $v";
-                            }
-
-                            if ($campo === 'unidad_servicio_id') {
-                                if (!$v) return 'Sin unidad de servicio';
-                                return $uniMap[(int)$v] ?? "ID: $v";
-                            }
-
-                            // ---- tu lógica actual ----
-                            if(is_array($v)) {
-                                if(isset($v['color'])) return $v['color'];
-                                if(isset($v['ram_gb'])) return $v['ram_gb'].' GB';
-                                if(isset($v['procesador'])) return $v['procesador'];
-
-                                if(isset($v['tipo']) || isset($v['capacidad_gb'])) {
-                                    return ($v['tipo'] ?? '').' — '.($v['capacidad_gb'] ?? '').' GB';
-                                }
-
-                                return json_encode($v, JSON_UNESCAPED_UNICODE);
-                            }
-
-                            if($campo === 'ram_gb' && is_numeric($v)) {
-                                return $v . ' GB';
-                            }
-
-                            return $v ?? '—';
-                        };
-                    @endphp
-
+              @else
+                {{-- === EDICIÓN GENERAL === --}}
+                <table class="diff-table">
+                  <thead>
                     <tr>
-                        <td>{{ $labelsCampo[$campo] ?? ucfirst(str_replace('_',' ', $campo)) }}</td>
+                      <th>Campo</th>
+                      @if($accion !== 'asignacion')
+                        <th>Valor anterior</th>
+                      @endif
+                      <th>Nuevo valor</th>
+                    </tr>
+                  </thead>
 
-                        @if($accion !== 'asignacion')
-                          <td class="mono text-gray-500">{{ $format($antes) }}</td>
+                  <tbody>
+                    @if($accion === 'asignacion')
+                      <tr><td>Asignado a</td><td class="mono">{{ $cambios['asignado_a']['despues'] ?? '—' }}</td></tr>
+                      <tr><td>Entregado por</td><td class="mono">{{ $cambios['entregado_por']['despues'] ?? '—' }}</td></tr>
+
+                      <tr>
+                        <td>Fecha entrega</td>
+                        <td class="mono">
+                          {{
+                            $cambios['fecha_entrega']['antes']
+                            ?? ($log->responsiva?->fecha_entrega
+                              ? \Carbon\Carbon::parse($log->responsiva->fecha_entrega)->format('d-m-Y')
+                              : 'SIN FECHA')
+                          }}
+                        </td>
+                      </tr>
+
+                      <tr>
+                        <td>Subsidiaria</td>
+                        <td class="mono">
+                          {{
+                            $cambios['subsidiaria']['antes']
+                            ?? ($log->responsiva?->colaborador?->subsidiaria?->descripcion ?? 'SIN SUBSIDIARIA')
+                          }}
+                        </td>
+                      </tr>
+                    @endif
+
+                    @foreach($cambios as $campo => $valor)
+                      @if(in_array($campo, ['asignado_a','entregado_por','fecha_entrega','subsidiaria']))
+                        @continue
+                      @endif
+
+                      @if($accion === 'asignacion' && $campo === 'unidad_servicio_id')
+                        @continue
+                      @endif
+
+                      @if(is_array($valor) && array_key_exists('antes',$valor) && array_key_exists('despues',$valor))
+                        @php
+                          $antes = $toArr($valor['antes']);
+                          $despues = $toArr($valor['despues']);
+                          $esSpecs = in_array($campo, ['especificaciones', 'especificaciones_base']);
+                        @endphp
+
+                        {{-- ✅ ESPECIFICACIONES: mostrar todos los subcampos editados --}}
+                        @if($esSpecs)
+                          @php
+                            $aFlat = $flatten(is_array($antes) ? $antes : []);
+                            $dFlat = $flatten(is_array($despues) ? $despues : []);
+
+                            $keys = array_unique(array_merge(array_keys($aFlat), array_keys($dFlat)));
+                            sort($keys);
+
+                            $diff = [];
+                            foreach ($keys as $k) {
+                              $va = $aFlat[$k] ?? null;
+                              $vd = $dFlat[$k] ?? null;
+                              if ($va != $vd) {
+                                $diff[$k] = ['antes' => $va, 'despues' => $vd];
+                              }
+                            }
+                          @endphp
+
+                          @if(!empty($diff))
+                            @foreach($diff as $k => $vals)
+                              <tr>
+                                <td>{{ $labelsSpec[$k] ?? ('Especificaciones: ' . ucfirst(str_replace(['_','.'],' ', $k))) }}</td>
+                                @if($accion !== 'asignacion')
+                                  <td class="mono text-gray-500">{{ $fmtVal($k, $vals['antes']) }}</td>
+                                @endif
+                                <td class="mono">{{ $fmtVal($k, $vals['despues']) }}</td>
+                              </tr>
+                            @endforeach
+                          @endif
+
+                          @continue
                         @endif
 
-                        <td class="mono">{{ $format($despues) }}</td>
-                    </tr>
-                @endif
+                        {{-- ✅ Caso normal (no especificaciones) --}}
+                        @php
+                          $format = function($v) use ($campo, $subsMap, $uniMap, $toArr) {
+                            if ($campo === 'subsidiaria_id') {
+                              if (!$v) return 'Sin subsidiaria';
+                              return $subsMap[(int)$v] ?? "ID: $v";
+                            }
+                            if ($campo === 'unidad_servicio_id') {
+                              if (!$v) return 'Sin unidad de servicio';
+                              return $uniMap[(int)$v] ?? "ID: $v";
+                            }
 
-            @endforeach
+                            $v = $toArr($v);
+                            if (is_array($v)) return json_encode($v, JSON_UNESCAPED_UNICODE);
+                            return $v ?? '—';
+                          };
+                        @endphp
 
-            </tbody>
-          </table>
-          @endif {{-- Fin edición general --}}
-
-          @else
-            <div class="ev-meta">Sin cambios registrados.</div>
-          @endif {{-- Fin if cambios --}}
-
-        </li>
+                        <tr>
+                          <td>{{ $labelsCampo[$campo] ?? ucfirst(str_replace('_',' ', $campo)) }}</td>
+                          @if($accion !== 'asignacion')
+                            <td class="mono text-gray-500">{{ $format($antes) }}</td>
+                          @endif
+                          <td class="mono">{{ $format($despues) }}</td>
+                        </tr>
+                      @endif
+                    @endforeach
+                  </tbody>
+                </table>
+              @endif {{-- Fin edición general/creación --}}
+            @else
+              <div class="ev-meta">Sin cambios registrados.</div>
+            @endif {{-- Fin if cambios --}}
+          </li>
         @endforeach
 
         </ul>

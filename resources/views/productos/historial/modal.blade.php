@@ -66,16 +66,6 @@
     white-space: pre-line;
     word-break: break-word;
   }
-
-  pre.json-block {
-    background: #f8fafc;
-    border-radius: 6px;
-    border: 1px solid #e5e7eb;
-    padding: .4rem .6rem;
-    font-size: .8rem;
-    line-height: 1.1rem;
-    overflow-x: auto;
-  }
 </style>
 
 <div id="prodModalOverlay" class="colab-modal-backdrop" data-modal-backdrop>
@@ -97,189 +87,236 @@
         <ul class="timeline">
           @foreach($historial->sortBy('id') as $log)
             @php
-              $user = $log->user->name ?? 'Sistema';
+              $user  = $log->user->name ?? 'Sistema';
               $fecha = optional($log->created_at)->format('d-m-Y H:i');
               $accion = strtolower($log->accion ?? 'actualización');
-              $datosAntes = json_decode($log->datos_anteriores ?? '[]', true);
-              $datosDespues = json_decode($log->datos_nuevos ?? '[]', true);
 
+              $datosAntes   = json_decode($log->datos_anteriores ?? '[]', true) ?: [];
+              $datosDespues = json_decode($log->datos_nuevos ?? '[]', true) ?: [];
+
+              // -------------------------
               // Detectar cambios
+              // -------------------------
               $cambios = [];
-              if ($accion === 'actualización' || $accion === 'actualizado') {
+              if (in_array($accion, ['actualización','actualizado'])) {
                 foreach ($datosDespues as $campo => $nuevo) {
                   $anterior = $datosAntes[$campo] ?? null;
                   if ($anterior != $nuevo) {
                     $cambios[$campo] = ['de' => $anterior, 'a' => $nuevo];
                   }
                 }
-              } elseif ($accion === 'creación' || $accion === 'creado') {
-                $cambios = $datosDespues ?? [];
-              } elseif ($accion === 'eliminación' || $accion === 'eliminado') {
-                $cambios = $datosAntes ?? [];
+              } elseif (in_array($accion, ['creación','creado'])) {
+                $cambios = $datosDespues;
+              } elseif (in_array($accion, ['eliminación','eliminado'])) {
+                $cambios = $datosAntes;
               }
 
-               // Detectar si cambió el campo 'activo'
-               $cambioActivo = null;
-               if (isset($cambios['activo'])) {
-                   $cambioActivo = [
-                   'de' => ($cambios['activo']['de'] ?? 0) ? 'Activo' : 'Inactivo',
-                   'a'  => ($cambios['activo']['a'] ?? 0) ? 'Activo' : 'Inactivo',
-                   ];
-                   unset($cambios['activo']); // lo quitamos para que no salga también en la tabla
-               }   
-               $soloCambioActivo = $cambioActivo && empty($cambios);
-              
-              // === 🔧 Determinar campos visibles según tipo y tracking ===
-              $tipo = strtolower(trim($producto->tipo ?? ''));
-              $tracking = strtolower(trim($producto->tracking ?? ''));
-  
-              // Normalizar texto del tracking
-              $tracking = preg_replace('/\s+/', ' ', $tracking);
-              $tracking = str_replace(
-                ['(', ')', '[', ']', '{', '}', 'á', 'é', 'í', 'ó', 'ú', 'ü'],
-                ['', '', '', '', '', '', 'a', 'e', 'i', 'o', 'u', 'u'],
-                $tracking
-                );
-              $tracking = trim($tracking);
-  
-              // === Mapeo de nombres equivalentes ===
-              $aliasCampos = [
-                  'unidad_medida' => 'unidad',
-                  'especificacion' => 'especificaciones',
-                  'especificacion_tecnica' => 'especificaciones',
-                  'sku' => 'sku',
-                  'stock_inicial' => 'stock',
+              // -------------------------
+              // Cambio activo (si lo modificaron)
+              // -------------------------
+              $cambioActivo = null;
+              if (isset($cambios['activo']) && is_array($cambios['activo'])) {
+                $cambioActivo = [
+                  'de' => ($cambios['activo']['de'] ?? 0) ? 'Activo' : 'Inactivo',
+                  'a'  => ($cambios['activo']['a'] ?? 0) ? 'Activo' : 'Inactivo',
                 ];
+                unset($cambios['activo']);
+              }
 
-                if ($tipo === 'equipo_pc') {
-                    $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo', 'especificaciones'];
-                } elseif (in_array($tipo, ['impresora','celular', 'pantalla', 'periferico', 'monitor'])) {
-                    $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo', 'descripcion'];
-                } elseif ($tipo === 'consumible') {
-                    $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo', 'especificaciones', 'sku', 'unidad', 'stock'];
-                } elseif ($tipo === 'otro') {
-                    if (str_contains($tracking, 'cantidad')) {
-                        $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo', 'descripcion', 'sku', 'unidad', 'stock'];
-                    } elseif (str_contains($tracking, 'serial')) {
-                        $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo', 'descripcion'];
-                    } else {
-                        $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo'];
-                    }
-                } else {
-                    $mostrarCampos = ['nombre', 'marca', 'modelo', 'tipo'];
+              // -------------------------
+              // Estado ACTUAL del evento (aunque no haya cambiado)
+              // prioridad: datos_nuevos.activo -> datos_anteriores.activo -> producto.activo
+              // -------------------------
+              $activoEventoRaw = $datosDespues['activo'] ?? $datosAntes['activo'] ?? ($producto->activo ?? 1);
+              $activoEvento = (int)($activoEventoRaw ?? 1) ? 'Activo' : 'Inactivo';
+              $activoEventoColor = $activoEvento === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+
+              // -------------------------
+              // Tipo del EVENTO (log)
+              // -------------------------
+              $tipoEvento = strtolower(trim(
+                $datosDespues['tipo'] ?? $datosAntes['tipo'] ?? ($producto->tipo ?? '')
+              ));
+              $tipoEvento = str_replace(['multifuncional','telefono','tv'], ['impresora','celular','pantalla'], $tipoEvento);
+
+              // -------------------------
+              // Alias
+              // -------------------------
+              $aliasCampos = [
+                'unidad_medida' => 'unidad',
+                'unidadmedida'  => 'unidad',
+                'especificacion' => 'especificaciones',
+                'especificacion_tecnica' => 'especificaciones',
+              ];
+
+              // -------------------------
+              // Orden EXACTO por tipo
+              // -------------------------
+              $hardwareTipos = ['equipo_pc','celular','impresora','monitor','pantalla','periferico'];
+
+              if (in_array($tipoEvento, $hardwareTipos)) {
+                $ordenCampos = ['nombre','marca','modelo','tipo'];
+              } elseif ($tipoEvento === 'consumible') {
+                $ordenCampos = ['nombre','marca','modelo','sku','unidad','color','tipo'];
+              } else {
+                $ordenCampos = ['nombre','marca','modelo','tipo'];
+              }
+
+              // -------------------------
+              // Normalizar keys + filtrar/ordenar
+              // -------------------------
+              $cambiosNormalizados = collect($cambios)->mapWithKeys(function($val, $key) use ($aliasCampos) {
+                $k = strtolower(trim($key));
+                $k = $aliasCampos[$k] ?? $k;
+                return [$k => $val];
+              });
+
+              $esCreacion = in_array($accion, ['creación','creado']);
+
+              // helper color desde especificaciones
+              $extraColorFromSpecs = function($spec) {
+                if (is_string($spec)) {
+                  $try = json_decode($spec, true);
+                  if (json_last_error() === JSON_ERROR_NONE) $spec = $try;
                 }
-                
-              // 🔍 Filtro mejorado con soporte a alias
-              $otrosCambios = collect($cambios)->filter(function ($val, $key) use ($mostrarCampos, $aliasCampos) {
-              $campo = strtolower($key);
-              $campoEquivalente = $aliasCampos[$campo] ?? $campo;
-              return in_array($campoEquivalente, $mostrarCampos);
-              });  
+                if (is_array($spec)) return $spec['color'] ?? $spec['Color'] ?? null;
+                return null;
+              };
 
-              // 🧩 Ordenar los campos según el orden definido en $mostrarCampos
-              $otrosCambios = $otrosCambios->sortBy(function ($val, $key) use ($mostrarCampos, $aliasCampos) {
-              $campo = strtolower($key);
-              $campoEquivalente = $aliasCampos[$campo] ?? $campo;
-              return array_search($campoEquivalente, $mostrarCampos);
-              });
+              if ($esCreacion) {
+                $otrosCambios = collect($ordenCampos)->mapWithKeys(function($campo) use ($datosDespues, $extraColorFromSpecs) {
+                  if ($campo === 'color') {
+                    $directo = $datosDespues['color'] ?? null;
+                    if (!is_null($directo) && $directo !== '') return ['color' => $directo];
 
-              $esCreacion = in_array($accion, ['creación','creado']);
+                    $spec = $datosDespues['especificaciones'] ?? $datosDespues['especificacion'] ?? null;
+                    return ['color' => $extraColorFromSpecs($spec)];
+                  }
+                  return [$campo => $datosDespues[$campo] ?? null];
+                });
+              } else {
+                $otrosCambios = $cambiosNormalizados
+                  ->filter(fn($val, $campo) => in_array($campo, $ordenCampos))
+                  ->sortBy(fn($val, $campo) => array_search($campo, $ordenCampos));
 
-              // Filtrar solo los campos relevantes
-              $otrosCambios = collect($cambios)->filter(function ($val, $key) use ($mostrarCampos) {
-                  return in_array(strtolower($key), $mostrarCampos);
-              });
+                // consumible: si cambió especificaciones, revisa si el color interno cambió
+                if ($tipoEvento === 'consumible' && $otrosCambios->has('especificaciones') && !$otrosCambios->has('color')) {
+                  $deSpec = $cambiosNormalizados['especificaciones']['de'] ?? null;
+                  $aSpec  = $cambiosNormalizados['especificaciones']['a']  ?? null;
 
-              $esCreacion = in_array($accion, ['creación','creado']);
+                  $deColor = $extraColorFromSpecs($deSpec);
+                  $aColor  = $extraColorFromSpecs($aSpec);
+
+                  if ($deColor != $aColor && (!is_null($deColor) || !is_null($aColor))) {
+                    $otrosCambios = $otrosCambios->put('color', ['de' => $deColor, 'a' => $aColor]);
+                    $otrosCambios = $otrosCambios->sortBy(fn($val, $campo) => array_search($campo, $ordenCampos));
+                  }
+                }
+              }
+
+              $tieneCambios = (collect($otrosCambios)->filter(fn($v) => $v !== null && $v !== '')->count() > 0);
             @endphp
 
-            {{-- ⚙️ Mostrar solo si hay cambios reales --}}
-            @if($accion !== 'actualización' && $accion !== 'actualizado' || !empty($cambios) || $cambioActivo)
-            <li class="{{ $accion }}">
+            @if($tieneCambios || $cambioActivo || in_array($accion, ['actualización','actualizado']))
+              <li class="{{ $accion }}">
                 <div class="ev-head">
-                @if($esCreacion)
-                  <span class="ev-title">Creación</span>
-                @elseif($accion === 'eliminación' || $accion === 'eliminado')
-                  <span class="ev-title">Eliminación</span>
-                @else
-                  <span class="ev-title">Actualización</span>
-                @endif
-                <span class="ev-meta">— {{ $user }} · {{ $fecha }}</span>
-              </div>
+                  @if($esCreacion)
+                    <span class="ev-title">Creación</span>
+                  @elseif(in_array($accion, ['eliminación','eliminado']))
+                    <span class="ev-title">Eliminación</span>
+                  @else
+                    <span class="ev-title">Actualización</span>
+                  @endif
+                  <span class="ev-meta">— {{ $user }} · {{ $fecha }}</span>
+                </div>
 
-              {{-- 🟢 Mostrar estado (solo creación o cambio de activo) --}}
-  @if(($accion === 'creación' || $accion === 'creado') && isset($datosDespues['activo']))
-    @php
-      $estado = ($datosDespues['activo'] ?? 1) ? 'Activo' : 'Inactivo';
-      $color = $estado === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
-    @endphp
-    <p class="ev-meta mt-1">Estado: <span class="px-2 py-1 rounded {{ $color }}">{{ $estado }}</span></p>
-  @elseif($cambioActivo)
-    @php
-      $colorDe = $cambioActivo['de'] === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
-      $colorA  = $cambioActivo['a'] === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
-    @endphp
-    <p class="ev-meta mt-1">
-      Estado:
-      <span class="px-2 py-1 rounded {{ $colorDe }}">{{ $cambioActivo['de'] }}</span>
-      →
-      <span class="px-2 py-1 rounded {{ $colorA }}">{{ $cambioActivo['a'] }}</span>
-    </p>
-  @endif
-  
-              {{-- 🔹 Tabla de cambios relevantes --}}
-              @if($otrosCambios->isNotEmpty())
-                <table class="diff-table">
-                  <thead>
-                    <tr>
-                      <th>Campo</th>
-                      @if($accion === 'actualización' || $accion === 'actualizado')
-                        <th>Valor anterior</th>
-                        <th>Nuevo valor</th>
-                      @else
-                        <th colspan="2">Valor</th>
-                      @endif
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @foreach($otrosCambios as $campo => $valor)
-                      @if(is_array($valor) && isset($valor['de'], $valor['a']))
-                        <tr>
-                          <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
-                          <td class="mono text-gray-500">
-                            @if(is_array($valor['de']))
-                              <pre class="json-block">{{ json_encode($valor['de'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
-                            @else
-                              {{ $valor['de'] ?? '—' }}
-                            @endif
-                          </td>
-                          <td class="mono">
-                            @if(is_array($valor['a']))
-                              <pre class="json-block">{{ json_encode($valor['a'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
-                            @else
-                              {{ $valor['a'] ?? '—' }}
-                            @endif
-                          </td>
-                        </tr>
-                      @else
-                        <tr>
-                          <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
-                          <td class="mono" colspan="2">
-                            @if(is_array($valor))
-                              <pre class="json-block">{{ json_encode($valor, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
-                            @else
-                              {{ $valor ?? '—' }}
-                            @endif
-                          </td>
-                        </tr>
-                      @endif
-                    @endforeach
-                  </tbody>
-                </table>
-                @elseif($accion !== 'actualización' && $accion !== 'actualizado')
-                    <div class="ev-meta">Sin datos relevantes en esta acción.</div>
+                {{-- ✅ Estado SIEMPRE: creación y actualización --}}
+                @if($cambioActivo)
+                  @php
+                    $colorDe = $cambioActivo['de'] === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+                    $colorA  = $cambioActivo['a'] === 'Activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
+                  @endphp
+                  <p class="ev-meta mt-1">
+                    Estado:
+                    <span class="px-2 py-1 rounded {{ $colorDe }}">{{ $cambioActivo['de'] }}</span>
+                    →
+                    <span class="px-2 py-1 rounded {{ $colorA }}">{{ $cambioActivo['a'] }}</span>
+                  </p>
+                @elseif(in_array($accion, ['creación','creado','actualización','actualizado']))
+                  <p class="ev-meta mt-1">
+                    Estado:
+                    <span class="px-2 py-1 rounded {{ $activoEventoColor }}">{{ $activoEvento }}</span>
+                  </p>
                 @endif
-            </li>
+
+                {{-- Tabla --}}
+                @php
+                  $collectionCambios = $otrosCambios instanceof \Illuminate\Support\Collection ? $otrosCambios : collect($otrosCambios);
+
+                  $toPretty = function($v) {
+                    if (is_string($v)) {
+                      $try = json_decode($v, true);
+                      if (json_last_error() === JSON_ERROR_NONE) return $try;
+                    }
+                    return $v;
+                  };
+                @endphp
+
+                @if($collectionCambios->isNotEmpty())
+                  <table class="diff-table">
+                    <thead>
+                      <tr>
+                        <th>Campo</th>
+                        @if(in_array($accion, ['actualización','actualizado']))
+                          <th>Valor anterior</th>
+                          <th>Nuevo valor</th>
+                        @else
+                          <th colspan="2">Valor</th>
+                        @endif
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @foreach($collectionCambios as $campo => $valor)
+                        @if(is_array($valor) && array_key_exists('de',$valor) && array_key_exists('a',$valor))
+                          @php
+                            $de = $toPretty($valor['de'] ?? null);
+                            $a  = $toPretty($valor['a'] ?? null);
+                          @endphp
+                          <tr>
+                            <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
+                            <td class="mono text-gray-500">
+                              @if(is_array($de))
+                                {{ json_encode($de, JSON_UNESCAPED_UNICODE) }}
+                              @else
+                                {{ $de ?? '—' }}
+                              @endif
+                            </td>
+                            <td class="mono">
+                              @if(is_array($a))
+                                {{ json_encode($a, JSON_UNESCAPED_UNICODE) }}
+                              @else
+                                {{ $a ?? '—' }}
+                              @endif
+                            </td>
+                          </tr>
+                        @else
+                          @php $val = $toPretty($valor); @endphp
+                          <tr>
+                            <td>{{ ucfirst(str_replace('_',' ', $campo)) }}</td>
+                            <td class="mono" colspan="2">
+                              @if(is_array($val))
+                                {{ json_encode($val, JSON_UNESCAPED_UNICODE) }}
+                              @else
+                                {{ $val ?? '—' }}
+                              @endif
+                            </td>
+                          </tr>
+                        @endif
+                      @endforeach
+                    </tbody>
+                  </table>
+                @endif
+              </li>
             @endif
           @endforeach
         </ul>
