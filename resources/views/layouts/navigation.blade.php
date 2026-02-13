@@ -185,19 +185,19 @@
 
               <div x-show="open" x-transition class="menu-panel">
                 <div class="p-2">
-                  @can('responsivas.view')
+                  @if(auth()->user()->hasRole('Administrador'))
                     <a href="{{ route('responsivas.index') }}"
                       class="menu-item {{ request()->routeIs('responsivas.*') ? 'menu-item--active' : '' }}">
                       Responsivas
                     </a>
-                  @endcan
+                  @endif
 
-                  @can('devoluciones.view')
+                  @if(auth()->user()->hasRole('Administrador'))
                     <a href="{{ route('devoluciones.index') }}"
                       class="menu-item {{ request()->routeIs('devoluciones.*') ? 'menu-item--active' : '' }}">
                       Devoluciones
                     </a>
-                  @endcan
+                  @endif
 
                   @can('celulares.view')
                     <a href="{{ url('/celulares/responsivas') }}"
@@ -435,19 +435,19 @@
           </button>
 
           <div x-show="formatos" x-transition class="mobile-sub">
-            @can('responsivas.view')
+            @if(auth()->user()->hasRole('Administrador'))
               <a href="{{ route('responsivas.index') }}"
                 class="mobile-a {{ request()->routeIs('responsivas.*') ? 'mobile-a--active' : '' }}">
                 Responsivas
               </a>
-            @endcan
+            @endif
 
-            @can('devoluciones.view')
+            @if(auth()->user()->hasRole('Administrador'))
               <a href="{{ route('devoluciones.index') }}"
                 class="mobile-a {{ request()->routeIs('devoluciones.*') ? 'mobile-a--active' : '' }}">
                 Devoluciones
               </a>
-            @endcan
+            @endif
 
             @can('celulares.view')
               <a href="{{ url('/celulares/responsivas') }}"
