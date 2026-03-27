@@ -11,7 +11,7 @@ class OrdenCompraDetalle extends Model
     protected $fillable = [
         'orden_compra_id',
         'cantidad','unidad','concepto',
-        'moneda','precio','importe',
+        'moneda','precio','descuento','importe',
         'iva_pct','isr_pct','isr_monto',
         'iva_monto','ret_iva_pct','ret_iva_monto',
         'subtotal','total',

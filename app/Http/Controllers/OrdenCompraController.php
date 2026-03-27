@@ -185,12 +185,14 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
         // ✅ Validación partidas
         $request->validate([
-            'items'            => ['required','array','min:1'],
-            'items.*.cantidad' => ['required','numeric','min:0.001'],
-            'items.*.unidad'   => ['required','string','max:50'],
-            'items.*.concepto' => ['required','string','max:500'],
-            'items.*.moneda'   => ['required','string','max:10'],
-            'items.*.precio'   => ['required','numeric','min:0'],
+            'items'                      => ['required','array','min:1'],
+            'items.*.cantidad'           => ['required','numeric','min:0.001'],
+            'items.*.unidad'             => ['required','string','max:50'],
+            'items.*.concepto'           => ['required','string','max:500'],
+            'items.*.moneda'             => ['required','string','max:10'],
+            'items.*.precio'             => ['required','numeric','min:0'],
+            'items.*.descuento_enabled'  => ['nullable','in:1'],
+            'items.*.descuento'          => ['nullable','numeric','min:0'],
         ]);
 
         $user   = auth()->user();
@@ -376,15 +378,26 @@ class OrdenCompraController extends Controller implements HasMiddleware
             foreach ($request->items as $row) {
                 $cantidad = (float) ($row['cantidad'] ?? 0);
                 $precio   = (float) ($row['precio'] ?? 0);
-                $subtotal = round($cantidad * $precio, 4);
+                $bruto    = round($cantidad * $precio, 4);
+
+                $descuento = !empty($row['descuento_enabled'])
+                    ? (float) ($row['descuento'] ?? 0)
+                    : 0;
+
+                if ($descuento > $bruto) {
+                    $descuento = $bruto;
+                }
+
+                $subtotal = round($bruto - $descuento, 4);
 
                 $temp[] = [
-                    'cantidad' => $cantidad,
-                    'unidad'   => $row['unidad'] ?? null,
-                    'concepto' => $row['concepto'],
-                    'moneda'   => $row['moneda'],
-                    'precio'   => $precio,
-                    'subtotal' => $subtotal,
+                    'cantidad'  => $cantidad,
+                    'unidad'    => $row['unidad'] ?? null,
+                    'concepto'  => $row['concepto'],
+                    'moneda'    => $row['moneda'],
+                    'precio'    => $precio,
+                    'descuento' => $descuento,
+                    'subtotal'  => $subtotal,
                 ];
 
                 $subtotalOC += $subtotal;
@@ -464,6 +477,10 @@ class OrdenCompraController extends Controller implements HasMiddleware
                     'subtotal'        => $d['subtotal'],
                     'total'           => $totalFila,
                 ];
+
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'descuento')) {
+                    $detallePayload['descuento'] = $d['descuento'];
+                }
 
                 // Guardar ISR en detalles solo si existen columnas
                 if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'isr_pct')) {
@@ -609,13 +626,15 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
         // Validación partidas
         $request->validate([
-            'items'            => ['required','array','min:1'],
-            'items.*.id'       => ['nullable','integer','min:1'],
-            'items.*.cantidad' => ['required','numeric','min:0.001'],
-            'items.*.unidad'   => ['required','string','max:50'],
-            'items.*.concepto' => ['required','string','max:500'],
-            'items.*.moneda'   => ['required','string','max:10'],
-            'items.*.precio'   => ['required','numeric','min:0'],
+            'items'                      => ['required','array','min:1'],
+            'items.*.id'                 => ['nullable','integer','min:1'],
+            'items.*.cantidad'           => ['required','numeric','min:0.001'],
+            'items.*.unidad'             => ['required','string','max:50'],
+            'items.*.concepto'           => ['required','string','max:500'],
+            'items.*.moneda'             => ['required','string','max:10'],
+            'items.*.precio'             => ['required','numeric','min:0'],
+            'items.*.descuento_enabled'  => ['nullable','in:1'],
+            'items.*.descuento'          => ['nullable','numeric','min:0'],
         ]);
 
         $tenantId = $this->tenantId();
@@ -821,16 +840,27 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
                 $cantidad = (float) $row['cantidad'];
                 $precio   = (float) $row['precio'];
-                $subtotal = round($cantidad * $precio, 4);
+                $bruto    = round($cantidad * $precio, 4);
+
+                $descuento = !empty($row['descuento_enabled'])
+                    ? (float) ($row['descuento'] ?? 0)
+                    : 0;
+
+                if ($descuento > $bruto) {
+                    $descuento = $bruto;
+                }
+
+                $subtotal = round($bruto - $descuento, 4);
 
                 $temp[] = [
-                    'id'       => $id,
-                    'cantidad' => $cantidad,
-                    'unidad'   => $row['unidad'],
-                    'concepto' => $row['concepto'],
-                    'moneda'   => $row['moneda'],
-                    'precio'   => $precio,
-                    'subtotal' => $subtotal,
+                    'id'        => $id,
+                    'cantidad'  => $cantidad,
+                    'unidad'    => $row['unidad'],
+                    'concepto'  => $row['concepto'],
+                    'moneda'    => $row['moneda'],
+                    'precio'    => $precio,
+                    'descuento' => $descuento,
+                    'subtotal'  => $subtotal,
                 ];
 
                 $subtotalOC += $subtotal;
@@ -935,6 +965,10 @@ class OrdenCompraController extends Controller implements HasMiddleware
                     'subtotal'  => $d['subtotal'],
                     'total'     => $totalFila,
                 ];
+
+                if (\Schema::hasColumn((new OrdenCompraDetalle)->getTable(), 'descuento')) {
+                    $payload['descuento'] = $d['descuento'];
+                }
 
                 if ($d['id'] && $existentes->has($d['id'])) {
                     $existentes[$d['id']]->update($payload);

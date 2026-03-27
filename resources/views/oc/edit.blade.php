@@ -58,6 +58,16 @@
 
     .currency-alert{ display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px; }
     .currency-alert.show{ display:block; }
+    .discount-readonly{ background:#f3f4f6; color:#6b7280; }
+    .discount-cell{ white-space:nowrap; }
+    .discount-inline{ display:flex; width:100%; align-items:center; justify-content:center; gap:0; }
+    .discount-inline.active{ justify-content:flex-start; gap:10px; }
+    .discount-toggle{ width:18px !important; height:18px; min-width:18px; margin:0; cursor:pointer; appearance:none; -webkit-appearance:none; border:2px solid #9ca3af; border-radius:9999px; background:#fff; position:relative; padding:0; }
+    .discount-toggle:checked{ border-color:#16a34a; background:#16a34a; }
+    .discount-toggle:checked::after{ content:''; position:absolute; top:50%; left:50%; width:6px; height:6px; border-radius:9999px; background:#fff; transform:translate(-50%, -50%); }
+    .discount-value-wrap{ width:0; max-width:0; overflow:hidden; opacity:0; pointer-events:none; transition:width .18s ease, max-width .18s ease, opacity .18s ease, margin-left .18s ease; margin-left:0; }
+    .discount-value-wrap.active{ width:120px; max-width:120px; opacity:1; pointer-events:auto; margin-left:10px; }
+    .discount-value-wrap input{ width:120px; min-width:120px; }
   </style>
 
 @php
@@ -99,26 +109,30 @@
       $prefill = ($oc->relationLoaded('detalles') ? $oc->detalles : $oc->detalles()->get())
           ->map(function($d){
               return [
-                  'id'       => $d->id,
-                  'cantidad' => $d->cantidad ?? '',
-                  'unidad'   => $d->unidad ?? '',
-                  'concepto' => $d->concepto ?? '',
-                  'moneda'   => $d->moneda ?? 'MXN',
-                  'precio'   => $d->precio ?? '',
-                  'importe'  => $d->importe ?? '',
+                  'id'                => $d->id,
+                  'cantidad'          => $d->cantidad ?? '',
+                  'unidad'            => $d->unidad ?? '',
+                  'concepto'          => $d->concepto ?? '',
+                  'moneda'            => $d->moneda ?? 'MXN',
+                  'precio'            => $d->precio ?? '',
+                  'descuento'         => $d->descuento ?? '',
+                  'descuento_enabled' => (float)($d->descuento ?? 0) > 0 ? 1 : 0,
+                  'importe'           => $d->importe ?? '',
               ];
           })->values()->all();
   }
 
   if (empty($prefill)) {
       $prefill = [[
-          'id' => null,
-          'cantidad' => '',
-          'unidad'   => '',
-          'concepto' => '',
-          'moneda'   => 'MXN',
-          'precio'   => '',
-          'importe'  => ''
+          'id'                => null,
+          'cantidad'          => '',
+          'unidad'            => '',
+          'concepto'          => '',
+          'moneda'            => 'MXN',
+          'precio'            => '',
+          'descuento'         => '',
+          'descuento_enabled' => 0,
+          'importe'           => ''
       ]];
   }
 
@@ -127,7 +141,11 @@
   // =======================
   $phpSubtotal = 0;
   foreach ($prefill as $r) {
-      $phpSubtotal += (float)$r['cantidad'] * (float)$r['precio'];
+      $importeFila = isset($r['importe']) && $r['importe'] !== ''
+          ? (float)$r['importe']
+          : max(((float)$r['cantidad'] * (float)$r['precio']) - (float)($r['descuento'] ?? 0), 0);
+
+      $phpSubtotal += $importeFila;
   }
 
   // =======================
@@ -348,12 +366,18 @@
                     <th>Concepto</th>
                     <th class="nowrap">Moneda</th>
                     <th class="nowrap">Precio</th>
+                    <th class="nowrap">Descuento</th>
                     <th class="nowrap">Importe</th>
                     <th class="nowrap">—</th>
                   </tr>
                 </thead>
                 <tbody id="itemsTbody">
                   @foreach($prefill as $idx => $it)
+                  @php
+                    $mon = old("items.$idx.moneda", $it['moneda'] ?? 'MXN');
+                    $descValue = old("items.$idx.descuento", $it['descuento'] ?? '');
+                    $descEnabled = old("items.$idx.descuento_enabled", $it['descuento_enabled'] ?? ((float)($it['descuento'] ?? 0) > 0 ? 1 : 0));
+                  @endphp
                   <tr class="item-row">
                     <input type="hidden" name="items[{{ $idx }}][id]" value="{{ old("items.$idx.id", $it['id'] ?? '') }}">
                     <td>
@@ -365,17 +389,32 @@
                     <td><input type="text" name="items[{{ $idx }}][unidad]" value="{{ old("items.$idx.unidad", $it['unidad']) }}"></td>
                     <td><input type="text" name="items[{{ $idx }}][concepto]" value="{{ old("items.$idx.concepto", $it['concepto']) }}"></td>
                     <td>
-                      @php $mon = old("items.$idx.moneda", $it['moneda'] ?? 'MXN'); @endphp
                       <select name="items[{{ $idx }}][moneda]" class="i-moneda">
                         <option value="MXN" @selected($mon==='MXN')>MXN&nbsp;</option>
                         <option value="USD" @selected($mon==='USD')>USD&nbsp;</option>
                       </select>
-                    </td>
-                    <td>
+                    </td><td>
                       <input type="number" step="0.0001" min="0"
                              name="items[{{ $idx }}][precio]"
                              class="i-precio right"
                              value="{{ $precioDisplay(old("items.$idx.precio", $it['precio'])) }}">
+                    </td>
+                    <td class="discount-cell">
+                      <div class="discount-inline {{ $descEnabled ? 'active' : '' }}">
+                        <input type="checkbox"
+                               name="items[{{ $idx }}][descuento_enabled]"
+                               class="i-descuento-check discount-toggle"
+                               value="1"
+                               {{ $descEnabled ? 'checked' : '' }}>
+                        <div class="discount-value-wrap {{ $descEnabled ? 'active' : '' }}">
+                          <input type="number" step="0.0001" min="0"
+                                 name="items[{{ $idx }}][descuento]"
+                                 class="i-descuento right {{ $descEnabled ? '' : 'discount-readonly' }}"
+                                 value="{{ $precioDisplay($descValue) }}"
+                                 {{ $descEnabled ? '' : 'disabled' }}
+                                 placeholder="0.00">
+                        </div>
+                      </div>
                     </td>
                     <td>
                       <input type="number" step="0.0001" min="0"
@@ -575,13 +614,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const retIvaPctBox   = document.getElementById("retIvaPctBox");
   const retIvaMontoBox = document.getElementById("retIvaMontoBox");
 
-  function r2(n){
-    n = Number(n || 0);
-    return Math.round((n + Number.EPSILON) * 100) / 100;
-  }
-  function fmt2(n){
-    return r2(n).toFixed(2);
-  }
+  function round2(n){
+        n = Number(n || 0);
+        return Math.round((n + Number.EPSILON) * 100) / 100;
+      }
+      function trunc2(n){
+        n = Number(n || 0);
+        return Math.floor((n + 0.0000001) * 100) / 100;
+      }
+      function fmt2(n){
+        return Number(n || 0).toFixed(2);
+      }
 
   /* =========================
      MONEDA (una sola)
@@ -635,7 +678,34 @@ document.addEventListener("DOMContentLoaded", () => {
       tbody.querySelectorAll("tr.item-row").forEach(tr => {
           const q = parseFloat(tr.querySelector(".i-cantidad")?.value || "0");
           const p = parseFloat(tr.querySelector(".i-precio")?.value || "0");
-          const imp = r2((q * p) || 0);
+          const bruto = round2((q * p) || 0);
+
+          const chk = tr.querySelector(".i-descuento-check");
+          const descInput = tr.querySelector(".i-descuento");
+          const descWrap = tr.querySelector(".discount-value-wrap");
+          const descInline = tr.querySelector(".discount-inline");
+          const aplicarDescuento = !!chk?.checked;
+
+          if (descWrap) {
+              descWrap.classList.toggle("active", aplicarDescuento);
+          }
+          if (descInline) {
+              descInline.classList.toggle("active", aplicarDescuento);
+          }
+          if (descInput) {
+              descInput.disabled = !aplicarDescuento;
+              descInput.classList.toggle("discount-readonly", !aplicarDescuento);
+              if (!aplicarDescuento) descInput.value = "";
+          }
+
+          let descuento = aplicarDescuento ? round2(parseFloat(descInput?.value || "0")) : 0;
+
+          if (descuento > bruto) {
+              descuento = bruto;
+              if (descInput) descInput.value = fmt2(bruto);
+          }
+
+          const imp = round2(Math.max(bruto - descuento, 0));
 
           const impInput = tr.querySelector(".i-importe");
           if (impInput) impInput.value = fmt2(imp);
@@ -643,9 +713,8 @@ document.addEventListener("DOMContentLoaded", () => {
           subtotal += imp;
       });
 
-      elSub.value = fmt2(subtotal);
+      elSub.value = fmt2(round2(subtotal));
 
-      // Dispara cálculo final
       elSub.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
@@ -656,7 +725,7 @@ document.addEventListener("DOMContentLoaded", () => {
      - ISR manual cuando ISR% = 0, ISR activo y tiene permiso
   ========================= */
   function applyTotals() {
-      const sub = r2(parseFloat(elSub.value || 0));
+      const sub = round2(parseFloat(elSub.value || 0));
 
       // =========================
       // IVA (igual que antes)
@@ -677,14 +746,14 @@ document.addEventListener("DOMContentLoaded", () => {
                   elIva.value = "0.00";
               }
 
-              const ivaUser = r2(parseFloat(elIva.value || 0));
+              const ivaUser = round2(parseFloat(elIva.value || 0));
               ivaFinal = ivaUser;
 
               if (ivaManualHidden) ivaManualHidden.value = fmt2(ivaUser);
           }
       } else {
           elIva.readOnly = true;
-          const ivaCalc = r2(sub * (pctIva / 100));
+          const ivaCalc = trunc2(sub * (pctIva / 100));
           elIva.value = fmt2(ivaCalc);
           ivaFinal = ivaCalc;
 
@@ -731,7 +800,7 @@ document.addEventListener("DOMContentLoaded", () => {
                       isrMontoEl.value = "0.00";
                   }
 
-                  const isrUser = r2(parseFloat(isrMontoEl?.value || 0));
+                  const isrUser = round2(parseFloat(isrMontoEl?.value || 0));
                   isrFinal = isrUser;
 
                   if (isrManualEl) isrManualEl.value = fmt2(isrUser);
@@ -741,7 +810,7 @@ document.addEventListener("DOMContentLoaded", () => {
               // --- ISR automático por % ---
               if (isrMontoEl) isrMontoEl.readOnly = true;
 
-              const isrCalc = r2(sub * (pctIsr / 100));
+              const isrCalc = trunc2(sub * (pctIsr / 100));
               if (isrMontoEl) isrMontoEl.value = fmt2(isrCalc);
 
               if (isrManualEl) isrManualEl.value = "";
@@ -787,7 +856,7 @@ document.addEventListener("DOMContentLoaded", () => {
                       retIvaMontoEl.value = "0.00";
                   }
 
-                  const user = r2(parseFloat(retIvaMontoEl?.value || 0));
+                  const user = round2(parseFloat(retIvaMontoEl?.value || 0));
                   retIvaFinal = user;
 
                   if (retIvaManualEl) retIvaManualEl.value = fmt2(user);
@@ -796,7 +865,7 @@ document.addEventListener("DOMContentLoaded", () => {
               // automático sobre SUBTOTAL
               if (retIvaMontoEl) retIvaMontoEl.readOnly = true;
 
-              const calc = r2(sub * (pctRetIva / 100));
+              const calc = trunc2(sub * (pctRetIva / 100));
               if (retIvaMontoEl) retIvaMontoEl.value = fmt2(calc);
 
               if (retIvaManualEl) retIvaManualEl.value = "";
@@ -807,7 +876,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // =========================
       // Total final
       // =========================
-      const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal) - r2(retIvaFinal));
+      const totalCalc = round2(sub + ivaFinal - isrFinal - retIvaFinal);
       elTotal.value = fmt2(totalCalc);
 
       // =========================
@@ -845,34 +914,45 @@ document.addEventListener("DOMContentLoaded", () => {
   /* =========================
      PLANTILLA FILA NUEVA
   ========================= */
-  function rowTemplate(idx, baseMoneda) {
-      const mMXN = (!baseMoneda || baseMoneda === "MXN") ? "selected" : "";
-      const mUSD = (baseMoneda === "USD") ? "selected" : "";
-
-      return `
-      <tr class="item-row">
+  function rowTemplate(idx, baseMoneda){
+        const mMXN = (!baseMoneda || baseMoneda === 'MXN') ? 'selected' : '';
+        const mUSD = (baseMoneda === 'USD') ? 'selected' : '';
+        return `
+        <tr class="item-row">
           <input type="hidden" name="items[${idx}][id]" value="">
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][cantidad]" class="i-cantidad right"></td>
           <td><input type="text" name="items[${idx}][unidad]"></td>
           <td><input type="text" name="items[${idx}][concepto]"></td>
           <td>
-              <select name="items[${idx}][moneda]" class="i-moneda">
-                  <option value="MXN" ${mMXN}>MXN</option>
-                  <option value="USD" ${mUSD}>USD</option>
-              </select>
+            <select name="items[${idx}][moneda]" class="i-moneda">
+              <option value="MXN" ${mMXN}>MXN</option>
+              <option value="USD" ${mUSD}>USD</option>
+            </select>
           </td>
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
+          <td class="discount-cell">
+            <div class="discount-inline">
+              <input type="checkbox" name="items[${idx}][descuento_enabled]" class="i-descuento-check discount-toggle" value="1">
+              <div class="discount-value-wrap">
+                <input type="number" step="0.0001" min="0" name="items[${idx}][descuento]" class="i-descuento right discount-readonly" disabled placeholder="0.00">
+              </div>
+            </div>
+          </td>
           <td><input type="number" step="0.01" min="0" name="items[${idx}][importe]" class="i-importe right" readonly></td>
           <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
-      </tr>`;
-  }
+        </tr>`;
+      }
 
   /* =========================
      BIND EVENTS FILAS
   ========================= */
   function bindRowEvents(scope = document) {
-      scope.querySelectorAll(".i-cantidad, .i-precio").forEach(inp => {
+      scope.querySelectorAll(".i-cantidad, .i-precio, .i-descuento").forEach(inp => {
           inp.addEventListener("input", recalc);
+      });
+
+      scope.querySelectorAll(".i-descuento-check").forEach(chk => {
+          chk.addEventListener("change", recalc);
       });
 
       scope.querySelectorAll(".i-moneda").forEach(sel => {

@@ -76,51 +76,101 @@
   /* ===== Partidas ===== */
   $detalles    = collect($oc->detalles ?? [])->values();
 
-  $r2 = function($n){
+  $round2 = function($n){
     $n = (float)($n ?? 0);
     return round($n, 2);
   };
 
-  $sumSubtotal = 0;
-  $sumIva      = 0;
-  $sumIsr      = 0;
-  $sumRetIva   = 0;
-  $sumTotal    = 0;
+  $trunc2 = function($n){
+    $n = (float)($n ?? 0);
+    return floor(($n + 0.0000001) * 100) / 100;
+  };
+
+  $samePctOrNull = function($rows, $field){
+    $values = collect($rows)
+      ->map(fn($d) => (float)($d->{$field} ?? 0))
+      ->filter(fn($v) => $v > 0)
+      ->unique()
+      ->values();
+
+    return $values->count() === 1 ? (float)$values->first() : null;
+  };
+
+  $displayRows = [];
+  $sumSubtotalRaw = 0.0;
 
   foreach ($detalles as $d) {
-    // valores "visibles" por fila (2 decimales)
-    $sub = $r2($d->subtotal ?? $d->importe ?? 0);
-    $iva = $r2($d->iva_monto ?? 0);
-    $isr = $r2($d->isr_monto ?? 0);
-    $ret = $r2($d->ret_iva_monto ?? 0); 
+    $cantidad = (float)($d->cantidad ?? 0);
+    $precioRaw = $d->precio ?? null;
+    $descuentoRaw = $d->descuento ?? null;
 
-    $tot = $r2($sub + $iva - $isr - $ret); 
+    $precioDisplay = is_numeric($precioRaw) ? $round2($precioRaw) : null;
+    $descuentoDisplay = ((float)($descuentoRaw ?? 0) > 0) ? $round2($descuentoRaw) : null;
 
-    $sumSubtotal += $sub;
-    $sumIva      += $iva;
-    $sumIsr      += $isr;
-    $sumRetIva   += $ret; 
-    $sumTotal    += $tot;
+    $importeBase = null;
+    if (isset($d->importe) && is_numeric($d->importe)) {
+      $importeBase = (float)$d->importe;
+    } elseif (is_numeric($cantidad) && is_numeric($precioRaw)) {
+      $importeBase = ($cantidad * (float)$precioRaw) - (float)($descuentoRaw ?? 0);
+    }
+
+    $importeDisplay = is_numeric($importeBase) ? $round2($importeBase) : null;
+
+    $displayRows[] = [
+      'model' => $d,
+      'precio_display' => $precioDisplay,
+      'descuento_display' => $descuentoDisplay,
+      'importe_display' => $importeDisplay,
+    ];
+
+    $sumSubtotalRaw += (float)($importeDisplay ?? 0);
   }
 
-  // redondeo final de seguridad
-  $sumSubtotal = $r2($sumSubtotal);
-  $sumIva      = $r2($sumIva);
-  $sumIsr      = $r2($sumIsr);
-  $sumRetIva   = $r2($sumRetIva);
-  $sumTotal    = $r2($sumTotal);
+  $sumSubtotal = $round2($sumSubtotalRaw);
 
-  $hasIsrPct = $detalles->contains(fn($d) => (float)($d->isr_pct ?? 0) > 0);
+  $ivaPctCommon    = $samePctOrNull($detalles, 'iva_pct');
+  $isrPctCommon    = $samePctOrNull($detalles, 'isr_pct');
+  $retIvaPctCommon = $samePctOrNull($detalles, 'ret_iva_pct');
+
+  if ($ivaPctCommon !== null) {
+    $sumIva = $trunc2($sumSubtotal * ($ivaPctCommon / 100));
+  } else {
+    $sumIva = $trunc2(collect($detalles)->sum(fn($d) => (float)($d->iva_monto ?? 0)));
+  }
+
+  if ($isrPctCommon !== null) {
+    $sumIsr = $trunc2($sumSubtotal * ($isrPctCommon / 100));
+  } else {
+    $sumIsr = $trunc2(collect($detalles)->sum(fn($d) => (float)($d->isr_monto ?? 0)));
+  }
+
+  if ($retIvaPctCommon !== null) {
+    $sumRetIva = $trunc2($sumSubtotal * ($retIvaPctCommon / 100));
+  } else {
+    $sumRetIva = $trunc2(collect($detalles)->sum(fn($d) => (float)($d->ret_iva_monto ?? 0)));
+  }
+
+  $sumTotal = $round2($sumSubtotal + $sumIva - $sumIsr - $sumRetIva);
+
+  $hasIsrPct = $detalles->contains(function($d){
+    return (float)($d->isr_pct ?? 0) > 0;
+  });
   $showIsr = ($sumIsr > 0) || $hasIsrPct;
 
-  $hasRetIvaPct = $detalles->contains(fn($d) => (float)($d->ret_iva_pct ?? 0) > 0);
+  $hasRetIvaPct = $detalles->contains(function($d){
+    return (float)($d->ret_iva_pct ?? 0) > 0;
+  });
   $showRetIva = ($sumRetIva > 0) || $hasRetIvaPct;
 
   $moneda  = $detalles->first()->moneda ?? 'MXN';
+  $showDiscountColumn = $detalles->contains(fn($d) => (float)($d->descuento ?? 0) > 0);
 
   // 13 filas base; si hay más, se generan dinámicamente
   $baseBlocks   = 13;
   $blocksToDraw = max($baseBlocks, $detalles->count());
+  $extraRightColspan = $showDiscountColumn ? 4 : 3;
+  $footerImageColspan = $showDiscountColumn ? 3 : 2;
+  $summaryLeadColspan = 3;
 
   /* ===== Layout ===== */
   $rows = $detalles->count();
@@ -215,8 +265,10 @@
     .items td.money > .mwrap,.items td.money-total > .mwrap{ display:flex; align-items:center; justify-content:space-between; width:100%; gap:6px; }
     .items td.money .sym,.items td.money-total .sym{ flex:0 0 auto; min-width:1.2em; text-align:left; }
     .items td.money .val,.items td.money-total .val{ flex:1 1 auto; text-align:right; font-variant-numeric:tabular-nums; }
-    .items tr:nth-child(n+2)>td:nth-child(2){ border-right:0 !important; }
-    .items tr:nth-child(n+2)>td:nth-child(3){ border-left:0  !important; }
+    .items tr.data>td:nth-child(2),
+    .items tr.spacer>td:nth-child(2){ border-right:0 !important; }
+    .items tr.data>td:nth-child(3),
+    .items tr.spacer>td:nth-child(3){ border-left:0 !important; }
 
     .items .xxsmall{ font-size: {{ max(8,$FS_BASE-3) }}px; }
     .items .bigger3{ font-size: {{ max(12,$FS_BASE+4) }}px; font-weight:700; }
@@ -244,31 +296,19 @@
 
     /* ===== Fila de NOTAS (PDF) ===== */
     .items tr.notes td{
-      border-top: 0 !important;        /* sin línea arriba */
-      border-bottom: 0 !important;     /* sin línea abajo */
+      border-top: 0 !important;
+      border-bottom: 0 !important;
     }
-    /* (1) Separación 1|2: borde derecho de col 1 */
-    .items tr.notes td:first-child{
-      border-right: 1px solid #111 !important;
-    }
-    /* (2) Bloque notas (cols 2–3): sin bordes laterales */
     .items tr.notes td.note-cell{
-      border-left: 0 !important;
-      border-right: 0 !important;
       text-align: left;
       padding-left: {{ max(4,$PAD-2) }}px;
       font-size: {{ max(10,$FS_BASE-1) }}px;
       line-height: 1.2;
     }
-    /* (3) Separación 3|4: borde izquierdo de la col 4 (3er <td> por el colspan) */
-    .items tr.notes td:nth-child(3){
-      border-left: 1px solid #111 !important;
-      border-right: 0 !important;
-    }
-    /* (4) Separación 4|5 + borde derecho exterior en col 5 (último <td>) */
-    .items tr.notes td:last-child{
-      border-left: 1px solid #111 !important;   /* 4|5 */
-      border-right: 1px solid #111 !important;  /* borde exterior */
+    .items tr.notes td.note-empty,
+    .items tr.notes td.note-first{
+      padding-top:0 !important;
+      padding-bottom:0 !important;
     }
 
     @if (!$DRAW_SPACERS)
@@ -311,21 +351,40 @@
 
   {{-- PARTIDAS --}}
   <table class="tbl items upper">
-    <colgroup><col style="width:10%"><col style="width:10%"><col style="width:48%"><col style="width:12%"><col style="width:20%"></colgroup>
-    <tr><th class="center">CANTIDAD</th><th colspan="2">CONCEPTO</th><th class="center">PRECIO</th><th class="center">IMPORTE</th></tr>
+    <colgroup>
+      <col style="width:10%"><col style="width:10%">
+      @if($showDiscountColumn)
+        <col style="width:36%"><col style="width:12%"><col style="width:12%"><col style="width:20%">
+      @else
+        <col style="width:48%"><col style="width:12%"><col style="width:20%">
+      @endif
+    </colgroup>
+    <tr>
+      <th class="center">CANTIDAD</th>
+      <th colspan="2">CONCEPTO</th>
+      <th class="center">PRECIO</th>
+      @if($showDiscountColumn)
+        <th class="center">DESCUENTO</th>
+      @endif
+      <th class="center">IMPORTE</th>
+    </tr>
     @if($DRAW_SPACERS)
-      <tr class="spacer r2"><td class="c1">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+      <tr class="spacer r2"><td class="c1">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>@if($showDiscountColumn)<td>&nbsp;</td>@endif<td>&nbsp;</td></tr>
     @endif
 
     @php $idxDetalle = 0; @endphp
     @for ($bloque = 0; $bloque < $blocksToDraw; $bloque++)
       @php
-        $d = $detalles->get($idxDetalle);
-        $cantidad = $d->cantidad ?? null; $unidad = $d->unidad ?? ''; $concepto = $d->concepto ?? '';
-        $precio = $d->precio ?? null; $mon = $d->moneda ?? $moneda;
-        $importe = $d ? ($d->importe ?? ((is_numeric($cantidad) && is_numeric($precio)) ? $cantidad * $precio : null)) : null;
-        [$pSym, $pVal] = $moneyParts($precio, $mon);
-        [$iSym, $iVal] = $moneyParts($importe, $mon);
+        $row = $displayRows[$idxDetalle] ?? null;
+        $d = $row['model'] ?? null;
+        $cantidad = $d->cantidad ?? null;
+        $unidad   = $d->unidad   ?? '';
+        $concepto = $d->concepto ?? '';
+        $mon      = $d->moneda   ?? $moneda;
+
+        [$pSym, $pVal] = $moneyParts($row['precio_display'] ?? null, $mon);
+        [$dSym, $dVal] = $moneyParts($row['descuento_display'] ?? null, $mon);
+        [$iSym, $iVal] = $moneyParts($row['importe_display'] ?? null, $mon);
       @endphp
 
       <tr class="data">
@@ -333,11 +392,14 @@
         <td class="unit">{{ $d ? ($unidad ?: ' ') : ' ' }}</td>
         <td>{{ $d ? ($concepto ?: ' ') : ' ' }}</td>
         <td class="money mono"><div class="mwrap"><span class="sym">{{ $pSym ?: ' ' }}</span><span class="val">{{ $pVal ?: ' ' }}</span></div></td>
+        @if($showDiscountColumn)
+          <td class="money mono"><div class="mwrap"><span class="sym">{{ $dSym ?: ' ' }}</span><span class="val">{{ $dVal ?: ' ' }}</span></div></td>
+        @endif
         <td class="money mono"><div class="mwrap"><span class="sym">{{ $iSym ?: ' ' }}</span><span class="val">{{ $iVal ?: ' ' }}</span></div></td>
       </tr>
 
       @if($DRAW_SPACERS)
-        <tr class="spacer"><td class="c1">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr class="spacer"><td class="c1">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>@if($showDiscountColumn)<td>&nbsp;</td>@endif<td>&nbsp;</td></tr>
       @endif
 
       @php if ($d) $idxDetalle++; @endphp
@@ -346,12 +408,15 @@
     {{-- ======= NOTAS (entre partidas y totales) ======= --}}
     @php $notas = trim((string)($oc->notas ?? '')); @endphp
     <tr class="notes no-upper">
-      <td>&nbsp;</td>  {{-- Col 1 vacía, mantiene borde 1|2 --}}
+      <td class="note-first">&nbsp;</td>
       <td colspan="2" class="note-cell">
         {!! $notas !== '' ? nl2br(e($notas)) : '&nbsp;' !!}
       </td>
-      <td>&nbsp;</td>  {{-- Col 4 con borde izquierdo (3|4) --}}
-      <td>&nbsp;</td>  {{-- Col 5 con borde izquierdo (4|5) y derecho exterior --}}
+      <td class="note-empty">&nbsp;</td>
+      @if($showDiscountColumn)
+        <td class="note-empty">&nbsp;</td>
+      @endif
+      <td class="note-empty note-last">&nbsp;</td>
     </tr>
 
     @php
@@ -369,14 +434,32 @@
       [$riSym, $riVal] = $moneyParts($sumRetIva, $moneda);
     @endphp
 
-    <tr class="summary"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>SUBTOTAL</b></td>
-      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $sSym }}</b></span><span class="val"><b>{{ $sVal }}</b></span></div></td></tr>
-    <tr class="summary"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>IVA</b></td>
-      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $vSym }}</b></span><span class="val"><b>{{ $vVal }}</b></span></div></td></tr>
+    <tr class="summary">
+      <td>&nbsp;</td><td colspan="2">&nbsp;</td>
+      @if($showDiscountColumn)
+        <td>&nbsp;</td><td class="right"><b>SUBTOTAL</b></td>
+      @else
+        <td class="right"><b>SUBTOTAL</b></td>
+      @endif
+      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $sSym }}</b></span><span class="val"><b>{{ $sVal }}</b></span></div></td>
+    </tr>
+    <tr class="summary">
+      <td>&nbsp;</td><td colspan="2">&nbsp;</td>
+      @if($showDiscountColumn)
+        <td>&nbsp;</td><td class="right"><b>IVA</b></td>
+      @else
+        <td class="right"><b>IVA</b></td>
+      @endif
+      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $vSym }}</b></span><span class="val"><b>{{ $vVal }}</b></span></div></td>
+    </tr>
       @if($showIsr)
       <tr class="summary">
         <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-        <td class="right"><b>RET ISR</b></td>
+        @if($showDiscountColumn)
+          <td>&nbsp;</td><td class="right"><b>RET ISR</b></td>
+        @else
+          <td class="right"><b>RET ISR</b></td>
+        @endif
         <td class="money-total">
           <div class="mwrap"><span class="sym"><b>{{ $rSym }}</b></span><span class="val"><b>{{ $rVal }}</b></span></div>
         </td>
@@ -385,7 +468,11 @@
       @if($showRetIva)
       <tr class="summary">
         <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-        <td class="right"><b>RET IVA</b></td>
+        @if($showDiscountColumn)
+          <td>&nbsp;</td><td class="right"><b>RET IVA</b></td>
+        @else
+          <td class="right"><b>RET IVA</b></td>
+        @endif
         <td class="money-total">
           <div class="mwrap">
             <span class="sym"><b>{{ $riSym }}</b></span>
@@ -394,16 +481,23 @@
         </td>
       </tr>
       @endif
-    <tr class="summary last"><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td class="right"><b>TOTAL ({{ $moneda }})</b></td>
-      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $tSym }}</b></span><span class="val"><b>{{ $tVal }}</b></span></div></td></tr>
+    <tr class="summary last">
+      <td>&nbsp;</td><td colspan="2">&nbsp;</td>
+      @if($showDiscountColumn)
+        <td>&nbsp;</td><td class="right"><b>TOTAL ({{ $moneda }})</b></td>
+      @else
+        <td class="right"><b>TOTAL ({{ $moneda }})</b></td>
+      @endif
+      <td class="money-total"><div class="mwrap"><span class="sym"><b>{{ $tSym }}</b></span><span class="val"><b>{{ $tVal }}</b></span></div></td>
+    </tr>
 
     {{-- 8 filas extra --}}
-    <tr class="extra e1 no-upper"><td colspan="2" class="center xxsmall"><b>DEPTO. DE COMPRAS</b></td><td colspan="3" class="xxsmall"><b>OBSERVACIONES:</b></td></tr>
-    <tr class="extra e2 no-upper"><td colspan="2">&nbsp;</td><td colspan="3" class="bigger3">Favor de poner # de O.C. a la factura y enviar la factura a</td></tr>
-    <tr class="extra e3 no-upper"><td colspan="2">&nbsp;</td><td colspan="3" class="bigger3">almacen@reprosisa.com.mx</td></tr>
-    <tr class="extra e4 no-upper"><td colspan="2" class="center upper-force">{{ $nombreFirma }}</td><td colspan="3">&nbsp;</td></tr>
-    <tr class="extra e5 no-upper"><td colspan="2" class="center"><b>FIRMA</b></td><td colspan="3">&nbsp;</td></tr>
-    <tr class="extra e6 no-upper"><td colspan="2">&nbsp;</td><td class="xxsmall">LAS FACTURAS DEBERAN MOSTRAR EL NUMERO DE ESTE ORDEN PARA SER PAGADAS</td><td colspan="2" rowspan="3" class="footer-img-td"></td></tr>
+    <tr class="extra e1 no-upper"><td colspan="2" class="center xxsmall"><b>DEPTO. DE COMPRAS</b></td><td colspan="{{ $extraRightColspan }}" class="xxsmall"><b>OBSERVACIONES:</b></td></tr>
+    <tr class="extra e2 no-upper"><td colspan="2">&nbsp;</td><td colspan="{{ $extraRightColspan }}" class="bigger3">Favor de poner # de O.C. a la factura y enviar la factura a</td></tr>
+    <tr class="extra e3 no-upper"><td colspan="2">&nbsp;</td><td colspan="{{ $extraRightColspan }}" class="bigger3">almacen@reprosisa.com.mx</td></tr>
+    <tr class="extra e4 no-upper"><td colspan="2" class="center upper-force">{{ $nombreFirma }}</td><td colspan="{{ $extraRightColspan }}">&nbsp;</td></tr>
+    <tr class="extra e5 no-upper"><td colspan="2" class="center"><b>FIRMA</b></td><td colspan="{{ $extraRightColspan }}">&nbsp;</td></tr>
+    <tr class="extra e6 no-upper"><td colspan="2">&nbsp;</td><td class="xxsmall">LAS FACTURAS DEBERAN MOSTRAR EL NUMERO DE ESTE ORDEN PARA SER PAGADAS</td><td colspan="{{ $footerImageColspan }}" rowspan="3" class="footer-img-td"></td></tr>
     <tr class="extra e7 no-upper"><td colspan="2">&nbsp;</td><td>&nbsp;</td></tr>
     <tr class="extra e8 no-upper"><td colspan="2">&nbsp;</td><td>&nbsp;</td></tr>
   </table>

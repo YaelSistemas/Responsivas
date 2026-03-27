@@ -57,6 +57,16 @@
 
     .currency-alert{ display:none; margin-top:8px; padding:8px 10px; border-radius:8px; background:#fff7ed; color:#9a3412; border:1px solid #fdba74; font-size:13px; }
     .currency-alert.show{ display:block; }
+    .discount-readonly{ background:#f3f4f6; color:#6b7280; }
+    .discount-cell{ white-space:nowrap; }
+    .discount-inline{ display:flex; width:100%; align-items:center; justify-content:center; gap:0; }
+    .discount-inline.active{ justify-content:flex-start; gap:10px; }
+    .discount-toggle{ width:18px !important; height:18px; min-width:18px; margin:0; cursor:pointer; appearance:none; -webkit-appearance:none; border:2px solid #9ca3af; border-radius:9999px; background:#fff; position:relative; padding:0; }
+    .discount-toggle:checked{ border-color:#16a34a; background:#16a34a; }
+    .discount-toggle:checked::after{ content:''; position:absolute; top:50%; left:50%; width:6px; height:6px; border-radius:9999px; background:#fff; transform:translate(-50%, -50%); }
+    .discount-value-wrap{ width:0; max-width:0; overflow:hidden; opacity:0; pointer-events:none; transition:width .18s ease, max-width .18s ease, opacity .18s ease, margin-left .18s ease; margin-left:0; }
+    .discount-value-wrap.active{ width:120px; max-width:120px; opacity:1; pointer-events:auto; margin-left:10px; }
+    .discount-value-wrap input{ width:120px; min-width:120px; }
   </style>
 
   @php
@@ -64,7 +74,16 @@
 
     $defaultIva = old('iva_porcentaje', 16);
     $oldItems = old('items', [
-      ['cantidad'=>'','unidad'=>'','concepto'=>'','moneda'=>'MXN','precio'=>'','importe'=>'']
+      [
+        'cantidad' => '',
+        'unidad' => '',
+        'concepto' => '',
+        'moneda' => 'MXN',
+        'precio' => '',
+        'descuento_enabled' => 0,
+        'descuento' => '',
+        'importe' => '',
+      ]
     ]);
 
     $isAdmin = Auth::user()->hasRole('Administrador');
@@ -184,24 +203,52 @@
                     <th>Concepto</th>
                     <th class="nowrap">Moneda</th>
                     <th class="nowrap">Precio</th>
+                    <th class="nowrap">Descuento</th>
                     <th class="nowrap">Importe</th>
                     <th class="nowrap">—</th>
                   </tr>
                 </thead>
                 <tbody id="itemsTbody">
                   @foreach($oldItems as $idx => $it)
+                  @php
+                    $mon = $it['moneda'] ?? 'MXN';
+                    $descEnabled = !empty($it['descuento_enabled']) || ((float)($it['descuento'] ?? 0) > 0);
+                    $descValue = $it['descuento'] ?? '';
+                  @endphp
                   <tr class="item-row">
                     <td><input type="number" step="0.0001" min="0" name="items[{{ $idx }}][cantidad]" class="i-cantidad right" value="{{ $it['cantidad'] }}"></td>
                     <td><input type="text" name="items[{{ $idx }}][unidad]" value="{{ $it['unidad'] }}"></td>
                     <td><input type="text" name="items[{{ $idx }}][concepto]" value="{{ $it['concepto'] }}"></td>
                     <td>
-                      @php $mon = $it['moneda'] ?? 'MXN'; @endphp
                       <select name="items[{{ $idx }}][moneda]" class="i-moneda">
                         <option value="MXN" @selected($mon==='MXN')>MXN</option>
                         <option value="USD" @selected($mon==='USD')>USD</option>
                       </select>
                     </td>
                     <td><input type="number" step="0.0001" min="0" name="items[{{ $idx }}][precio]" class="i-precio right" value="{{ $it['precio'] ?? $it['precio_unitario'] ?? '' }}"></td>
+                    <td class="discount-cell">
+                      <div class="discount-inline {{ $descEnabled ? 'active' : '' }}">
+                        <input
+                          type="checkbox"
+                          name="items[{{ $idx }}][descuento_enabled]"
+                          class="i-descuento-check discount-toggle"
+                          value="1"
+                          {{ $descEnabled ? 'checked' : '' }}
+                        >
+                        <div class="discount-value-wrap {{ $descEnabled ? 'active' : '' }}">
+                          <input
+                            type="number"
+                            step="0.0001"
+                            min="0"
+                            name="items[{{ $idx }}][descuento]"
+                            class="i-descuento right {{ $descEnabled ? '' : 'discount-readonly' }}"
+                            value="{{ $descValue }}"
+                            {{ $descEnabled ? '' : 'disabled' }}
+                            placeholder="0.00"
+                          >
+                        </div>
+                      </div>
+                    </td>
                     <td><input type="number" step="0.0001" min="0" name="items[{{ $idx }}][importe]" class="i-importe right" value="{{ $it['importe'] }}" readonly></td>
                     <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
                   </tr>
@@ -378,21 +425,58 @@
         recalc();
       }
 
+      function round2(n){
+        n = Number(n || 0);
+        return Math.round((n + Number.EPSILON) * 100) / 100;
+      }
+      function fmt2(n){
+        return Number(n || 0).toFixed(2);
+      }
+
       function recalc(){
         let subtotal = 0;
 
         tbody.querySelectorAll('tr.item-row').forEach(tr=>{
           const q = parseFloat(tr.querySelector('.i-cantidad')?.value || '0');
           const p = parseFloat(tr.querySelector('.i-precio')?.value || '0');
-          const imp = (q*p) || 0;
+          const bruto = round2((q * p) || 0);
+
+          const chk = tr.querySelector('.i-descuento-check');
+          const descInput = tr.querySelector('.i-descuento');
+          const descWrap = tr.querySelector('.discount-value-wrap');
+          const aplicarDescuento = !!chk?.checked;
+
+          if (descWrap) {
+            descWrap.classList.toggle('active', aplicarDescuento);
+          }
+
+          const descInline = tr.querySelector('.discount-inline');
+          if (descInline) {
+            descInline.classList.toggle('active', aplicarDescuento);
+          }
+
+          if (descInput) {
+            descInput.disabled = !aplicarDescuento;
+            descInput.classList.toggle('discount-readonly', !aplicarDescuento);
+            if (!aplicarDescuento) descInput.value = '';
+          }
+
+          let descuento = aplicarDescuento ? round2(parseFloat(descInput?.value || '0')) : 0;
+
+          if (descuento > bruto) {
+            descuento = bruto;
+            if (descInput) descInput.value = fmt2(bruto);
+          }
+
+          const imp = round2(Math.max(bruto - descuento, 0));
 
           const iImp = tr.querySelector('.i-importe');
-          if(iImp){ iImp.value = imp.toFixed(2); }
+          if(iImp){ iImp.value = fmt2(imp); }
 
           subtotal += imp;
         });
 
-        elSubtotal.value = subtotal.toFixed(2);
+        elSubtotal.value = fmt2(round2(subtotal));
         elSubtotal.dispatchEvent(new Event('input', { bubbles:true }));
       }
 
@@ -411,14 +495,26 @@
             </select>
           </td>
           <td><input type="number" step="0.0001" min="0" name="items[${idx}][precio]" class="i-precio right"></td>
+          <td class="discount-cell">
+            <div class="discount-inline">
+              <input type="checkbox" name="items[${idx}][descuento_enabled]" class="i-descuento-check discount-toggle" value="1">
+              <div class="discount-value-wrap">
+                <input type="number" step="0.0001" min="0" name="items[${idx}][descuento]" class="i-descuento right discount-readonly" disabled placeholder="0.00">
+              </div>
+            </div>
+          </td>
           <td><input type="number" step="0.01" min="0" name="items[${idx}][importe]" class="i-importe right" readonly></td>
           <td class="right"><button type="button" class="btn-danger del-row">X</button></td>
         </tr>`;
       }
 
       function bindRowEvents(scope=document){
-        scope.querySelectorAll('.i-cantidad,.i-precio').forEach(inp=>{
+        scope.querySelectorAll('.i-cantidad,.i-precio,.i-descuento').forEach(inp=>{
           inp.addEventListener('input', recalc);
+        });
+
+        scope.querySelectorAll('.i-descuento-check').forEach(chk=>{
+          chk.addEventListener('change', recalc);
         });
 
         scope.querySelectorAll('.del-row').forEach(btn=>{
@@ -508,20 +604,24 @@
       const retIvaMontoBox= document.getElementById("retIvaMontoBox");
       const retIvaManualHidden = document.getElementById("retIvaManualInput");
 
-      function r2(n){
+      function round2(n){
         n = Number(n || 0);
         return Math.round((n + Number.EPSILON) * 100) / 100;
       }
+      function trunc2(n){
+        n = Number(n || 0);
+        return Math.floor((n + 0.0000001) * 100) / 100;
+      }
       function fmt2(n){
-        return r2(n).toFixed(2);
+        return Number(n || 0).toFixed(2);
       }
 
       function applyTotals() {
           const pctIva = parseFloat(ivaPct.value || 0);
-          const sub = r2(parseFloat(subtotal.value || 0)); // subtotal a 2 decimales
+          const sub = round2(parseFloat(subtotal.value || 0));
 
           // =========================
-          // IVA (igual que edit)
+          // IVA
           // =========================
           let ivaFinal = 0;
 
@@ -538,20 +638,20 @@
                       ivaInput.value = "0.00";
                   }
 
-                  const ivaManual = r2(parseFloat(ivaInput.value || 0));
+                  const ivaManual = round2(parseFloat(ivaInput.value || 0));
                   ivaManualHidden.value = fmt2(ivaManual);
                   ivaFinal = ivaManual;
               }
           } else {
               ivaInput.readOnly = true;
-              const ivaCalc = r2(sub * (pctIva / 100));
+              const ivaCalc = trunc2(sub * (pctIva / 100));
               ivaInput.value = fmt2(ivaCalc);
               ivaManualHidden.value = "";
               ivaFinal = ivaCalc;
           }
 
           // =========================
-          // ISR (manual igual que IVA)
+          // ISR (manual/auto como IVA)
           // =========================
           const isrOn = !!(isrEnabled && isrEnabled.checked);
           if (isrPctBox)   isrPctBox.style.display   = isrOn ? "" : "none";
@@ -566,29 +666,32 @@
                   isrInput.value = "0.00";
               }
               if (isrManualHidden) isrManualHidden.value = "";
+              isrFinal = 0;
           } else {
               const pctIsr = parseFloat(isrPct?.value || 0);
 
               if (pctIsr === 0) {
-                  // manual (solo con permiso)
-                  if (isrInput) isrInput.readOnly = !CAN_MANUAL;
-
                   if (!CAN_MANUAL) {
-                      if (isrInput) isrInput.value = "0.00";
+                      if (isrInput) {
+                          isrInput.readOnly = true;
+                          isrInput.value = "0.00";
+                      }
+                      if (isrManualHidden) isrManualHidden.value = "0.00";
                       isrFinal = 0;
-                      if (isrManualHidden) isrManualHidden.value = "";
                   } else {
+                      if (isrInput) isrInput.readOnly = false;
+
                       if (isrInput && (isrInput.value === "" || isNaN(parseFloat(isrInput.value)))) {
                           isrInput.value = "0.00";
                       }
-                      const isrManual = r2(parseFloat(isrInput?.value || 0));
+
+                      const isrManual = round2(parseFloat(isrInput?.value || 0));
                       isrFinal = isrManual;
                       if (isrManualHidden) isrManualHidden.value = fmt2(isrManual);
                   }
               } else {
-                  // automático
                   if (isrInput) isrInput.readOnly = true;
-                  const isrCalc = r2(sub * (pctIsr / 100));
+                  const isrCalc = trunc2(sub * (pctIsr / 100));
                   if (isrInput) isrInput.value = fmt2(isrCalc);
                   isrFinal = isrCalc;
                   if (isrManualHidden) isrManualHidden.value = "";
@@ -597,7 +700,6 @@
 
           // =========================
           // RET IVA (manual/auto)
-          // base: SUBTOTAL (como ISR)
           // =========================
           const retIvaOn = !!(retIvaEnabled && retIvaEnabled.checked);
           if (retIvaPctBox)   retIvaPctBox.style.display   = retIvaOn ? "" : "none";
@@ -612,29 +714,32 @@
                   retIvaMonto.value = "0.00";
               }
               if (retIvaManualHidden) retIvaManualHidden.value = "";
+              retIvaFinal = 0;
           } else {
               const pctRetIva = parseFloat(retIvaPct?.value || 0);
 
               if (pctRetIva === 0) {
-                  // manual (solo con permiso)
-                  if (retIvaMonto) retIvaMonto.readOnly = !CAN_MANUAL;
-
                   if (!CAN_MANUAL) {
-                      if (retIvaMonto) retIvaMonto.value = "0.00";
+                      if (retIvaMonto) {
+                          retIvaMonto.readOnly = true;
+                          retIvaMonto.value = "0.00";
+                      }
+                      if (retIvaManualHidden) retIvaManualHidden.value = "0.00";
                       retIvaFinal = 0;
-                      if (retIvaManualHidden) retIvaManualHidden.value = "";
                   } else {
+                      if (retIvaMonto) retIvaMonto.readOnly = false;
+
                       if (retIvaMonto && (retIvaMonto.value === "" || isNaN(parseFloat(retIvaMonto.value)))) {
                           retIvaMonto.value = "0.00";
                       }
-                      const manual = r2(parseFloat(retIvaMonto?.value || 0));
+
+                      const manual = round2(parseFloat(retIvaMonto?.value || 0));
                       retIvaFinal = manual;
                       if (retIvaManualHidden) retIvaManualHidden.value = fmt2(manual);
                   }
               } else {
-                  // automático sobre SUBTOTAL
                   if (retIvaMonto) retIvaMonto.readOnly = true;
-                  const calc = r2(sub * (pctRetIva / 100));
+                  const calc = trunc2(sub * (pctRetIva / 100));
                   if (retIvaMonto) retIvaMonto.value = fmt2(calc);
                   retIvaFinal = calc;
                   if (retIvaManualHidden) retIvaManualHidden.value = "";
@@ -644,15 +749,14 @@
           // =========================
           // TOTAL FINAL
           // =========================
-          const totalCalc = r2(sub + r2(ivaFinal) - r2(isrFinal) - r2(retIvaFinal));
+          const totalCalc = round2(sub + ivaFinal - isrFinal - retIvaFinal);
           total.value = fmt2(totalCalc);
 
           // =========================
-          // HINTS dinámicos (texto abajo de los checks)
+          // HINTS dinámicos
           // =========================
           const isrHintEl = document.getElementById("isrHint");
           const retIvaHintEl = document.getElementById("retIvaHint");
-
           const bothOn = isrOn && retIvaOn;
 
           if (isrHintEl) {
