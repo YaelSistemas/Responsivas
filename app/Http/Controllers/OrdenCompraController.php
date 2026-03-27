@@ -38,6 +38,16 @@ class OrdenCompraController extends Controller implements HasMiddleware
         return (int) (session('empresa_activa') ?? Auth::user()->empresa_id);
     }
 
+    protected function round2(float $n): float
+    {
+        return round($n + PHP_FLOAT_EPSILON, 2);
+    }
+
+    protected function trunc2(float $n): float
+    {
+        return floor(($n + 0.0000001) * 100) / 100;
+    }
+
     /* ===================== Listado ===================== */
 
     public function index(Request $request)
@@ -378,17 +388,17 @@ class OrdenCompraController extends Controller implements HasMiddleware
             foreach ($request->items as $row) {
                 $cantidad = (float) ($row['cantidad'] ?? 0);
                 $precio   = (float) ($row['precio'] ?? 0);
-                $bruto    = round($cantidad * $precio, 4);
+                $bruto    = $this->round2($cantidad * $precio);
 
                 $descuento = !empty($row['descuento_enabled'])
-                    ? (float) ($row['descuento'] ?? 0)
+                    ? $this->round2((float) ($row['descuento'] ?? 0))
                     : 0;
 
                 if ($descuento > $bruto) {
                     $descuento = $bruto;
                 }
 
-                $subtotal = round($bruto - $descuento, 4);
+                $subtotal = $this->round2(max($bruto - $descuento, 0));
 
                 $temp[] = [
                     'cantidad'  => $cantidad,
@@ -501,40 +511,38 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 OrdenCompraDetalle::create($detallePayload);
             }
 
-            // ===== IVA cabecera =====
+            // ===== Totales cabecera (regla oficial) =====
+            $subtotal2 = $this->round2($subtotalOC);
+
+            // IVA
             if ($usarIvaManual) {
-                $ivaMontoOC = (float)$ivaManual;
+                $ivaMontoOC = $this->round2((float) $ivaManual);
             } else {
-                $ivaMontoOC = round($subtotalOC * ($ivaPctOC / 100), 4);
+                $ivaMontoOC = $this->trunc2($subtotal2 * (($ivaPctOC ?? 0) / 100));
             }
 
-            // ===== ISR cabecera =====
-            $isrMontoOC = 0;
-            if ($isrEnabled) {
-                if ($isrPctReq > 0) {
-                    $isrMontoOC = round($subtotalOC * ($isrPctReq / 100), 4);
-                } else {
-                    $isrMontoOC = round((float)$isrMontoReq, 4);
-                }
+            // ISR
+            if (!$isrEnabled) {
+                $isrMontoOC = 0;
+            } elseif ($isrPctReq > 0) {
+                $isrMontoOC = $this->trunc2($subtotal2 * ($isrPctReq / 100));
+            } else {
+                $isrMontoOC = $this->round2((float) $isrMontoReq);
             }
 
-            // ===== Ret IVA cabecera (sobre SUBTOTAL) =====
-            $retIvaMontoOC = 0;
-            if ($retIvaEnabled) {
-                if ($retIvaPctReq > 0) {
-                    $retIvaMontoOC = round($subtotalOC * ($retIvaPctReq / 100), 4);
-                } else {
-                    $retIvaMontoOC = round((float)$retIvaMontoReq, 4);
-                }
+            // Ret IVA
+            if (!$retIvaEnabled) {
+                $retIvaMontoOC = 0;
+            } elseif ($retIvaPctReq > 0) {
+                $retIvaMontoOC = $this->trunc2($subtotal2 * ($retIvaPctReq / 100));
+            } else {
+                $retIvaMontoOC = $this->round2((float) $retIvaMontoReq);
             }
 
-            // ===== Totales cabecera (2 decimales, lo que SIEMPRE se mostrará) =====
-            $subtotal2 = round($subtotalOC, 2);
-            $iva2      = round($ivaMontoOC, 2);
-            $isr2      = round($isrMontoOC, 2);
-            $retIva2 = round($retIvaMontoOC, 2);
-
-            $totalOC2  = round($subtotal2 + $iva2 - $isr2 - $retIva2, 2);
+            $iva2     = $ivaMontoOC;
+            $isr2     = $isrMontoOC;
+            $retIva2  = $retIvaMontoOC;
+            $totalOC2 = $this->round2($subtotal2 + $iva2 - $isr2 - $retIva2);
 
             // Guardar cabecera calculada (redondeada)
             if (\Schema::hasColumn($tabla, 'subtotal'))   $oc->subtotal   = $subtotal2;
@@ -840,17 +848,17 @@ class OrdenCompraController extends Controller implements HasMiddleware
 
                 $cantidad = (float) $row['cantidad'];
                 $precio   = (float) $row['precio'];
-                $bruto    = round($cantidad * $precio, 4);
+                $bruto    = $this->round2($cantidad * $precio);
 
                 $descuento = !empty($row['descuento_enabled'])
-                    ? (float) ($row['descuento'] ?? 0)
+                    ? $this->round2((float) ($row['descuento'] ?? 0))
                     : 0;
 
                 if ($descuento > $bruto) {
                     $descuento = $bruto;
                 }
 
-                $subtotal = round($bruto - $descuento, 4);
+                $subtotal = $this->round2(max($bruto - $descuento, 0));
 
                 $temp[] = [
                     'id'        => $id,
@@ -866,20 +874,22 @@ class OrdenCompraController extends Controller implements HasMiddleware
                 $subtotalOC += $subtotal;
             }
 
+            $subtotal2 = $this->round2($subtotalOC);
+
             // ====== IVA total OC ======
             if ($usarIvaManual) {
-                $ivaMontoOC = (float)$ivaManualMonto;
+                $ivaMontoOC = $this->round2((float) $ivaManualMonto);
             } else {
-                $ivaMontoOC = round($subtotalOC * (($ivaPctOC ?? 0) / 100), 4);
+                $ivaMontoOC = $this->trunc2($subtotal2 * (($ivaPctOC ?? 0) / 100));
             }
 
             // ====== ISR total OC ======
             if (!$isrOn) {
                 $isrMontoOC = 0;
             } elseif ($usarIsrAuto) {
-                $isrMontoOC = round($subtotalOC * ($isrPct / 100), 4);
+                $isrMontoOC = $this->trunc2($subtotal2 * ($isrPct / 100));
             } elseif ($usarIsrManual) {
-                $isrMontoOC = round($isrMontoManual, 4);
+                $isrMontoOC = $this->round2((float) $isrMontoManual);
             } else {
                 $isrMontoOC = 0;
             }
@@ -888,9 +898,9 @@ class OrdenCompraController extends Controller implements HasMiddleware
             if (!$retIvaOn) {
                 $retIvaMontoOC = 0;
             } elseif ($usarRetIvaAuto) {
-                $retIvaMontoOC = round($subtotalOC * ($retIvaPct / 100), 4);
+                $retIvaMontoOC = $this->trunc2($subtotal2 * ($retIvaPct / 100));
             } elseif ($usarRetIvaManual) {
-                $retIvaMontoOC = round($retIvaMontoManual, 4);
+                $retIvaMontoOC = $this->round2((float) $retIvaMontoManual);
             } else {
                 $retIvaMontoOC = 0;
             }
@@ -984,12 +994,10 @@ class OrdenCompraController extends Controller implements HasMiddleware
             }
 
             // ===== Totales cabecera (2 decimales, consistente con show/pdf/index) =====
-            $subtotal2 = round($subtotalOC, 2);
-            $iva2      = round($ivaMontoOC, 2);
-            $isr2      = round($isrMontoOC, 2);
-            $retIva2   = round($retIvaMontoOC, 2);
-
-            $totalOC2  = round($subtotal2 + $iva2 - $isr2 - $retIva2, 2);
+            $iva2     = $ivaMontoOC;
+            $isr2     = $isrMontoOC;
+            $retIva2  = $retIvaMontoOC;
+            $totalOC2 = $this->round2($subtotal2 + $iva2 - $isr2 - $retIva2);
 
             if (\Schema::hasColumn($tabla, 'subtotal'))  $data['subtotal']  = $subtotal2;
             if (\Schema::hasColumn($tabla, 'iva_monto')) $data['iva_monto'] = $iva2;
