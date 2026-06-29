@@ -279,7 +279,7 @@
             </tr>
             <tr>
               <td class="title-row title-sub">ORDEN DE COMPRA</td>
-              <td class="rightcell"><b>NÚMERO DE REVISIÓN:</b><br>01</td>
+              <td class="rightcell"><b>NÚMERO DE REVISIÓN:</b><br>02</td>
             </tr>
           </table>
 
@@ -651,7 +651,7 @@
             </tr>
             <tr class="extra e3 no-upper">
               <td colspan="2">&nbsp;</td>
-              <td colspan="{{ $extraRightColspan }}" class="bigger3">almacen@reprosisa.com.mx</td>
+              <td colspan="{{ $extraRightColspan }}" class="bigger3">almacen@reprosisa.com.mx, luz.hernandez@reprosisa.com.mx, teresa.mayorga@reprosisa.com.mx</td>
             </tr>
             <tr class="extra e4 no-upper">
               <td colspan="2" class="center upper-force">{{ $nombreFirma }}</td>

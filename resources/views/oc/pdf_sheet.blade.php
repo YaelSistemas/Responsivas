@@ -328,7 +328,7 @@
     </tr>
     <tr><td class="rightcell"><b>CODIFICACIÓN:</b> SGC-PO-CO-01-FO-01</td></tr>
     <tr><td class="title-row title-sub">SISTEMA DE GESTION DE CALIDAD</td><td class="rightcell"><b>20-jun-2025</b></td></tr>
-    <tr><td class="title-row title-sub">ORDEN DE COMPRA</td><td class="rightcell"><b>NÚMERO DE REVISIÓN:</b><br>01</td></tr>
+    <tr><td class="title-row title-sub">ORDEN DE COMPRA</td><td class="rightcell"><b>NÚMERO DE REVISIÓN:</b><br>02</td></tr>
   </table>
 
   {{-- PROVEEDOR / ORDEN --}}
@@ -494,7 +494,7 @@
     {{-- 8 filas extra --}}
     <tr class="extra e1 no-upper"><td colspan="2" class="center xxsmall"><b>DEPTO. DE COMPRAS</b></td><td colspan="{{ $extraRightColspan }}" class="xxsmall"><b>OBSERVACIONES:</b></td></tr>
     <tr class="extra e2 no-upper"><td colspan="2">&nbsp;</td><td colspan="{{ $extraRightColspan }}" class="bigger3">Favor de poner # de O.C. a la factura y enviar la factura a</td></tr>
-    <tr class="extra e3 no-upper"><td colspan="2">&nbsp;</td><td colspan="{{ $extraRightColspan }}" class="bigger3">almacen@reprosisa.com.mx</td></tr>
+    <tr class="extra e3 no-upper"><td colspan="2">&nbsp;</td><td colspan="{{ $extraRightColspan }}" class="bigger3">almacen@reprosisa.com.mx, luz.hernandez@reprosisa.com.mx, teresa.mayorga@reprosisa.com.mx</td></tr>
     <tr class="extra e4 no-upper"><td colspan="2" class="center upper-force">{{ $nombreFirma }}</td><td colspan="{{ $extraRightColspan }}">&nbsp;</td></tr>
     <tr class="extra e5 no-upper"><td colspan="2" class="center"><b>FIRMA</b></td><td colspan="{{ $extraRightColspan }}">&nbsp;</td></tr>
     <tr class="extra e6 no-upper"><td colspan="2">&nbsp;</td><td class="xxsmall">LAS FACTURAS DEBERAN MOSTRAR EL NUMERO DE ESTE ORDEN PARA SER PAGADAS</td><td colspan="{{ $footerImageColspan }}" rowspan="3" class="footer-img-td"></td></tr>
